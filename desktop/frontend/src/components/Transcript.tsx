@@ -264,11 +264,21 @@ export function Transcript(props: TranscriptProps) {
     if (questionNavigatorRef.current) questionNavigatorRef.current.retry();
     else void requestOlder(undefined, "retry");
   });
+  const handledRewindSignalRef = useRef(0);
+  const latestQuestionsRef = useRef(questions);
+  latestQuestionsRef.current = questions;
   useEffect(() => {
-    if (rewindSignal <= 0) return;
-    const last = questions[questions.length - 1];
+    // Only the signal itself may trigger this jump. `questions` changes on every
+    // streaming frame, so depending on it re-fired the jump on each frame and
+    // dragged the viewport back to the last question - the sawtooth users report
+    // as "scrolled to the bottom, let go, and it jumped back up".
+    if (rewindSignal <= 0 || handledRewindSignalRef.current === rewindSignal) return;
+    handledRewindSignalRef.current = rewindSignal;
+    const current = latestQuestionsRef.current;
+    const last = current[current.length - 1];
     if (last) jumpToLoadedQuestion(last);
-  }, [jumpToLoadedQuestion, questions, rewindSignal]);
+onRewindConsumed?.();
+  }, [jumpToLoadedQuestion, rewindSignal, onRewindConsumed]);
 
   const handleScroll = useTranscriptCommand(() => {
     const towardHistory = onScroll();
