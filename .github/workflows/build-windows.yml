@@ -1,0 +1,89 @@
+name: Build Windows artifact
+
+# On-demand Windows build for the v1.38.* line.
+#
+# Why this exists: the upstream `desktop-windows` CI job builds a Wails
+# executable purely for its native startup smoke and never publishes an
+# artifact, and the upstream release pipeline (release-desktop.yml) requires 11
+# signing/CDN secrets this fork does not have.
+#
+# Trigger is MANUAL only. Day-to-day validation is covered by the upstream
+# ci.yml, which still runs on every push to main-v2 - running a second build
+# here on push would duplicate that work. Use this workflow when you actually
+# need a runnable Windows build to test on a real desktop:
+#
+#   gh workflow run build-windows.yml
+#   gh workflow run build-windows.yml -f version=v1.38.22
+#
+# Tag-driven releases live in release-windows.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version stamped into the build (e.g. v1.38.21)"
+        required: false
+        default: "v1.38.21"
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: "Version stamped into the build"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 10
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: desktop/frontend/pnpm-lock.yaml
+
+      - name: Install Wails CLI
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          go install "github.com/wailsapp/wails/v2/cmd/wails@$(cat "$GITHUB_WORKSPACE/.wails-version")"
+
+      - name: Install NSIS
+        run: pwsh -NoProfile -File ../scripts/install-nsis.ps1
+
+      - name: Build portable archive and installer
+        timeout-minutes: 40
+        run: ../scripts/desktop-build.sh windows/amd64 "${{ inputs.version }}" stable
+
+      - name: List produced artifacts
+        run: ls -la ../dist
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: reasonix-windows-amd64-${{ inputs.version }}
+          path: |
+            dist/Reasonix-windows-amd64.zip
+            dist/Reasonix-windows-amd64-installer.exe
+          if-no-files-found: error
+          retention-days: 14
