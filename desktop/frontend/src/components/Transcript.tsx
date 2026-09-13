@@ -97,6 +97,7 @@ export type TranscriptProps = {
   creationMode?: boolean;
   actionHoverMenus?: boolean;
   rewindSignal?: number;
+  onRewindConsumed?: () => void;
   revealSignal?: number;
   hydrating?: boolean;
   hasOlderHistory?: boolean;
@@ -120,7 +121,7 @@ export function Transcript(props: TranscriptProps) {
     onEditPrompt, onRewind, checkpoints = EMPTY_CHECKPOINTS, actionPending = false,
     rewindDisabled = false, running = false, questionNavigator = true,
     welcomeVariant = "default", creationMode = false, actionHoverMenus = false,
-    rewindSignal = 0, revealSignal = 0, hydrating = false, hasOlderHistory = false,
+    rewindSignal = 0, onRewindConsumed, revealSignal = 0, hydrating = false, hasOlderHistory = false,
     historyStartTurn = 0, historyTotalTurns = 0, loadingOlderHistory = false,
     olderHistoryError, onLoadOlderHistory, turnStartAt, contentRevision = 0,
     invocationMetadata = EMPTY_INVOCATION_METADATA, historyMutation,
@@ -277,7 +278,9 @@ export function Transcript(props: TranscriptProps) {
     const current = latestQuestionsRef.current;
     const last = current[current.length - 1];
     if (last) jumpToLoadedQuestion(last);
-onRewindConsumed?.();
+// One-shot: clear the signal after consuming it, so remounting the
+    // transcript (switching sessions) never replays this jump.
+    onRewindConsumed?.();
   }, [jumpToLoadedQuestion, rewindSignal, onRewindConsumed]);
 
   const handleScroll = useTranscriptCommand(() => {

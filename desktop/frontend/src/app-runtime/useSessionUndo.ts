@@ -61,6 +61,10 @@ export function useSessionUndo(input: SessionUndoInput) {
   });
 
   const bumpRewindSignal = useCommittedCommand(() => setRewindSignal((value) => value + 1));
+  // The signal is a one-shot event, not a state. Transcript consumes it right
+  // after the jump and clears it; otherwise every remount of the transcript
+  // (e.g. switching back to this session) replays the previous edit/fork jump.
+  const consumeRewindSignal = useCommittedCommand(() => setRewindSignal(0));
 
   const handleSessionRevertCommitted = useCommittedCommand((sourceTabId: string, outcome: RewindResultView) => {
     if (!sourceTabId || !outcome.ok) return;
@@ -237,6 +241,7 @@ export function useSessionUndo(input: SessionUndoInput) {
     setRewindStateForTab,
     setRewindCommittingForTab,
     bumpRewindSignal,
+    consumeRewindSignal,
     handleSessionRevertCommitted,
     handleMessageAction,
     handleUndoRewind,

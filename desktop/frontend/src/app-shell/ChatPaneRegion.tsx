@@ -31,6 +31,7 @@ export type ChatPaneTranscriptInput = {
     stateActive: boolean;
     committing: boolean;
     signal: TranscriptProps["rewindSignal"];
+    consume: () => void;
   };
 };
 
@@ -124,6 +125,7 @@ export function ChatPaneRegion(props: ChatPaneRegionProps) {
                 creationMode={transcript.creation}
                 actionHoverMenus={transcript.creation && !transcript.hydratePlaceholderActive && !transitioning}
                 rewindSignal={rewind.signal}
+                onRewindConsumed={rewind.consume}
                 revealSignal={transcript.revealSignal}
                 hydrating={transcript.transcriptHydrating || (transitioning && !transcript.navigationDataReady)}
                 hasOlderHistory={!transitioning && state.historyHasOlder && !rewind.stateActive}
