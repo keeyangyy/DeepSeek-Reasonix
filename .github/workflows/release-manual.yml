@@ -50,6 +50,7 @@ jobs:
           set -euo pipefail
           SHA="${{ steps.target.outputs.sha }}"
           DEADLINE=$((SECONDS + 5400))
+          RETRIED=0
           while true; do
             LATEST=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA" \
               --jq '.workflow_runs[] | select(.name=="CI") | "\(.status) \(.conclusion) \(.id)"' | head -1 || true)
@@ -63,7 +64,17 @@ jobs:
                   echo "CI passed; proceeding to tag."
                   exit 0
                 fi
-                echo "::error::CI failed (run $RUN_ID); release aborted, no tag created."
+                # One automatic retry of the failed jobs: the official CI is
+                # occasionally red from platform flakes (Windows runtime /
+                # race timing), not from repo code.
+                if [ "$RETRIED" = "0" ]; then
+                  echo "CI failed (run $RUN_ID); retrying failed jobs once."
+                  gh run rerun "$RUN_ID" --repo "$GITHUB_REPOSITORY" --failed
+                  RETRIED=1
+                  sleep 30
+                  continue
+                fi
+                echo "::error::CI failed again after retry (run $RUN_ID); release aborted, no tag created."
                 exit 1
               fi
             else
@@ -104,3 +115,15 @@ jobs:
           else
             gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --generate-notes
           fi
+
+      - name: Dispatch Windows artifact pipeline
+        # GITHUB_TOKEN pushes do not trigger tag workflows, but
+        # workflow_dispatch is an allowed exception — relay the just-created
+        # tag to the upstream release-windows pipeline (it builds the portable
+        # archive + NSIS installer and uploads both to this release).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-windows.yml --repo "$GITHUB_REPOSITORY" -f "tag=v$VERSION"
