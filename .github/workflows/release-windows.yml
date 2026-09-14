@@ -96,16 +96,22 @@ jobs:
           RELEASE_TAG: ${{ needs.verify.outputs.version }}
         run: |
           set -euo pipefail
+          # Strip the leading 'v' so assets carry the bare version like the
+          # upstream line (e.g. Reasonix-windows-amd64-installer-1.38.21.exe).
+          version="$(printf '%s' "$RELEASE_TAG" | sed 's/^v//')"
+          zip_asset="Reasonix-windows-amd64-${version}.zip"
+          exe_asset="Reasonix-windows-amd64-installer-${version}.exe"
+          mv dist/Reasonix-windows-amd64.zip "dist/${zip_asset}"
+          mv dist/Reasonix-windows-amd64-installer.exe "dist/${exe_asset}"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; uploading/overwriting assets."
-            gh release upload "$RELEASE_TAG" \
-              dist/Reasonix-windows-amd64.zip \
-              dist/Reasonix-windows-amd64-installer.exe \
-              --clobber
+            # Drop the pre-versioned asset names from the first fork releases so
+            # re-running the same tag never leaves both old and new names behind.
+            gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64.zip --yes >/dev/null 2>&1 || true
+            gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64-installer.exe --yes >/dev/null 2>&1 || true
+            gh release upload "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" --clobber
           else
-            gh release create "$RELEASE_TAG" \
-              dist/Reasonix-windows-amd64.zip \
-              dist/Reasonix-windows-amd64-installer.exe \
+            gh release create "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" \
               --title "$RELEASE_TAG" \
               --generate-notes
           fi
