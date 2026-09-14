@@ -125,10 +125,8 @@ type App struct {
 	catalogRebuild     *sessionCatalogRebuildFlight
 	catalogRebuilding  atomic.Bool
 	// sessionCatalogMetadataMu guards the fingerprint of the last metadata the
-	// catalog accepted. The 30s refresh loop calls syncSessionCatalogMetadata
-	// unconditionally; without a guard every tick bumps the catalog revision
-	// and republishes project-tree:changed-v2, so the sidebar re-renders every
-	// 30 seconds even when nothing changed.
+	// catalog accepted. The 30s refresh loop drives SyncMetadata unconditionally;
+	// without a guard every tick re-renders the sidebar.
 	sessionCatalogMetadataMu          sync.Mutex
 	sessionCatalogMetadataFingerprint string
 	shuttingDown                      atomic.Bool

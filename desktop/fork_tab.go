@@ -96,9 +96,8 @@ func (a *App) forkForTabWithOptions(tabID string, turn int, isolateWorkspace boo
 	}
 
 	// Fork always creates a separate session file + new tab (schema-1 and
-	// schema-2 alike). The schema-2 in-log head fork is intentionally not used
-	// here: the fork button must surface a brand-new session entry in the
-	// sidebar. Rewind/branch/switch keep the in-log head model.
+	// schema-2 alike); the schema-2 in-log head fork is intentionally unused
+	// so the sidebar gains a new session entry. Rewind/switch keep head model.
 
 	newPath, err := ctrl.ForkSession(turn, "")
 	if err != nil {
