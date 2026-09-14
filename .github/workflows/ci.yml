@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main-v2]
 
+# Windows runners sporadically hit Go runtime preemption failures
+# (runtime.preemptM: duplicatehandle failed) unrelated to repo code;
+# disabling async preemption there removes that flake class for free.
+env:
+  GODEBUG: asyncpreemptoff=1
+
 permissions:
   contents: read
 
