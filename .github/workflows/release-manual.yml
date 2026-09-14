@@ -1,0 +1,106 @@
+name: Release (manual)
+
+# One-shot release pipeline: triggers manually with a semver, waits for the
+# official CI of the current main-v2 commit to turn green, then creates the
+# annotated tag and the GitHub Release. A tag is therefore never created for
+# a commit whose CI is red — the previous "push, tag, walk away for an hour"
+# failure mode is impossible: the run ends either with a published release or
+# with an explicit red/failed job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver to release, e.g. 1.38.21"
+        required: true
+        default: "1.38.22"
+      title:
+        description: "Release title (optional; defaults to v<version>)"
+        required: false
+      notes:
+        description: "Release notes (optional; defaults to auto-generated)"
+        required: false
+
+concurrency:
+  group: release-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main-v2
+          fetch-depth: 0
+
+      - name: Resolve target commit
+        id: target
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for official CI of this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA="${{ steps.target.outputs.sha }}"
+          DEADLINE=$((SECONDS + 5400))
+          while true; do
+            LATEST=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA" \
+              --jq '.workflow_runs[] | select(.name=="CI") | "\(.status) \(.conclusion) \(.id)"' | head -1 || true)
+            if [ -n "$LATEST" ]; then
+              STATUS=$(echo "$LATEST" | awk '{print $1}')
+              CONCLUSION=$(echo "$LATEST" | awk '{print $2}')
+              RUN_ID=$(echo "$LATEST" | awk '{print $3}')
+              echo "CI run $RUN_ID: $STATUS/$CONCLUSION"
+              if [ "$STATUS" = "completed" ]; then
+                if [ "$CONCLUSION" = "success" ]; then
+                  echo "CI passed; proceeding to tag."
+                  exit 0
+                fi
+                echo "::error::CI failed (run $RUN_ID); release aborted, no tag created."
+                exit 1
+              fi
+            else
+              echo "CI run for $SHA not created yet"
+            fi
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "::error::Timed out after 90 minutes waiting for CI on $SHA."
+              exit 1
+            fi
+            sleep 60
+          done
+
+      - name: Create annotated tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag v$VERSION already exists; aborting."
+            exit 1
+          fi
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+          TITLE: ${{ github.event.inputs.title }}
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          set -euo pipefail
+          RELEASE_TITLE="${TITLE:-v$VERSION}"
+          if [ -n "$NOTES" ]; then
+            gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --notes "$NOTES"
+          else
+            gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --generate-notes
+          fi
