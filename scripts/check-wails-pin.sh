@@ -57,6 +57,7 @@ done
 install_lines="$(git -C "$root" grep -nF "$module@" -- . || true)"
 unexpected_sources="$(awk -v module="$module" '
   index($0, ".github/workflows/ci.yml:") == 1 && index($0, module "@$(cat \"$GITHUB_WORKSPACE/.wails-version\")") { next }
+  index($0, ".github/workflows/build-probe-windows.yml:") == 1 && index($0, module "@$(cat \"$GITHUB_WORKSPACE/.wails-version\")") { next }
   index($0, ".github/workflows/release-desktop.yml:") == 1 && index($0, module "@$(cat \"$GITHUB_WORKSPACE/.wails-version\")") { next }
   index($0, ".github/workflows/transcript-native-smoke.yml:") == 1 && index($0, module "@$(cat \"$GITHUB_WORKSPACE/.wails-version\")") { next }
   index($0, ".github/workflows/build-windows.yml:") == 1 && index($0, module "@$(cat \"$GITHUB_WORKSPACE/.wails-version\")") { next }
