@@ -97,6 +97,7 @@ export type TranscriptProps = {
   creationMode?: boolean;
   actionHoverMenus?: boolean;
   rewindSignal?: number;
+  onRewindConsumed?: () => void;
   revealSignal?: number;
   hydrating?: boolean;
   hasOlderHistory?: boolean;
@@ -120,7 +121,7 @@ export function Transcript(props: TranscriptProps) {
     onEditPrompt, onRewind, checkpoints = EMPTY_CHECKPOINTS, actionPending = false,
     rewindDisabled = false, running = false, questionNavigator = true,
     welcomeVariant = "default", creationMode = false, actionHoverMenus = false,
-    rewindSignal = 0, revealSignal = 0, hydrating = false, hasOlderHistory = false,
+    rewindSignal = 0, onRewindConsumed, revealSignal = 0, hydrating = false, hasOlderHistory = false,
     historyStartTurn = 0, historyTotalTurns = 0, loadingOlderHistory = false,
     olderHistoryError, onLoadOlderHistory, turnStartAt, contentRevision = 0,
     invocationMetadata = EMPTY_INVOCATION_METADATA, historyMutation,
@@ -264,11 +265,23 @@ export function Transcript(props: TranscriptProps) {
     if (questionNavigatorRef.current) questionNavigatorRef.current.retry();
     else void requestOlder(undefined, "retry");
   });
+  const handledRewindSignalRef = useRef(0);
+  const latestQuestionsRef = useRef(questions);
+  latestQuestionsRef.current = questions;
   useEffect(() => {
-    if (rewindSignal <= 0) return;
-    const last = questions[questions.length - 1];
+    // Only the signal itself may trigger this jump. `questions` changes on every
+    // streaming frame, so depending on it re-fired the jump on each frame and
+    // dragged the viewport back to the last question - the sawtooth users report
+    // as "scrolled to the bottom, let go, and it jumped back up".
+    if (rewindSignal <= 0 || handledRewindSignalRef.current === rewindSignal) return;
+    handledRewindSignalRef.current = rewindSignal;
+    const current = latestQuestionsRef.current;
+    const last = current[current.length - 1];
     if (last) jumpToLoadedQuestion(last);
-  }, [jumpToLoadedQuestion, questions, rewindSignal]);
+// One-shot: clear the signal after consuming it, so remounting the
+    // transcript (switching sessions) never replays this jump.
+    onRewindConsumed?.();
+  }, [jumpToLoadedQuestion, rewindSignal, onRewindConsumed]);
 
   const handleScroll = useTranscriptCommand(() => {
     const towardHistory = onScroll();

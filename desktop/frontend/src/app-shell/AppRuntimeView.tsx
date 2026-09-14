@@ -338,7 +338,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
               hydratePlaceholderActive: session.hydratePlaceholderActive,
               clearContextPending: session.clearCommands.clearContextPending,
               creation: sidebarCreation,
-              rewind: { stateActive: session.sessionUndo.rewindState != null, committing: session.sessionUndo.rewindCommitting, signal: session.sessionUndo.rewindSignal },
+              rewind: { stateActive: session.sessionUndo.rewindState != null, committing: session.sessionUndo.rewindCommitting, signal: session.sessionUndo.rewindSignal, consume: session.sessionUndo.consumeRewindSignal },
             }}
             onRetryHistory={() => void runtime.sessionActions.retrySessionHistory(activeTabId)}
             commands={{
