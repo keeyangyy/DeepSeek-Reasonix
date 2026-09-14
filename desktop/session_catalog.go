@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -363,7 +364,42 @@ func (a *App) syncSessionCatalogMetadata(ctx context.Context, catalog *sessionca
 		})
 		appendTopics("project", project.Root, project.Topics, project.PinnedTopics, project.ManualTopicOrder)
 	}
-	return catalog.SyncMetadata(ctx, projects, topics)
+	// Idempotence guard: the 30s refresh loop drives this unconditionally, and
+	// Catalog.SyncMetadata always rewrites rows and bumps the revision. When
+	// the derived projects/topics are byte-identical to the last accepted set,
+	// skip the catalog write entirely so the sidebar is not re-rendered every
+	// 30 seconds. A nil/empty fingerprint always syncs (first run or a test
+	// with a fresh App).
+	fingerprint := sessionCatalogMetadataFingerprint(projects, topics)
+	a.sessionCatalogMetadataMu.Lock()
+	if fingerprint != "" && fingerprint == a.sessionCatalogMetadataFingerprint {
+		a.sessionCatalogMetadataMu.Unlock()
+		return nil
+	}
+	if err := catalog.SyncMetadata(ctx, projects, topics); err != nil {
+		a.sessionCatalogMetadataMu.Unlock()
+		return err
+	}
+	a.sessionCatalogMetadataFingerprint = fingerprint
+	a.sessionCatalogMetadataMu.Unlock()
+	return nil
+}
+
+// sessionCatalogMetadataFingerprint derives a stable identity for the metadata
+// set fed into Catalog.SyncMetadata. Orderings are deterministic here (global
+// topics, then projects in file order, each topic list in pinned/order
+// sequence), so a marshaled comparison is exact.
+func sessionCatalogMetadataFingerprint(projects []sessioncatalog.ProjectRecord, topics []sessioncatalog.TopicMetadata) string {
+	if len(projects) == 0 && len(topics) == 0 {
+		return ""
+	}
+	projectsJSON, _ := json.Marshal(projects)
+	topicsJSON, _ := json.Marshal(topics)
+	var buf strings.Builder
+	buf.Write(projectsJSON)
+	buf.WriteByte(0)
+	buf.Write(topicsJSON)
+	return buf.String()
 }
 
 func (a *App) emitProjectTreeChangedV2(revision uint64, roots []string, reason string) {

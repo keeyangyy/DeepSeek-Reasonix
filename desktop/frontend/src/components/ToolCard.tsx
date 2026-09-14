@@ -44,6 +44,7 @@ import { isBatchedReadOnlyTool, isTerminalSubagentPhase, type Item, type Subagen
 import type { Translator } from "../lib/i18n";
 import { ReadOnlyBatch } from "./ReadOnlyBatch";
 import { useWorkProcessPresentation } from "../lib/sessionExperience";
+import { useDefaultCollapsed } from "../lib/defaultCollapsedPreference";
 import { useTranscriptUserResizeIntent } from "./TranscriptLayoutIntentContext";
 import { resolveToolCardDefaultOpen } from "../lib/transcriptRowGeometry";
 import type { SearchSourcePresentation } from "../lib/searchSourcesPresentation";
@@ -248,16 +249,18 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
       })()
     : "";
   const presentation = useWorkProcessPresentation();
+  const defaultCollapsed = useDefaultCollapsed();
   const hasSubagentPreview = Boolean(sp && ((sp.reasoning && presentation.showWhileRunning) || sp.text || sp.notice));
 
   // All tools default to collapsed. Sub-agent tools open while running so the
   // user sees nested calls; they collapse when done. Reasoning (AssistantMessage)
   // stays open for the same owner lifecycle instead of collapsing between the
-  // reasoning and response/tool phases.
+  // reasoning and response/tool phases. The default-collapsed preference keeps
+  // every card one line regardless of running state; manual expand still works.
   const subagentReasoningRunning = sp?.phase === "reasoning";
   const subagentActive = Boolean(sp) && item.status === "running";
   const liveFollow = presentation.showWhileRunning;
-  const defaultOpen = resolveToolCardDefaultOpen(item, nested.length, presentation);
+  const defaultOpen = defaultCollapsed ? false : resolveToolCardDefaultOpen(item, nested.length, presentation);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? defaultOpen;
   const openRef = useRef(open);
@@ -267,34 +270,37 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
   // The sub-agent reasoning preview opens as a one-line summary; the full
   // Markdown only mounts after the user expands the reasoning section.
   const [subagentReasoningOpen, setSubagentReasoningOpen] = useState(
-    () => presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && subagentActive),
+    () => !defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && subagentActive)),
   );
   const subagentReasoningUserOverridden = useRef(false);
   const previousSubagentReasoningRunning = useRef(subagentReasoningRunning);
   const previousSubagentActive = useRef(subagentActive);
   const previousExperience = useRef(presentation.experience);
+  const previousCollapsed = useRef(defaultCollapsed);
   useEffect(() => {
     const modeChanged = previousExperience.current !== presentation.experience;
+    const collapsedChanged = previousCollapsed.current !== defaultCollapsed;
     const wasRunning = previousSubagentReasoningRunning.current;
     const wasActive = previousSubagentActive.current;
     previousExperience.current = presentation.experience;
+    previousCollapsed.current = defaultCollapsed;
     previousSubagentReasoningRunning.current = subagentReasoningRunning;
     previousSubagentActive.current = subagentActive;
-    if (modeChanged) {
+    if (modeChanged || collapsedChanged) {
       subagentReasoningUserOverridden.current = false;
-      setSubagentReasoningOpen(presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && subagentActive));
+      setSubagentReasoningOpen(!defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && subagentActive)));
       return;
     }
     if ((subagentActive && !wasActive) || (subagentReasoningRunning && !wasRunning)) {
       subagentReasoningUserOverridden.current = false;
-      if (liveFollow) setSubagentReasoningOpen(true);
+      if (liveFollow && !defaultCollapsed) setSubagentReasoningOpen(true);
       return;
     }
     if (!presentation.showWhileRunning) return;
     if (!subagentActive && wasActive && !presentation.keepExpandedAfterCompletion && !subagentReasoningUserOverridden.current) {
       setSubagentReasoningOpen(false);
     }
-  }, [liveFollow, presentation, subagentActive, subagentReasoningRunning]);
+  }, [defaultCollapsed, liveFollow, presentation, subagentActive, subagentReasoningRunning]);
   // Lazy-load full tool data from the backend when the card is expanded and
   // the in-memory copy was archived for memory efficiency.
   const [fullData, setFullData] = useState<{ args: string; output?: string; execution?: ToolItem["execution"]; mcpApp?: MCPAppPresentation } | null>(null);

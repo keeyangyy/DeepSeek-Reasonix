@@ -124,7 +124,14 @@ type App struct {
 	catalogRebuildMu   sync.Mutex
 	catalogRebuild     *sessionCatalogRebuildFlight
 	catalogRebuilding  atomic.Bool
-	shuttingDown       atomic.Bool
+	// sessionCatalogMetadataMu guards the fingerprint of the last metadata the
+	// catalog accepted. The 30s refresh loop calls syncSessionCatalogMetadata
+	// unconditionally; without a guard every tick bumps the catalog revision
+	// and republishes project-tree:changed-v2, so the sidebar re-renders every
+	// 30 seconds even when nothing changed.
+	sessionCatalogMetadataMu          sync.Mutex
+	sessionCatalogMetadataFingerprint string
+	shuttingDown                      atomic.Bool
 	// catalogReconcileJobs coalesces both the legacy pre-scan and catalog scan.
 	// Catalog deduplicates its worker; this also prevents callers from
 	// stampeding the otherwise-unbounded pre-scan goroutines.
