@@ -115,3 +115,15 @@ jobs:
           else
             gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --generate-notes
           fi
+
+      - name: Dispatch Windows artifact pipeline
+        # GITHUB_TOKEN pushes do not trigger tag workflows, but
+        # workflow_dispatch is an allowed exception — relay the just-created
+        # tag to the upstream release-windows pipeline (it builds the portable
+        # archive + NSIS installer and uploads both to this release).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-windows.yml --repo "$GITHUB_REPOSITORY" -f "tag=v$VERSION"
