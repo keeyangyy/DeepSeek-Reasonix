@@ -95,15 +95,11 @@ func (a *App) forkForTabWithOptions(tabID string, turn int, isolateWorkspace boo
 		}
 	}
 
-	if _, ok := ctrl.SessionHead(); ok && !result.Isolated {
-		// A schema-2 log forks into a new head of the same log and the source
-		// tab moves onto it; the previous chain stays selectable as a version.
-		if _, err := ctrl.ForkNamed(turn, ""); err != nil {
-			return ForkWorktreeResultView{}, err
-		}
-		result.Tab = a.tabMetaAfterHeadSwitch(sourceTab)
-		return result, nil
-	}
+	// Fork always creates a separate session file + new tab (schema-1 and
+	// schema-2 alike). The schema-2 in-log head fork is intentionally not used
+	// here: the fork button must surface a brand-new session entry in the
+	// sidebar. Rewind/branch/switch keep the in-log head model.
+
 	newPath, err := ctrl.ForkSession(turn, "")
 	if err != nil {
 		return ForkWorktreeResultView{}, a.rollbackUnusedForkWorktree(created, err)
