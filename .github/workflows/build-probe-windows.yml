@@ -29,7 +29,10 @@ on:
         type: string
 
 concurrency:
-  group: build-probe-windows
+  # One group per branch: a new push on the same branch cancels its running
+  # build (the original intent), but builds on other branches — e.g. a test/**
+  # probe while a dev build is running — must not cancel each other.
+  group: build-probe-windows-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
