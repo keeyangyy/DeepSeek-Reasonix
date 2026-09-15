@@ -777,13 +777,7 @@ func (a *App) restoreOrBuildTabs() {
 			} else {
 				tab = a.createTabEntryWithID("global", globalTabWorkspaceRoot(), entry.TopicID, id)
 			}
-			tab.model = entry.Model
-			// Effort is session state: restore it from the sidecar of the
-			// session this tab is about to open. The persisted tab-level value
-			// stays a compatibility mirror only, so a restart cannot revive a
-			// level the visible tab happened to carry over from another
-			// conversation.
-			tab.effort = effortPtr(loadTabSessionProfile(entry.SessionPath).effort)
+			tab.model, tab.effort = entry.Model, sessionEffortFor(entry.SessionPath)
 			// The role entry seeds the quality floor: delivery (and legacy
 			// delivery labels) raise it; light folds to standard.
 			if entry.QualityFloor == control.QualityFloorDelivery {
@@ -3813,18 +3807,6 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 			a.runtimeAdmissionMu.Unlock()
 			return fmt.Errorf("failed to reattach detached session runtime")
 		}
-		// The reused runtime already belongs to the target session, but the
-		// tab-level effort mirror still describes the outgoing conversation.
-		// Align it with the target session so the switcher stops showing the
-		// previous level.
-		reusedEffort := effortPtr(loadTabSessionProfile(sessionPath).effort)
-		a.mu.Lock()
-		if !tab.removed && a.tabs[tab.ID] == tab {
-			tab.effort = cloneStringPtr(reusedEffort)
-			a.saveTabsLocked()
-		}
-		a.mu.Unlock()
-
 		if oldSink != nil {
 			oldSink.setBinding("", nil)
 			oldSink.clearContext()
@@ -3948,8 +3930,7 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 	tab.Ctrl = candidate.ctrl
 	tab.sink = candidate.sink
 	tab.SessionPath = sessionPath
-	tab.model = candidate.model
-	tab.effort = cloneStringPtr(candidate.effort)
+	tab.model, tab.effort = candidate.model, effortPtr(profile.effort)
 	tab.Label = candidate.ctrl.Label()
 	applyNormalizedRuntimeToTabLocked(tab, candidate.runtime)
 	tab.Ready = true
@@ -4075,6 +4056,7 @@ func (a *App) reattachDetachedSessionRuntimeForRebind(
 	a.mu.Unlock()
 
 	a.replayPendingPromptsAfterRuntimeAttach(tab.ID, attachedSink, attachedCtrl, attachedEpoch)
+	a.alignEffortForReusedRuntime(tab, sessionPath)
 	return oldCtrl, oldSink, oldLease, oldHostKey, true
 }
 
@@ -4083,7 +4065,6 @@ type sessionRebindCandidate struct {
 	ctrl              control.SessionAPI
 	sink              *tabEventSink
 	model             string
-	effort            *string
 	runtime           normalizedTabRuntime
 	telemetry         tabTelemetrySnapshot
 	sharedHostKey     string
@@ -4170,10 +4151,6 @@ func (a *App) buildSessionRebindCandidate(
 	if _, err := loadPinnedContextState(sessionPath); err != nil {
 		return nil, err
 	}
-	// The target session owns its effort: use the level recorded beside that
-	// transcript, and fall back to the provider default (auto) instead of
-	// reviving the outgoing tab's level.
-	targetEffort := effortPtr(profile.effort)
 	ctrl, err := boot.Build(a.bootContext(), boot.Options{
 		Model:                    model,
 		RequireKey:               false,
@@ -4183,7 +4160,7 @@ func (a *App) buildSessionRebindCandidate(
 		Sink:                     a.desktopControllerSink(sink, cfg.Notifications),
 		WorkspaceRoot:            root,
 		SessionDir:               sessionDir,
-		EffortOverride:           targetEffort,
+		EffortOverride:           effortPtr(profile.effort),
 		SharedHost:               sharedHost,
 		MCPHostProfile:           plugin.HostProfileDesktopApps,
 		CleanupPendingReconciler: reconcileDesktopCleanupPending,
@@ -4202,7 +4179,7 @@ func (a *App) buildSessionRebindCandidate(
 		return nil, err
 	}
 	candidate := &sessionRebindCandidate{
-		app: a, ctrl: ctrl, sink: sink, model: model, effort: cloneStringPtr(targetEffort), runtime: runtimeProfile,
+		app: a, ctrl: ctrl, sink: sink, model: model, runtime: runtimeProfile,
 		sharedHostKey: source.sharedHostKey, ownsSharedHostRef: ownsSharedHostRef,
 	}
 	a.bindControllerDisplayRecorder(ctrl)
@@ -9964,17 +9941,6 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 	// The rebuilt runtime reflects the on-disk config; drop any deferred refresh.
 	a.clearDeferredRebuild(tab.ID)
 	a.persistTabSessionPath(tab, path)
-	// The session owns the level: record it beside the transcript so a later
-	// conversation switch restores this choice instead of the tab's stale state.
-	effortPath := strings.TrimSpace(path)
-	if effortPath == "" && newCtrl != nil {
-		effortPath = strings.TrimSpace(newCtrl.SessionPath())
-	}
-	if effortPath != "" {
-		if err := agent.SetBranchEffortPreserveUpdated(effortPath, effort); err != nil {
-			return fmt.Errorf("persist selected effort: %w", err)
-		}
-	}
 	a.notifyTabRuntimeRebuilt(tab)
 	return nil
 }

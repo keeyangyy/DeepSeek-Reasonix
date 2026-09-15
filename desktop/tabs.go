@@ -2831,11 +2831,8 @@ func (a *App) ensureBlankTab(scope, workspaceRoot string) (TabMeta, error) {
 		return enrichTabMeta(meta), nil
 	}
 
-	// New blank sessions start from global defaults for model and approval
-	// posture, keeping execution-local settings (floor/MCP) from the active tab
-	// without letting it override global defaults (#4019). Effort is session
-	// state, so a blank session starts at auto instead of inheriting the level
-	// of whatever conversation happens to be visible.
+	// Effort is session state: a blank session starts at auto instead of
+	// inheriting the level of the visible conversation.
 	inheritedModel := defaultModel
 	inheritedFloor := tabQualityFloor(workspaceRoot, a.activeTabLocked().qualityFloorSafe())
 	inheritedMode := tabModeFromAxes(false, defaultToolApprovalMode == control.ToolApprovalYolo)
@@ -7727,7 +7724,6 @@ func (a *App) saveTabSessionMeta(tab *WorkspaceTab, path string) error {
 		mode:             normalizeTabMode(tab.mode),
 		toolApprovalMode: normalizeToolApprovalMode(tab.toolApprovalMode),
 		goal:             strings.TrimSpace(tab.goal),
-		effort:           effortString(tab.effort),
 	}
 	a.mu.RUnlock()
 	if ctrl != nil {
@@ -7748,19 +7744,6 @@ type tabSessionMetaSnapshot struct {
 	tokenMode, qualityFloor    string
 	mode, toolApprovalMode     string
 	goal                       string
-	// effort is the session-scoped reasoning level ("" = auto). Persisting it
-	// here keeps the session sidecar authoritative whenever tab metadata is
-	// saved.
-	effort string
-}
-
-// effortString renders a tab override for a sidecar field, mapping a nil
-// (auto) override to the empty string.
-func effortString(level *string) string {
-	if level == nil {
-		return ""
-	}
-	return strings.TrimSpace(*level)
 }
 
 func (a *App) saveTabSessionMetaForCurrentSession(tab *WorkspaceTab) error {
@@ -7792,7 +7775,6 @@ func (a *App) tabSessionMetaSnapshotForCurrentSession(tab *WorkspaceTab) (tabSes
 	mode := normalizeTabMode(tab.mode)
 	toolApprovalMode := normalizeToolApprovalMode(tab.toolApprovalMode)
 	goal := strings.TrimSpace(tab.goal)
-	effort := effortString(tab.effort)
 	a.mu.RUnlock()
 	if readOnly {
 		return tabSessionMetaSnapshot{}, false
@@ -7856,7 +7838,6 @@ func (a *App) tabSessionMetaSnapshotForCurrentSession(tab *WorkspaceTab) (tabSes
 		mode:             mode,
 		toolApprovalMode: toolApprovalMode,
 		goal:             goal,
-		effort:           effort,
 	}, true
 }
 
@@ -7902,10 +7883,6 @@ func saveTabSessionMetaSnapshot(snap tabSessionMetaSnapshot) error {
 	m.Mode = persistedTabMode(snap.mode)
 	m.ToolApprovalMode = persistedToolApprovalMode(snap.toolApprovalMode)
 	m.Goal = strings.TrimSpace(snap.goal)
-	// The session owns its effort: keep the sidecar in sync whenever tab
-	// metadata is saved. snap.effort mirrors the session's own record, so an
-	// empty value means auto rather than "unknown".
-	m.Effort = strings.TrimSpace(snap.effort)
 	if err := agent.SaveBranchMetaPreserveUpdatedLocked(snap.path, m); err != nil {
 		return err
 	}
@@ -7933,10 +7910,7 @@ func tabSessionMetaPathForSession(runtimeDir, sessionDir, sessionPath string) st
 type tabSessionProfile struct {
 	tokenMode, qualityFloor, mode string
 	toolApprovalMode, goal        string
-	// effort is the session-scoped reasoning level ("" = auto). It travels with
-	// the session sidecar so a conversation switch restores the level the user
-	// picked inside that conversation.
-	effort string
+	effort                        string
 }
 
 func defaultTabSessionProfile() tabSessionProfile {
@@ -7992,20 +7966,7 @@ func applyTabSessionProfile(tab *WorkspaceTab, profile tabSessionProfile) {
 	}
 	tab.mode = tabModeFromAxes(tabModeHasPlan(tab.mode), tab.toolApprovalMode == control.ToolApprovalYolo)
 	tab.goal = strings.TrimSpace(profile.goal)
-	// The session owns its effort: an empty record means auto, and it must
-	// overwrite whatever level the tab carried over from the previous
-	// conversation.
 	tab.effort = effortPtr(profile.effort)
-}
-
-// effortPtr converts a stored level into a tab override, treating an empty
-// record as auto (no override) instead of pinning an empty value.
-func effortPtr(level string) *string {
-	trimmed := strings.TrimSpace(level)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
 }
 
 func persistedTabGoal(tab *WorkspaceTab) string {
@@ -8095,6 +8056,7 @@ func (a *App) persistTabSessionPath(tab *WorkspaceTab, path string) {
 	}
 	_ = a.saveTabSessionMeta(tab, path)
 	a.rememberTabSessionPath(tab, path)
+	recordTabSessionEffort(a, tab, path)
 }
 
 func (a *App) knownSessionDirs() []string {
