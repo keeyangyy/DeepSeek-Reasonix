@@ -411,6 +411,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // measure 2399.2 KiB; retain the same bounded 0.2 KiB build headroom.
 // Search-assignment bridge and metadata add 1.0 KiB over the measured
 // main-v2 baseline (2399.3 KiB); result 2400.3 KiB plus 0.2 KiB headroom.
-const rawInitialBudgetKiB = 2_400.5;
+// The main-v2 merge of the default-collapsed preference and the fork-session
+// flow adds ~0.7 KiB to the initial path (measured 2401.2 KiB on CI). Keep
+// the raise explicit and bounded, with headroom for toolchain/hash drift.
+const rawInitialBudgetKiB = 2_402.0;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
