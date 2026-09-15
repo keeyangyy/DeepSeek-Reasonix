@@ -57,6 +57,14 @@ export class TurnEventProjector {
     if (projected === undefined) {
       projected = active ? Math.min(replayAfter ?? latest, latest) : latest;
       this.sequenceByTab.set(tabId, projected);
+      // Only a replay that starts at the ACTIVE TURN'S FIRST event re-projects
+      // the whole turn and may therefore rewind its segment allocation. A gap
+      // repair (cursor already set, replaying a few missing events) must not:
+      // rewinding the ordinal there would leave it below the segments already
+      // on screen, and the next live events would then reuse a middle segment.
+      if (active && replayAfter !== undefined && replayAfter < latest) {
+        this.replayStartHandler?.(tabId, projected);
+      }
     }
     if (latest > projected) this.requestReplay(tabId, projected, runtimeEpoch);
   }
@@ -104,11 +112,6 @@ export class TurnEventProjector {
 
   private async replayGap(tabId: string, afterSeq: number, requestedEpoch: string | undefined, generation: number) {
     let cursor = afterSeq;
-    // One gap repair re-projects the turn across every page it takes, but the
-    // segment rewind must happen once, before the first page's first event: a
-    // second reset between pages would clear the segments the earlier pages had
-    // just rebuilt and let the remaining pages allocate fresh ones.
-    let seeded = false;
     for (let page = 0; page < MAX_REPLAY_PAGES; page += 1) {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);
@@ -130,13 +133,6 @@ export class TurnEventProjector {
 
       const envelopes = asArray(replay.events).slice().sort((a, b) => a.seq - b.seq);
       // A replay is re-projecting durable events the surface may already hold.
-      // Tell the reducer before the first event so it rewinds the active turn's
-      // segment allocation; without this the replayed rows land beside the
-      // existing ones and the turn is rendered twice.
-      if (!seeded && envelopes.length > 0) {
-        seeded = true;
-        this.replayStartHandler?.(tabId, cursor);
-      }
       for (const envelope of envelopes) {
         if (envelope.seq <= cursor) continue;
         if (envelope.seq !== cursor + 1) throw new Error(`turn event replay gap after ${cursor}`);

@@ -206,5 +206,28 @@ ok(before.every((id) => after.includes(id)), "no existing row was dropped by the
   );
 }
 
+// ---- Variant: a gap repair must NOT rewind the segment allocation ----------
+// Only a replay seeded at the active turn's FIRST event rebuilds the whole
+// turn. A cursor that already exists means a few missing events are being
+// backfilled: rewinding the ordinal there leaves it below the segments already
+// on screen, and the next live events reuse a middle segment — new text lands
+// mid-transcript while the rows after it stay frozen.
+{
+  const rewinds: string[] = [];
+  const gapProjector = new TurnEventProjector();
+  gapProjector.bind(() => {});
+  gapProjector.bindReset(async () => true);
+  gapProjector.bindReplayStart((tabId) => { rewinds.push(tabId); });
+
+  // First observation: cursor unknown and active → seeded at the turn's start.
+  gapProjector.observeRuntime("gap", "epoch", 14, 11, true);
+  const afterSeed = rewinds.length;
+  // Later observation: cursor already set → a gap backfill, not a rebuild.
+  gapProjector.observeRuntime("gap", "epoch", 20, 11, true);
+
+  ok(afterSeed === 1, `a replay seeded at the turn start rewinds once (got ${afterSeed})`);
+  ok(rewinds.length === 1, `a gap repair does not rewind the segments again (got ${rewinds.length})`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
