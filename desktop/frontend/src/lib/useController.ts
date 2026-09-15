@@ -1003,7 +1003,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
 // Diagnostic-only: a compact token describing the active turn's rows, encoded
 // for the whitelisted `state` diagnostic field (see sanitizeEvent in
 // frontendDiagnostics). Format: o<segmentOrdinal>_a<assistantRows>_h<historyRows>
-// _h<historyRows>_t<toolRows>_u<userRows>. Comparing replay.turn-reset with
+// _t<toolRows>_u<userRows>. Comparing replay.turn-reset with
 // replay.turn-complete tells a turn rebuilt in place (same counts) from one the
 // replay appended to; a prepend whose live `u` is 0 has no anchor for the page
 // tail alignment, so the page cannot yield and gets laid down twice.

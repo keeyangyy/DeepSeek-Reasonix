@@ -280,17 +280,55 @@ export function liveOwnedPageTailIds(
   if (pageItems.length === 0 || liveItems.length === 0) return [];
   const pageAnchors = turnAnchorIndexes(pageItems);
   const liveAnchors = turnAnchorIndexes(liveItems);
-  if (pageAnchors.length === 0 || liveAnchors.length === 0) return [];
-  let shared = 0;
-  while (shared < pageAnchors.length && shared < liveAnchors.length) {
-    const pagePrompt = anchorPrompt(pageItems, pageAnchors[pageAnchors.length - 1 - shared]);
-    // An empty prompt cannot prove two turns are the same one.
-    if (pagePrompt === "") break;
-    if (pagePrompt !== anchorPrompt(liveItems, liveAnchors[liveAnchors.length - 1 - shared])) break;
-    shared += 1;
+  if (pageAnchors.length > 0 && liveAnchors.length > 0) {
+    let shared = 0;
+    while (shared < pageAnchors.length && shared < liveAnchors.length) {
+      const pagePrompt = anchorPrompt(pageItems, pageAnchors[pageAnchors.length - 1 - shared]);
+      // An empty prompt cannot prove two turns are the same one.
+      if (pagePrompt === "") break;
+      if (pagePrompt !== anchorPrompt(liveItems, liveAnchors[liveAnchors.length - 1 - shared])) break;
+      shared += 1;
+    }
+    if (shared > 0) {
+      return pageItems.slice(pageAnchors[pageAnchors.length - shared]).map((item) => item.id);
+    }
   }
-  if (shared === 0) return [];
-  return pageItems.slice(pageAnchors[pageAnchors.length - shared]).map((item) => item.id);
+  return liveMidTurnOwnedPageIds(pageItems, liveItems);
+}
+
+/**
+ * Ids of the page rows a mid-turn live surface already owns.
+ *
+ * A replay that rebuilds the active turn recreates its assistant/tool rows but
+ * NOT its user row: the user row comes from the local submission, and the
+ * replay stream has no event for it (`turn_started` carries only the
+ * submissionId). A live surface that holds assistant/tool rows but no user
+ * anchor is therefore mid-turn, so the anchor walk above cannot align it and
+ * returns nothing — the page is then prepended whole, laying down a second copy
+ * of the turn that is already streaming. The page's last turn is that same
+ * turn as last flushed to disk, so its assistant/tool rows yield to the live
+ * copy (the live rows are the newer representation) while its user row stays,
+ * because the live side cannot supply it.
+ *
+ * Declines when the live rows are narrower than the page turn: a live turn with
+ * fewer assistant rows than the page carries is behind, and dropping the page
+ * rows would lose content the live surface does not have yet.
+ */
+function liveMidTurnOwnedPageIds(
+  pageItems: readonly AlignableRow[],
+  liveItems: readonly AlignableRow[],
+): string[] {
+  if (liveItems.some((item) => item.kind === "user")) return [];
+  const liveBody = liveItems.filter((item) => item.kind === "assistant" || item.kind === "tool");
+  if (liveBody.length === 0) return [];
+  const pageAnchors = turnAnchorIndexes(pageItems);
+  if (pageAnchors.length === 0) return [];
+  const tail = pageItems.slice(pageAnchors[pageAnchors.length - 1]).filter((item) => item.kind !== "user");
+  if (tail.length === 0) return [];
+  const liveAssistants = liveBody.filter((item) => item.kind === "assistant").length;
+  const tailAssistants = tail.filter((item) => item.kind === "assistant").length;
+  if (liveAssistants < tailAssistants) return [];
+  return tail.map((item) => item.id);
 }
 
 export function sameSessionPlaceholderItems<T>(

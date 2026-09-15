@@ -222,8 +222,27 @@ ok(
     "an empty prompt cannot prove a shared turn",
   );
   ok(
-    liveOwnedPageTailIds(page, [row("assistant", "a9", "")]).length === 0,
-    "a live surface with no turn anchor claims nothing",
+    liveOwnedPageTailIds([row("assistant", "h2", "old answer")], [row("assistant", "a9", "")]).length === 0,
+    "a page with no turn anchor yields nothing",
+  );
+  // Mid-turn live surface: the replay rebuilt the turn's assistant/tool rows
+  // but not its user row, so the anchor walk finds nothing. The page's last
+  // turn is that same turn, so its body rows yield while its user row stays.
+  ok(
+    JSON.stringify(liveOwnedPageTailIds(page, [
+      row("assistant", "a7", ""), row("tool", "t7", ""),
+    ])) === JSON.stringify(["h4"]),
+    "a mid-turn live surface (no user anchor) takes only the page turn's body rows",
+  );
+  ok(
+    liveOwnedPageTailIds([
+      row("user", "h1", "old prompt"),
+      row("assistant", "h2", "old answer"),
+      row("user", "h3", "new prompt"),
+      row("assistant", "h4", "part one"),
+      row("assistant", "h5", "part two"),
+    ], [row("assistant", "a7", "")]).length === 0,
+    "a live turn narrower than the page turn declines to drop its rows",
   );
   ok(
     liveOwnedPageTailIds([], [row("user", "u9", "new prompt")]).length === 0 &&
