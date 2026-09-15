@@ -6,6 +6,7 @@ import {
   duplicateLiveItemIds,
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
+  liveOwnedPageTailIds,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
   shouldPreferResidentHistory,
@@ -185,6 +186,33 @@ ok(
     digest: "rev-10",
   }) === "replace",
   "empty idle surface still applies history",
+);
+
+// liveOwnedPageTailIds: filter the page (keep live) only while mid-turn. The
+// "only C duplicates" case: an in-flight live surface with no user row must
+// still yield the page's last-turn rows; an idle surface keeps main-v2.
+ok(
+  liveOwnedPageTailIds(
+    [{ kind: "user", id: "p-u", text: "q" }, { kind: "assistant", id: "p-a1" }, { kind: "assistant", id: "p-a2" }],
+    [{ kind: "assistant", id: "l-a1" }],
+    true,
+  ).length === 2,
+  "an in-flight live surface without a user row yields the page's last-turn rows",
+);
+ok(
+  liveOwnedPageTailIds(
+    [{ kind: "user", id: "p-u", text: "q" }, { kind: "assistant", id: "p-a1" }],
+    [{ kind: "assistant", id: "l-a1" }],
+  ).length === 0,
+  "an idle live surface does not filter the page (main-v2 semantics kept)",
+);
+ok(
+  liveOwnedPageTailIds(
+    [{ kind: "user", id: "p-u", text: "q" }, { kind: "assistant", id: "p-a1" }],
+    [{ kind: "user", id: "l-u", text: "q" }, { kind: "assistant", id: "l-a1" }],
+    true,
+  ).length === 2,
+  "an in-flight live surface with matching user prompt yields the whole shared turn",
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

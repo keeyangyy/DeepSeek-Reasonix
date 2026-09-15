@@ -40,7 +40,7 @@ import {
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { probeEventApplied, probeMerge, probeSurfaceRebuild } from "./sessionDupProbe";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, liveOwnedPageTailIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2940,22 +2940,35 @@ export function useController() {
           digest: projection.digest || undefined,
         };
         const probeLive = statesRef.current.get(tabId);
-        const probeRemoved = applyMode === "prepend" ? duplicateLiveItemIds(projection.items, probeLive?.items ?? []) : [];
+        const liveItems = probeLive?.items ?? [];
+        const inFlight = foregroundTurnActive();
+        const isPrepend = applyMode === "prepend";
+        // Idle keeps main-v2 semantics (drop the overlapping live tail, keep
+        // the page). While the live surface is mid-turn, keep the live rows and
+        // instead filter the page down to what live does not already own, so a
+        // switch-back cannot lay the same in-flight turn down a second time.
+        const liveOwned = isPrepend && inFlight
+          ? new Set(liveOwnedPageTailIds(projection.items, liveItems, true))
+          : new Set<string>();
+        const pageItems = liveOwned.size > 0
+          ? projection.items.filter((item) => !liveOwned.has(item.id))
+          : projection.items;
+        const probeRemoved = isPrepend && !inFlight ? duplicateLiveItemIds(projection.items, liveItems) : [];
         probeMerge({
           tabId,
-          kind: applyMode === "prepend" ? "history_prepend" : "history_replace",
+          kind: isPrepend ? "history_prepend" : "history_replace",
           reason,
           applyMode,
-          pageRows: projection.items,
-          liveRows: probeLive?.items ?? [],
-          keptCount: projection.items.length,
+          pageRows: pageItems,
+          liveRows: liveItems,
+          keptCount: pageItems.length,
           removedLive: probeRemoved,
           totalTurns: projection.totalTurns,
           pageStartTurn: projection.startTurn,
           liveStartTurn: probeLive?.historyStartTurn ?? 0,
         });
-        dispatchTo(tabId, applyMode === "prepend"
-          ? { type: "history_prepend", ...page, removeIds: probeRemoved }
+        dispatchTo(tabId, isPrepend
+          ? { type: "history_prepend", ...page, items: pageItems, removeIds: probeRemoved }
           : { type: "history_replace", ...page });
         addBreadcrumb(
           "tab.hydrate",

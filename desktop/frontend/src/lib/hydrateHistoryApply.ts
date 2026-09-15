@@ -239,6 +239,48 @@ export function duplicateLiveItemIds(
   return [];
 }
 
+function turnAnchorIndexes(rows: readonly SignatureItem[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < rows.length; i += 1) if (rows[i].kind === "user") out.push(i);
+  return out;
+}
+
+// Yield-side dedupe (filter the PAGE, keep the LIVE rows). Enabled only while
+// the live surface is mid-turn: a switch-back re-projects the active turn
+// onto a live surface that already holds it, and the page snapshot may carry
+// the same turn — keeping both renders it twice. When idle we keep the
+// main-v2 "drop the live tail, keep the page" semantics, so this returns [].
+export function liveOwnedPageTailIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+  liveInFlight = false,
+): string[] {
+  if (!liveInFlight || pageItems.length === 0 || liveItems.length === 0) return [];
+  const pageAnchors = turnAnchorIndexes(pageItems);
+  const liveAnchors = turnAnchorIndexes(liveItems);
+  // Primary: align shared turns by user-row prompt (the only rows with real
+  // text on both sides); yield the page's copy of those turns.
+  if (pageAnchors.length > 0 && liveAnchors.length > 0) {
+    let shared = 0;
+    while (shared < pageAnchors.length && shared < liveAnchors.length) {
+      const pPrompt = (pageItems[pageAnchors[pageAnchors.length - 1 - shared]]?.text ?? "").trim();
+      if (pPrompt === "") break;
+      if (pPrompt !== (liveItems[liveAnchors[liveAnchors.length - 1 - shared]]?.text ?? "").trim()) break;
+      shared += 1;
+    }
+    if (shared > 0) return pageItems.slice(pageAnchors[pageAnchors.length - shared]).map((item) => item.id);
+  }
+  // Fallback: the live surface holds the in-flight turn but has NO user row
+  // (its prompt came from the local submission, not the replay stream), so the
+  // anchor walk above cannot align. Yield the page's last turn (assistant/tool
+  // rows) to the live copy instead of laying the whole page down twice.
+  if (liveAnchors.length === 0 && liveItems.some((item) => item.kind === "assistant" || item.kind === "tool")) {
+    const start = pageAnchors.length > 0 ? pageAnchors[pageAnchors.length - 1] : 0;
+    return pageItems.slice(start).filter((item) => item.kind !== "user").map((item) => item.id);
+  }
+  return [];
+}
+
 export function sameSessionPlaceholderItems<T>(
   target: SessionHydrateIdentity | undefined,
   prev: { meta?: SessionHydrateIdentity; items?: T[] } | undefined,
