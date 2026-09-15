@@ -37,6 +37,23 @@ export class TurnEventProjector {
     this.repairByTab.delete(tabId);
   }
 
+  /**
+   * Resolves once any in-flight gap repair / turn-event replay for the tab has
+   * settled (or was already discarded). A no-op when nothing is running. Used
+   * to serialize a history merge against a replay that may still be paging:
+   * the merge must observe the fully-replayed live rows so its dedupe sees the
+   * complete turn instead of racing a later replay page onto the merged page.
+   */
+  async waitForIdle(tabId: string): Promise<void> {
+    const repair = this.repairByTab.get(tabId);
+    if (!repair) return;
+    try {
+      await repair;
+    } catch {
+      // gap-repair-failed is already recorded in requestReplay; nothing else to do.
+    }
+  }
+
   observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean) {
     if (runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId)) {
       this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);

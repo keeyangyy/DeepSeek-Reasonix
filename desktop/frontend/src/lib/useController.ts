@@ -2921,6 +2921,13 @@ export function useController() {
       const applyProj = projection && {
         items: projection.items, revision: projection.revisionKnown ? projection.revision : undefined, digest: projection.digest || undefined,
       };
+      // A turn-event replay (observed on runtime rebuild when returning to a
+      // mid-turn session) may still be paging in. Wait for it to settle before
+      // deciding the apply mode and merging the page, so the dedupe below sees
+      // the complete replayed live rows rather than racing a later replay page
+      // onto an already-merged page and duplicating the in-flight turn.
+      await turnEventProjector.waitForIdle(tabId);
+      if (!stillCurrent()) return;
       const applyMode = hydratedHistoryApplyMode(skipHistory, projection !== undefined, foregroundTurnActive(), statesRef.current.get(tabId), applyProj);
       if (projection !== undefined && applyMode !== "skip") {
         if (deferResetUntilHistory && stillCurrent() && !foregroundTurnActive()) dispatchTo(tabId, { type: "reset" });
