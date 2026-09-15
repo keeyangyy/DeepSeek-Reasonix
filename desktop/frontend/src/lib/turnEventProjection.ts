@@ -6,6 +6,7 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
 type ReplaySeedHandler = (tabId: string, fromSeq: number) => void;
+type ReplayDoneHandler = (tabId: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
 
@@ -23,6 +24,7 @@ export class TurnEventProjector {
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
   private replayStartHandler?: ReplaySeedHandler;
+  private replayDoneHandler?: ReplayDoneHandler;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
@@ -33,6 +35,10 @@ export class TurnEventProjector {
   // that turn in place instead of appending a second copy of it.
   bindReplayStart(handler: ReplaySeedHandler) { this.replayStartHandler = handler; }
   unbindReplayStart(handler: ReplaySeedHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
+  // Notified once a replay has projected its last event, so the reducer state
+  // after the rebuild can be compared with the state before it.
+  bindReplayDone(handler: ReplayDoneHandler) { this.replayDoneHandler = handler; }
+  unbindReplayDone(handler: ReplayDoneHandler) { if (this.replayDoneHandler === handler) this.replayDoneHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -104,6 +110,11 @@ export class TurnEventProjector {
 
   private async replayGap(tabId: string, afterSeq: number, requestedEpoch: string | undefined, generation: number) {
     let cursor = afterSeq;
+    // One gap repair re-projects the turn across every page it takes, but the
+    // segment rewind must happen once, before the first page's first event: a
+    // second reset between pages would clear the segments the earlier pages had
+    // just rebuilt and let the remaining pages allocate fresh ones.
+    let seeded = false;
     for (let page = 0; page < MAX_REPLAY_PAGES; page += 1) {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);
@@ -128,7 +139,10 @@ export class TurnEventProjector {
       // Tell the reducer before the first event so it rewinds the active turn's
       // segment allocation; without this the replayed rows land beside the
       // existing ones and the turn is rendered twice.
-      if (envelopes.length > 0) this.replayStartHandler?.(tabId, cursor);
+      if (!seeded && envelopes.length > 0) {
+        seeded = true;
+        this.replayStartHandler?.(tabId, cursor);
+      }
       for (const envelope of envelopes) {
         if (envelope.seq <= cursor) continue;
         if (envelope.seq !== cursor + 1) throw new Error(`turn event replay gap after ${cursor}`);
@@ -160,7 +174,10 @@ export class TurnEventProjector {
         cursor = live.seq;
         this.sequenceByTab.set(tabId, cursor);
       }
-      if (remaining.length === 0) return;
+      if (remaining.length === 0) {
+        this.replayDoneHandler?.(tabId);
+        return;
+      }
       this.gapQueueByTab.set(tabId, remaining);
     }
     recordFrontendDiagnostic("runtime", "turn-events-gap-repair-incomplete", {

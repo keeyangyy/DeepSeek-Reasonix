@@ -1000,6 +1000,19 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
   return { items, seq };
 }
 
+// Diagnostic-only: a compact token describing the active turn's rows, encoded
+// for the whitelisted `state` diagnostic field (see sanitizeEvent in
+// frontendDiagnostics). Format: o<segmentOrdinal>_a<assistantRows>_h<historyRows>
+// _t<toolRows>. Comparing the token at replay.turn-reset with the one at
+// replay.turn-complete distinguishes a turn rebuilt in place (same counts) from
+// one the replay appended a second copy of (more rows).
+function transcriptTurnShape(state: { items: readonly Item[]; assistantSegmentOrdinal: number }): string {
+  const assistants = state.items.filter((item) => item.kind === "assistant");
+  const historyRows = assistants.filter((item) => item.id.startsWith("he:")).length;
+  const toolRows = state.items.filter((item) => item.kind === "tool").length;
+  return `o${state.assistantSegmentOrdinal}_a${assistants.length}_h${historyRows}_t${toolRows}`;
+}
+
 function applyTurnCheckpoint(items: Item[], submissionId: string | undefined, turn: number | undefined): Item[] {
   if (!submissionId) return items;
   const validTurn = turn !== undefined && Number.isInteger(turn) && turn >= 0;
@@ -3142,25 +3155,35 @@ export function useController() {
     // rewind that turn's segment allocation so the replayed rows reuse their
     // existing ids instead of being appended as a second copy of the turn.
     const onReplayStart = (tabId: string) => {
-      // Diagnostic anchor: what the turn looked like when the replay began.
-      // Row counts (never ids or content) are enough to tell a rebuilt-in-place
-      // turn from an appended duplicate.
+      // Diagnostic anchor: the turn's shape when the replay began. Only the
+      // whitelisted `state`/`running` fields survive sanitization, so the shape
+      // is encoded as a token: o<segmentOrdinal>_a<assistantRows>_h<historyRows>
+      // _t<toolRows>. Comparing it with replay.turn-complete tells a rebuilt-in-
+      // place turn (same shape) from an appended duplicate (more rows).
       const state = statesRef.current.get(tabId);
       if (state) {
         recordFrontendDiagnostic("runtime", "replay.turn-reset", {
-          ordinal: state.assistantSegmentOrdinal,
-          hasCurrentAssistant: state.currentAssistant !== undefined,
-          hasLive: state.live !== undefined,
-          turnActive: state.turnActive,
+          state: transcriptTurnShape(state),
           running: state.running,
-          assistantRows: state.items.filter((item) => item.kind === "assistant").length,
-          toolRows: state.items.filter((item) => item.kind === "tool").length,
         });
       }
       dispatchTo(tabId, { type: "replay_turn_reset" });
     };
+    const onReplayDone = (tabId: string) => {
+      const state = statesRef.current.get(tabId);
+      if (state) {
+        recordFrontendDiagnostic("runtime", "replay.turn-complete", {
+          state: transcriptTurnShape(state),
+          running: state.running,
+        });
+      }
+    };
     turnEventProjector.bindReplayStart(onReplayStart);
-    return () => turnEventProjector.unbindReplayStart(onReplayStart);
+    turnEventProjector.bindReplayDone(onReplayDone);
+    return () => {
+      turnEventProjector.unbindReplayStart(onReplayStart);
+      turnEventProjector.unbindReplayDone(onReplayDone);
+    };
   }, [dispatchTo, turnEventProjector]);
 
   // On-demand full content for a ref-replaced history field (entries carrying
