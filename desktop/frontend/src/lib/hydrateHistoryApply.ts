@@ -239,6 +239,60 @@ export function duplicateLiveItemIds(
   return [];
 }
 
+export type AlignableRow = { kind: string; id: string; text?: string };
+
+/** Indexes of the user rows, the only rows that start a turn. */
+function turnAnchorIndexes(rows: readonly AlignableRow[]): number[] {
+  const anchors: number[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    if (rows[i].kind === "user") anchors.push(i);
+  }
+  return anchors;
+}
+
+function anchorPrompt(rows: readonly AlignableRow[], anchor: number): string {
+  return (rows[anchor]?.text ?? "").trim();
+}
+
+/**
+ * Ids of the page rows the live surface already owns.
+ *
+ * The persisted snapshot of an in-flight turn is always a prefix of what the
+ * live surface renders, and a live assistant row carries no text at all — the
+ * streaming body lives in LiveStream, not in `items`. Per-row text signatures
+ * therefore cannot align the two sources: `itemSignature` collapses every live
+ * assistant row to `assistant|||` and the whole-page match in
+ * `duplicateLiveItemIds` never fires, so the page is prepended on top of the
+ * live copy of the same turn.
+ *
+ * The turn anchor — a user row, whose prompt text is real on both sides — is
+ * the only comparable unit. Walking back from both tails over those anchors
+ * finds the turns the two sources share, and the page copy of a shared turn
+ * yields to the live copy: while the turn is in flight the live rows are the
+ * newer representation, since the page can only carry what was flushed to
+ * disk mid-stream. Rows before the first shared turn are kept; they are older
+ * history the live surface does not have.
+ */
+export function liveOwnedPageTailIds(
+  pageItems: readonly AlignableRow[],
+  liveItems: readonly AlignableRow[],
+): string[] {
+  if (pageItems.length === 0 || liveItems.length === 0) return [];
+  const pageAnchors = turnAnchorIndexes(pageItems);
+  const liveAnchors = turnAnchorIndexes(liveItems);
+  if (pageAnchors.length === 0 || liveAnchors.length === 0) return [];
+  let shared = 0;
+  while (shared < pageAnchors.length && shared < liveAnchors.length) {
+    const pagePrompt = anchorPrompt(pageItems, pageAnchors[pageAnchors.length - 1 - shared]);
+    // An empty prompt cannot prove two turns are the same one.
+    if (pagePrompt === "") break;
+    if (pagePrompt !== anchorPrompt(liveItems, liveAnchors[liveAnchors.length - 1 - shared])) break;
+    shared += 1;
+  }
+  if (shared === 0) return [];
+  return pageItems.slice(pageAnchors[pageAnchors.length - shared]).map((item) => item.id);
+}
+
 export function sameSessionPlaceholderItems<T>(
   target: SessionHydrateIdentity | undefined,
   prev: { meta?: SessionHydrateIdentity; items?: T[] } | undefined,

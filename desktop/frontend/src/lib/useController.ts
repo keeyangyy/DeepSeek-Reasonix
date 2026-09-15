@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, liveOwnedPageTailIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2962,8 +2962,17 @@ export function useController() {
       const applyMode = hydratedHistoryApplyMode(skipHistory, projection !== undefined, foregroundTurnActive(), statesRef.current.get(tabId), applyProj);
       if (projection !== undefined && applyMode !== "skip") {
         if (deferResetUntilHistory && stillCurrent() && !foregroundTurnActive()) dispatchTo(tabId, { type: "reset" });
+        // A turn the live surface is streaming is also, mid-stream, the turn the
+        // page's tail carries. Whole turns (anchored on the user row, the only
+        // row comparable across sources) yield to the live copy; rows before the
+        // oldest shared turn stay, they are older history the live surface lacks.
+        const liveItems = statesRef.current.get(tabId)?.items ?? [];
+        const liveOwnedIds = applyMode === "prepend" ? new Set(liveOwnedPageTailIds(projection.items, liveItems)) : undefined;
+        const pageItems = liveOwnedIds?.size
+          ? projection.items.filter((item) => !liveOwnedIds.has(item.id))
+          : projection.items;
         const page = {
-          items: projection.items,
+          items: pageItems,
           startTurn: projection.startTurn,
           totalTurns: projection.totalTurns,
           hasOlder: projection.hasOlder,
@@ -2971,7 +2980,7 @@ export function useController() {
           digest: projection.digest || undefined,
         };
         dispatchTo(tabId, applyMode === "prepend"
-          ? { type: "history_prepend", ...page, removeIds: duplicateLiveItemIds(projection.items, statesRef.current.get(tabId)?.items ?? []) }
+          ? { type: "history_prepend", ...page, removeIds: duplicateLiveItemIds(projection.items, liveItems) }
           : { type: "history_replace", ...page });
         addBreadcrumb(
           "tab.hydrate",

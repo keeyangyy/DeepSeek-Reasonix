@@ -6,6 +6,7 @@ import {
   duplicateLiveItemIds,
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
+  liveOwnedPageTailIds,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
   shouldPreferResidentHistory,
@@ -186,6 +187,77 @@ ok(
   }) === "replace",
   "empty idle surface still applies history",
 );
+
+// ---- liveOwnedPageTailIds: whole-turn ownership across the two sources -----
+// A live assistant row carries no text in `items` (the streaming body lives in
+// LiveStream), so per-row signatures cannot align the sources; the user row is
+// the only comparable anchor. These lock the turn-level rule and, critically,
+// the cases where it must decline to drop anything.
+{
+  const row = (kind: string, id: string, text: string) => ({ kind, id, text });
+  const page = [
+    row("user", "h1", "old prompt"),
+    row("assistant", "h2", "old answer"),
+    row("user", "h3", "new prompt"),
+    row("assistant", "h4", "new answer"),
+  ];
+
+  ok(
+    JSON.stringify(liveOwnedPageTailIds(page, [row("user", "u9", "new prompt"), row("assistant", "a9", "")])) === JSON.stringify(["h3", "h4"]),
+    "only the shared tail turn yields to the live surface",
+  );
+  ok(
+    JSON.stringify(liveOwnedPageTailIds(page, [
+      row("user", "u1", "old prompt"), row("assistant", "a1", ""),
+      row("user", "u9", "new prompt"), row("assistant", "a9", ""),
+    ])) === JSON.stringify(["h1", "h2", "h3", "h4"]),
+    "consecutive shared turns yield together",
+  );
+  ok(
+    liveOwnedPageTailIds(page, [row("user", "u9", "unrelated prompt"), row("assistant", "a9", "")]).length === 0,
+    "a turn the live surface does not hold is never dropped",
+  );
+  ok(
+    liveOwnedPageTailIds(page, [row("user", "u9", ""), row("assistant", "a9", "")]).length === 0,
+    "an empty prompt cannot prove a shared turn",
+  );
+  ok(
+    liveOwnedPageTailIds(page, [row("assistant", "a9", "")]).length === 0,
+    "a live surface with no turn anchor claims nothing",
+  );
+  ok(
+    liveOwnedPageTailIds([], [row("user", "u9", "new prompt")]).length === 0 &&
+      liveOwnedPageTailIds(page, []).length === 0,
+    "either side empty claims nothing",
+  );
+  ok(
+    liveOwnedPageTailIds(
+      [row("user", "h1", "same prompt")],
+      [row("user", "u1", "  same prompt  ")],
+    ).length === 1,
+    "surrounding whitespace does not defeat the anchor comparison",
+  );
+  // The two sides reach the transcript by different routes: the page row's text
+  // is the user-authored replay content (`RawContent`, or the compose/reference
+  // prefixes stripped back off), while the live row carries the composer's
+  // display text. For plain text they are byte-identical, which is why the
+  // common case aligns. A prompt with added context is NOT the same string on
+  // both sides, and the rule must then decline rather than drop a real turn.
+  ok(
+    liveOwnedPageTailIds(
+      [row("user", "h1", "fix the parser")],
+      [row("user", "u1", "Referenced context:\n\n<file path=src/parse.ts>…</file>\n\nfix the parser")],
+    ).length === 0,
+    "an expanded reference preamble on the live side cannot claim the page turn",
+  );
+  ok(
+    liveOwnedPageTailIds(
+      [row("user", "h1", "Plan mode: fix the parser")],
+      [row("user", "u1", "fix the parser")],
+    ).length === 0,
+    "a compose-injected prefix on the page side cannot be claimed by the live turn",
+  );
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
