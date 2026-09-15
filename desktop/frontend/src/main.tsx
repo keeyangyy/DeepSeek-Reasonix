@@ -9,6 +9,7 @@ import { installWailsNonFileDragErrorSuppression } from "./lib/bridge";
 import { installBreadcrumbConsoleHook } from "./lib/breadcrumbs";
 import { installMessageSelectionCopy } from "./lib/messageSelectionCopy";
 import { installPerfDebugHook } from "./lib/perfDebug";
+import { installSessionDupProbe } from "./lib/sessionDupProbe";
 import { LocaleProvider, preloadDetectedLocale } from "./lib/i18n";
 import { ToastProvider } from "./lib/toast";
 import { initFontFamily } from "./lib/fontFamily";
@@ -25,6 +26,9 @@ installGlobalCrashHandlers();
 installBreadcrumbConsoleHook();
 installPerformancePressureMonitor();
 installPerfDebugHook();
+// Session-dup diagnostics probe (test/live-dup line only): subscribes to the
+// Go emit-side mirror channel and feeds the frontend diagnostics ring.
+installSessionDupProbe();
 
 // Apply the saved appearance (auto/light/dark) before the first paint.
 function initTypographyPlatform() {

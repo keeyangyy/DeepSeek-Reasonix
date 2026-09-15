@@ -78,7 +78,10 @@ func TestTabEventSinkCorrelatesDelayedTurnDoneBySubmission(t *testing.T) {
 	release := make(chan struct{})
 	delivered := make(chan any, 2)
 	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
-	sink.runtimeEvents.emit = func(_ context.Context, _ string, payload ...any) {
+	sink.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
+		if name == probeAgentEventChannel {
+			return // test-line diagnostics mirror; orthogonal to correlation semantics.
+		}
 		delivered <- payload[0]
 		if len(delivered) == 1 {
 			close(entered)
@@ -117,7 +120,10 @@ func TestTabEventSinkCorrelatesDelayedTurnDoneBySubmission(t *testing.T) {
 func TestTabEventSinkClearsRejectedSubmissionCorrelation(t *testing.T) {
 	delivered := make(chan any, 2)
 	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
-	sink.runtimeEvents.emit = func(_ context.Context, _ string, payload ...any) {
+	sink.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
+		if name == probeAgentEventChannel {
+			return // test-line diagnostics mirror; orthogonal to correlation semantics.
+		}
 		delivered <- payload[0]
 	}
 
@@ -147,7 +153,10 @@ func TestTabEventSinkClearsRejectedSubmissionCorrelation(t *testing.T) {
 func TestSubmitToTabWithIDCorrelatesOnlyAdmittedGuardedTurn(t *testing.T) {
 	delivered := make(chan any, 8)
 	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
-	sink.runtimeEvents.emit = func(_ context.Context, _ string, payload ...any) {
+	sink.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
+		if name == probeAgentEventChannel {
+			return // test-line diagnostics mirror; orthogonal to correlation semantics.
+		}
 		delivered <- payload[0]
 	}
 	ctrl := control.New(control.Options{Sink: sink})
@@ -290,7 +299,10 @@ func TestTabEventSinkDropsCorrelationWhenFrontendBindingChanges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			delivered := make(chan any, 1)
 			sink := &tabEventSink{tabID: "original", ctx: context.Background(), runtimeEpoch: "runtime-1"}
-			sink.runtimeEvents.emit = func(_ context.Context, _ string, payload ...any) {
+			sink.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
+				if name == probeAgentEventChannel {
+					return // test-line diagnostics mirror; orthogonal to correlation semantics.
+				}
 				delivered <- payload[0]
 			}
 			if !sink.tryBeginTurn("u-original") {

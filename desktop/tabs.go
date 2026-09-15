@@ -1875,7 +1875,17 @@ func (s *tabEventSink) emitRuntimeEvent(name string, payload ...any) {
 		return
 	}
 	s.runtimeEvents.Emit(ctx, name, payload...)
+	// [PROBE test/live-dup only — never flows back to main-v2]
+	// Mirror every agent event on a side channel so the frontend diagnostics
+	// ring can count emit-side volume and rule out backend double delivery.
+	if name == eventChannel {
+		s.runtimeEvents.Emit(ctx, probeAgentEventChannel, payload...)
+	}
 }
+
+// probeAgentEventChannel is the side channel that mirrors each agent:event
+// forward. TEST-LINE ONLY (session-dup diagnostics).
+const probeAgentEventChannel = "probe:agent-event"
 
 type runtimeEventEmitFunc func(context.Context, string, ...any)
 

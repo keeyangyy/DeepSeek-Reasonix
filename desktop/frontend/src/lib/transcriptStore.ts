@@ -32,6 +32,7 @@
 import { asArray } from "./array";
 import { app } from "./bridge";
 import { noteHistoryPage, registerTranscriptCacheDiagnostics } from "./sessionDiagnostics";
+import { probePageFetch as probePageFetchEvent } from "./sessionDupProbe";
 import { TranscriptMarkdownCache, type ParsedMarkdownValue } from "./transcriptMarkdownCache";
 export type { ParsedMarkdownValue } from "./transcriptMarkdownCache";
 import { historySearchAndAnswer } from "./searchTranscript";
@@ -790,6 +791,7 @@ export class TranscriptStore {
     if (options.preferResident && existing && existing.records.length > 0 &&
       this.matchesExpectedFingerprint(existing, options.expectedRevision, options.expectedDigest)) {
       this.touch(existing);
+      probePageFetchEvent({ tabId, op: "latest", residentHit: true, source: "resident", entries: existing.records.length, startTurn: existing.startTurn, endTurn: existing.endTurn, totalTurns: existing.totalTurns, revisionKnown: existing.revisionKnown, hasOlder: existing.hasOlder, nextCursor: existing.nextCursor });
       return this.projectionOf(existing);
     }
     const session = existing ?? this.newSession(key, tabId, sessionPath);
@@ -822,6 +824,7 @@ export class TranscriptStore {
     this.autoFetchRefs(session);
     this.enforceBudgets();
     if (this.sessions.get(key) !== session) return undefined; // evicted by the budget
+    probePageFetchEvent({ tabId, op: "latest", residentHit: false, source: slice.source ?? "fetched", entries: session.records.length, startTurn: session.startTurn, endTurn: session.endTurn, totalTurns: session.totalTurns, revisionKnown: session.revisionKnown, hasOlder: session.hasOlder, nextCursor: session.nextCursor });
     return this.projectionOf(session);
   }
 
@@ -868,6 +871,7 @@ export class TranscriptStore {
       session.digest = slice.digest ?? session.digest;
       this.enforceBudgets();
       if (this.sessions.get(key) !== session) return undefined;
+      probePageFetchEvent({ tabId, op: "older", residentHit: false, source: slice.source ?? "fetched", entries: session.records.length, startTurn: session.startTurn, endTurn: session.endTurn, totalTurns: session.totalTurns, revisionKnown: session.revisionKnown, hasOlder: session.hasOlder, nextCursor: session.nextCursor });
       return { ...this.projectionOf(session), kind: "prepend", prependItems: items, removeIds };
     } finally {
       session.olderInFlight = false;

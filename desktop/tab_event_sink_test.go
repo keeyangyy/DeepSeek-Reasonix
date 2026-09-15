@@ -111,8 +111,10 @@ func TestTabEventSinkDoesNotBlockOnRuntimeEventsEmit(t *testing.T) {
 
 	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
 	sink.runtimeEvents.emit = func(_ context.Context, name string, payload ...any) {
-		if name != eventChannel {
-			t.Errorf("event name = %q, want %q", name, eventChannel)
+		// The probe mirror (test/live-dup diagnostics line) duplicates every
+		// agent event on a side channel; only the real channel counts here.
+		if name != eventChannel && name != probeAgentEventChannel {
+			t.Errorf("event name = %q, want %q or %q", name, eventChannel, probeAgentEventChannel)
 		}
 		if len(payload) != 1 {
 			t.Errorf("payload count = %d, want 1", len(payload))
@@ -123,7 +125,9 @@ func TestTabEventSinkDoesNotBlockOnRuntimeEventsEmit(t *testing.T) {
 			t.Errorf("payload type = %T, want wireEventTab", payload[0])
 			return
 		}
-		delivered <- wire.Text
+		if name == eventChannel {
+			delivered <- wire.Text
+		}
 		if calls.Add(1) == 1 {
 			close(entered)
 			<-release

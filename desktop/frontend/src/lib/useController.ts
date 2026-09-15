@@ -39,6 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
+import { probeEventApplied, probeMerge, probeSurfaceRebuild } from "./sessionDupProbe";
 import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
@@ -2833,6 +2834,8 @@ export function useController() {
       deferResetUntilHistory?: boolean; surfacePolicy?: HydrateSurfacePolicy;
     } = {},
   ) => {
+    const probeState = statesRef.current.get(tabId);
+    probeSurfaceRebuild({ tabId, reason, running: probeState?.running ?? false, turnActive: probeState?.turnActive ?? false, itemsLen: probeState?.items?.length ?? 0 });
     const surfacePolicy = options.surfacePolicy ?? "preserve-current"; const resetSurface = reset || surfacePolicy === "replace-surface";
     const stateMeta = statesRef.current.get(tabId)?.meta;
     const sessionPath = ("sessionPath" in options ? options.sessionPath ?? "" : stateMeta?.sessionPath ?? "").trim();
@@ -2929,8 +2932,23 @@ export function useController() {
           revision: projection.revisionKnown ? projection.revision : undefined,
           digest: projection.digest || undefined,
         };
+        const probeLive = statesRef.current.get(tabId);
+        const probeRemoved = applyMode === "prepend" ? duplicateLiveItemIds(projection.items, probeLive?.items ?? []) : [];
+        probeMerge({
+          tabId,
+          kind: applyMode === "prepend" ? "history_prepend" : "history_replace",
+          reason,
+          applyMode,
+          pageRows: projection.items,
+          liveRows: probeLive?.items ?? [],
+          keptCount: projection.items.length,
+          removedLive: probeRemoved,
+          totalTurns: projection.totalTurns,
+          pageStartTurn: projection.startTurn,
+          liveStartTurn: probeLive?.historyStartTurn ?? 0,
+        });
         dispatchTo(tabId, applyMode === "prepend"
-          ? { type: "history_prepend", ...page, removeIds: duplicateLiveItemIds(projection.items, statesRef.current.get(tabId)?.items ?? []) }
+          ? { type: "history_prepend", ...page, removeIds: probeRemoved }
           : { type: "history_replace", ...page });
         addBreadcrumb(
           "tab.hydrate",
@@ -3527,6 +3545,7 @@ export function useController() {
       // leaks the previous session's approval/ask gate into the new composer.
       const targetTabId = e.tabId || backendActiveTabIdRef.current || activeTabIdRef.current;
       if (!targetTabId) return;
+      probeEventApplied(targetTabId, e.kind, e.submissionId ?? (e as { toolCallId?: string }).toolCallId ?? statesRef.current.get(targetTabId)?.currentAssistant ?? "∅");
       const acceptedEpoch = runtimeEpochByTabRef.current.get(targetTabId);
       if (e.runtimeEpoch) {
         if (!acceptsRuntimeEventEpoch(acceptedEpoch, e.runtimeEpoch)) return;
