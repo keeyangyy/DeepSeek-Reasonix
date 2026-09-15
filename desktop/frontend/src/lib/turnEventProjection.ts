@@ -9,6 +9,14 @@ type ReplaySeedHandler = (tabId: string, fromSeq: number) => void;
 
 const MAX_REPLAY_PAGES = 32;
 
+// A re-delivered live event is indistinguishable from a fresh one when it
+// carries no seq (the backend omits seq on some compatibility paths), so the
+// projectors's sequence guard cannot see it and its delta is applied twice,
+// rendering the same reasoning/answer text a second time. Content deltas are
+// incremental, so an identical kind+body reappearing inside this window is a
+// re-delivery rather than new content.
+const LIVE_DEDUP_WINDOW_MS = 50;
+
 // TurnEventProjector is the per-tab ordered projection boundary. While a gap or
 // checkpoint reset is being repaired, live events are held and applied only
 // after the durable page and transcript prefix agree.
@@ -20,6 +28,10 @@ export class TurnEventProjector {
   private readonly epochByTab = new Map<string, string>();
   private readonly generationByTab = new Map<string, number>();
   private readonly projectingReplayByTab = new Set<string>();
+  // Re-delivery guard for seq-less live deltas: kind+body → the time it was
+  // last accepted. See LIVE_DEDUP_WINDOW_MS.
+  private readonly liveFingerprintByTab = new Map<string, Map<string, number>>();
+  private liveDedupHits = 0;
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
   private replayStartHandler?: ReplaySeedHandler;
@@ -63,6 +75,7 @@ export class TurnEventProjector {
       // rewinding the ordinal there would leave it below the segments already
       // on screen, and the next live events would then reuse a middle segment.
       if (active && replayAfter !== undefined && replayAfter < latest) {
+        recordFrontendDiagnostic("runtime", "replay.seed", { sequence: projected, intent: latest });
         this.replayStartHandler?.(tabId, projected);
       }
     }
@@ -71,7 +84,17 @@ export class TurnEventProjector {
 
   acceptLive(tabId: string, event: WireEvent, runtimeEpoch?: string): boolean {
     if (this.projectingReplayByTab.has(tabId)) return true;
-    if (typeof event.seq !== "number" || event.seq <= 0) return true;
+    if (typeof event.seq !== "number" || event.seq <= 0) {
+      // Nothing to compare against the cursor, so fall back to the re-delivery
+      // guard: a doubled seq-less delta would otherwise be applied twice and
+      // render the same reasoning/answer text a second time.
+      if (this.isDuplicateLiveEvent(tabId, event)) {
+        this.liveDedupHits += 1;
+        recordFrontendDiagnostic("runtime", "live.dedup", { action: event.kind, sequence: this.liveDedupHits });
+        return false;
+      }
+      return true;
+    }
     const last = this.sequenceByTab.get(tabId) ?? 0;
     if (event.seq <= last) return false;
     if (this.repairByTab.has(tabId) || event.seq > last + 1) {
@@ -85,6 +108,26 @@ export class TurnEventProjector {
     }
     this.sequenceByTab.set(tabId, event.seq);
     return true;
+  }
+
+  /** True when this seq-less delta repeats one accepted moments ago. */
+  private isDuplicateLiveEvent(tabId: string, event: WireEvent): boolean {
+    if (event.kind !== "text" && event.kind !== "reasoning") return false;
+    const body = event.text ?? event.reasoning ?? "";
+    if (body === "") return false;
+    const now = Date.now();
+    let seen = this.liveFingerprintByTab.get(tabId);
+    if (!seen) {
+      seen = new Map<string, number>();
+      this.liveFingerprintByTab.set(tabId, seen);
+    }
+    for (const [key, at] of seen) {
+      if (now - at > LIVE_DEDUP_WINDOW_MS) seen.delete(key);
+    }
+    const fingerprint = `${event.kind}|${body}`;
+    if (seen.has(fingerprint)) return true;
+    seen.set(fingerprint, now);
+    return false;
   }
 
   private requestReplay(tabId: string, afterSeq: number, runtimeEpoch?: string) {

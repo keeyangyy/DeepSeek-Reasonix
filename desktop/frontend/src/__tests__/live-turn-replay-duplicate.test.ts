@@ -229,5 +229,19 @@ ok(before.every((id) => after.includes(id)), "no existing row was dropped by the
   ok(rewinds.length === 1, `a gap repair does not rewind the segments again (got ${rewinds.length})`);
 }
 
+// ---- Variant: a seq-less delta re-delivered must be dropped ---------------
+// Without a seq the cursor cannot recognise a doubled event, so an identical
+// kind+body inside the live window counts as a re-delivery.
+{
+  const dedup = new TurnEventProjector();
+  dedup.bind(() => {});
+  const first = dedup.acceptLive("dup", { kind: "reasoning", reasoning: "same text" }, "epoch");
+  const second = dedup.acceptLive("dup", { kind: "reasoning", reasoning: "same text" }, "epoch");
+  const different = dedup.acceptLive("dup", { kind: "reasoning", reasoning: "other text" }, "epoch");
+  ok(first === true, "a seq-less delta is accepted");
+  ok(second === false, "an identical seq-less delta is dropped as a re-delivery");
+  ok(different === true, "a different seq-less delta is still accepted");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
