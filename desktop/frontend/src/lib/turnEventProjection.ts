@@ -6,7 +6,6 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
 type ReplaySeedHandler = (tabId: string, fromSeq: number) => void;
-type ReplayDoneHandler = (tabId: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
 
@@ -24,7 +23,6 @@ export class TurnEventProjector {
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
   private replayStartHandler?: ReplaySeedHandler;
-  private replayDoneHandler?: ReplayDoneHandler;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
@@ -35,10 +33,6 @@ export class TurnEventProjector {
   // that turn in place instead of appending a second copy of it.
   bindReplayStart(handler: ReplaySeedHandler) { this.replayStartHandler = handler; }
   unbindReplayStart(handler: ReplaySeedHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
-  // Notified once a replay has projected its last event, so the reducer state
-  // after the rebuild can be compared with the state before it.
-  bindReplayDone(handler: ReplayDoneHandler) { this.replayDoneHandler = handler; }
-  unbindReplayDone(handler: ReplayDoneHandler) { if (this.replayDoneHandler === handler) this.replayDoneHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -174,10 +168,7 @@ export class TurnEventProjector {
         cursor = live.seq;
         this.sequenceByTab.set(tabId, cursor);
       }
-      if (remaining.length === 0) {
-        this.replayDoneHandler?.(tabId);
-        return;
-      }
+      if (remaining.length === 0) return;
       this.gapQueueByTab.set(tabId, remaining);
     }
     recordFrontendDiagnostic("runtime", "turn-events-gap-repair-incomplete", {
