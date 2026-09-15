@@ -913,7 +913,8 @@ jobs:
   # a regression in redirect validation fails the build instead of shipping.
   site:
     needs: changes
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.site != 'false')
+    # fork does not ship the official site; this job never runs.
+    if: false
     runs-on: ubuntu-latest
     defaults:
       run:
