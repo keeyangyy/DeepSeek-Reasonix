@@ -188,6 +188,10 @@ func (a *App) openForkedSessionTabWithWorkspace(sourceTab *WorkspaceTab, newPath
 	m.WorkspaceRoot = workspaceRoot
 	m.TopicID = topicID
 	m.TopicTitle = topicTitle
+	// A forked conversation inherits the level picked in the source
+	// conversation. Recording it here keeps the session sidecar authoritative
+	// from the first render instead of waiting for a later metadata save.
+	m.Effort = effortString(effort)
 	if err := agent.SaveBranchMeta(newPath, m); err != nil {
 		return forkedSessionTabOpen{}, err
 	}

@@ -56,8 +56,10 @@ func TestEnsureBlankTabInheritsActiveTabLocalSettings(t *testing.T) {
 	if created == nil {
 		t.Fatalf("new tab %q missing from app.tabs", meta.ID)
 	}
-	if created.effort == nil || *created.effort != "max" {
-		t.Fatalf("effort = %v, want inherited \"max\"", created.effort)
+	// Effort is session state: a fresh blank session starts at auto instead of
+	// inheriting the level of whatever conversation is currently visible.
+	if created.effort != nil {
+		t.Fatalf("effort = %q, want auto (no inherited override)", *created.effort)
 	}
 	if created.qualityFloor != "" && created.qualityFloor != control.QualityFloorStandard {
 		t.Fatalf("qualityFloor = %q, want standard default (must not inherit economy)", created.qualityFloor)
