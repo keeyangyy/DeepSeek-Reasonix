@@ -291,5 +291,47 @@ ok(before.every((id) => after.includes(id)), "no existing row was dropped by the
   ok(projectedAtResolve >= 3, `the replay had projected its events by then (got ${projectedAtResolve})`);
 }
 
+// ---- Variant: a cleared transcript replays its turn again ------------------
+// A `reset` empties the transcript but the cursor lives outside the reducer, so
+// without resetCursor the next runtime snapshot treats those events as already
+// projected and the cleared prefix (the in-flight turn) never comes back.
+{
+  const p = new TurnEventProjector();
+  const projectedSeqs: number[] = [];
+  const rewinds: string[] = [];
+  p.bind((event) => { projectedSeqs.push(event.seq ?? 0); });
+  p.bindReset(async () => true);
+  p.bindReplayStart((tabId) => rewinds.push(tabId));
+
+  // First observation seeds at the turn start and replays it.
+  p.observeRuntime("reset-tab", "epoch-live", 14, 11, true);
+  for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+  const seeded = projectedSeqs.length;
+  ok(seeded > 0, `the first observation replays the turn (got ${seeded})`);
+
+  // The transcript is cleared: dropping the cursor must make the next
+  // observation replay the turn again rather than backfill from the old cursor.
+  p.resetCursor("reset-tab");
+  const beforeSecond = projectedSeqs.length;
+  p.observeRuntime("reset-tab", "epoch-live", 14, 11, true);
+  for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+  const replayed = projectedSeqs.length - beforeSecond;
+  ok(replayed === seeded, `a cleared transcript replays the turn again (got ${replayed}, first ${seeded})`);
+  ok(rewinds.length === 2, `both replays rewind the turn's segments (got ${rewinds.length})`);
+
+  // Without the cursor drop the same observation only backfills: the cleared
+  // prefix would stay gone. This pins the behavior the fix depends on.
+  const q = new TurnEventProjector();
+  const qSeqs: number[] = [];
+  q.bind((event) => { qSeqs.push(event.seq ?? 0); });
+  q.bindReset(async () => true);
+  q.observeRuntime("keep-tab", "epoch-live", 14, 11, true);
+  for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+  const qFirst = qSeqs.length;
+  q.observeRuntime("keep-tab", "epoch-live", 14, 11, true);
+  for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+  ok(qSeqs.length === qFirst, "without a cleared transcript the cursor stays and nothing is replayed");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

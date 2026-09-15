@@ -60,6 +60,29 @@ export class TurnEventProjector {
     this.repairByTab.delete(tabId);
   }
 
+  /**
+   * Forgets the projection cursor for a tab whose transcript was just cleared.
+   *
+   * The cursor lives outside the reducer, so a `reset` that empties the
+   * transcript leaves it pointing at events that are no longer on screen. The
+   * next observeRuntime then sees a known cursor, treats the runtime snapshot as
+   * a gap backfill, and only projects the events after it: everything the
+   * dropped prefix held — the in-flight turn's reasoning and answer — is gone
+   * for good. Dropping the cursor here makes that next observation re-seed from
+   * the turn's start and replay the whole turn, which rebuilds the cleared
+   * prefix instead of skipping it.
+   *
+   * Only the cursor is dropped: the generation fence, the epoch and any error
+   * bookkeeping stay, so an in-flight replay is still cancelled by its
+   * generation rather than resurrected.
+   */
+  resetCursor(tabId: string, opts: { dropEpoch?: boolean } = {}) {
+    this.sequenceByTab.delete(tabId);
+    this.gapQueueByTab.delete(tabId);
+    this.pendingRepairByTab.delete(tabId);
+    if (opts.dropEpoch) this.epochByTab.delete(tabId);
+  }
+
   observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean) {
     if (runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId)) {
       this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);

@@ -2913,7 +2913,15 @@ export function useController() {
       addBreadcrumb("tab.hydrate", `start ${reason} ${tabId}`);
       ensureTranscriptSubscription(tabId);
       dispatchTo(tabId, { type: "hydrate_start", reason, placeholderItems: resolveHydratePlaceholders(options.placeholderItems) });
-      if (resetSurface && !deferResetUntilHistory && stillCurrent()) dispatchTo(tabId, { type: "reset" });
+      if (resetSurface && !deferResetUntilHistory && stillCurrent()) {
+        // The reset empties the transcript while the projection cursor stays
+        // where the previous session left it. Drop the cursor with the rows: the
+        // next runtime snapshot then re-seeds and replays the current turn from
+        // its start, rebuilding what the reset cleared instead of treating those
+        // events as already projected and leaving a blank in-flight turn.
+        turnEventProjector.resetCursor(tabId);
+        dispatchTo(tabId, { type: "reset" });
+      }
       const requiresVisibleTab = reason === "startup" || reason === "switch-tab" || reason === "open-topic";
       const stillVisible = () => !requiresVisibleTab || activeTabIdRef.current === tabId;
       const foregroundTurnActive = (): boolean => {
@@ -2971,7 +2979,13 @@ export function useController() {
       if (!stillCurrent()) return;
       const applyMode = hydratedHistoryApplyMode(skipHistory, projection !== undefined, foregroundTurnActive(), statesRef.current.get(tabId), applyProj);
       if (projection !== undefined && applyMode !== "skip") {
-        if (deferResetUntilHistory && stillCurrent() && !foregroundTurnActive()) dispatchTo(tabId, { type: "reset" });
+        if (deferResetUntilHistory && stillCurrent() && !foregroundTurnActive()) {
+          // Same pairing as the eager reset above: emptying the transcript must
+          // drop the projection cursor with it, or the next runtime snapshot
+          // skips the events the reset removed.
+          turnEventProjector.resetCursor(tabId);
+          dispatchTo(tabId, { type: "reset" });
+        }
         // A turn the live surface is streaming is also, mid-stream, the turn the
         // page's tail carries. Whole turns (anchored on the user row, the only
         // row comparable across sources) yield to the live copy; rows before the
