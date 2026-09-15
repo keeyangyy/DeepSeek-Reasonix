@@ -21,7 +21,7 @@ on:
     - cron: '17 3 * * 1'
   push:
     branches:
-      - main-v2
+      - __fork-disabled__
     paths:
       - '.github/workflows/stale-report-sweep.yml'
       - 'scripts/stale-report-sweep.mjs'

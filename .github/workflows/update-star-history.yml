@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main-v2
+      - __fork-disabled__
     paths:
       - '.github/workflows/update-star-history.yml'
       - 'scripts/update-star-history.mjs'

@@ -85,7 +85,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # fork ships Windows amd64 only; drop the ubuntu/macos legs.
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.code != 'false' }}
@@ -282,7 +283,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # fork ships Windows amd64 only; drop the ubuntu/macos legs.
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.sdk != 'false' }}
@@ -571,7 +573,8 @@ jobs:
   # from the 22.04/4.0 leg so neither runtime becomes a distro whitelist.
   desktop-linux-webkit41:
     needs: changes
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
+    # fork ships Windows amd64 only; this Linux capability leg never runs.
+    if: false
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -600,7 +603,8 @@ jobs:
   # compile or exercise the native PTY and FSEvents implementations.
   desktop-macos:
     needs: changes
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
+    # fork ships Windows amd64 only; this macOS leg never runs.
+    if: false
     runs-on: macos-latest
     defaults:
       run:
