@@ -243,5 +243,24 @@ ok(before.every((id) => after.includes(id)), "no existing row was dropped by the
   ok(different === true, "a different seq-less delta is still accepted");
 }
 
+// ---- Variant: a gap whose cursor predates the active turn must rewind ------
+// The "only this session duplicates" case: the cursor was set before the
+// active turn started, so the gap replay re-projects the turn's first events
+// beside rows already on screen. It must rewind (in place), unlike a backfill
+// whose cursor already sits at-or-past the turn start.
+{
+  const p = new TurnEventProjector();
+  const rewinds: string[] = [];
+  p.bind(() => {});
+  p.bindReset(async () => true);
+  p.bindReplayStart((tabId) => rewinds.push(tabId));
+  // Cursor set at a completed previous turn (seq 5 == replayAfter), idle.
+  p.observeRuntime("gapb", "epoch", 5, 5, true);
+  ok(rewinds.length === 0, "an idle completed turn does not rewind");
+  // Active turn now starts at seq 6; the cursor (5) predates it; latest grew.
+  p.observeRuntime("gapb", "epoch", 14, 6, true);
+  ok(rewinds.length === 1, "a gap whose cursor predates the active turn's start rewinds");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

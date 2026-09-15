@@ -70,18 +70,28 @@ export class TurnEventProjector {
       this.repairByTab.delete(tabId);
     }
     let projected = this.sequenceByTab.get(tabId);
+    const freshSeed = projected === undefined;
     if (projected === undefined) {
       projected = active ? Math.min(replayAfter ?? latest, latest) : latest;
       this.sequenceByTab.set(tabId, projected);
-      // Only a replay that starts at the ACTIVE TURN'S FIRST event re-projects
-      // the whole turn and may therefore rewind its segment allocation. A gap
-      // repair (cursor already set, replaying a few missing events) must not:
-      // rewinding the ordinal there would leave it below the segments already
-      // on screen, and the next live events would then reuse a middle segment.
-      if (active && replayAfter !== undefined && replayAfter < latest) {
-        recordFrontendDiagnostic("runtime", "replay.seed", { sequence: projected, intent: latest });
-        this.replayStartHandler?.(tabId, projected);
-      }
+    }
+    // Rewind the active turn's segment allocation whenever the replay will
+    // re-project the turn's FIRST event: either a fresh seed that lands on
+    // (or before) the turn start, or a gap whose cursor still predates the
+    // turn start. In both cases the turn's rows are already on screen, so the
+    // replay must rebuild them in place, not append a parallel copy. A gap
+    // backfill whose cursor already sits at-or-past the turn start re-projects
+    // only the still-missing tail; rewinding there would strand the segments
+    // below it, so that case is deliberately left alone.
+    const rewindTurn =
+      active &&
+      replayAfter !== undefined &&
+      latest > projected &&
+      projected <= replayAfter &&
+      (freshSeed || projected < replayAfter);
+    if (rewindTurn) {
+      recordFrontendDiagnostic("runtime", "replay.seed", { sequence: projected, intent: latest });
+      this.replayStartHandler?.(tabId, projected);
     }
     if (latest > projected) this.requestReplay(tabId, projected, runtimeEpoch);
   }

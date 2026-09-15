@@ -1003,13 +1003,16 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
 // Diagnostic-only: a compact token describing the active turn's rows, encoded
 // for the whitelisted `state` diagnostic field (see sanitizeEvent in
 // frontendDiagnostics). Format: o<segmentOrdinal>_a<assistantRows>_h<historyRows>
-// _t<toolRows>. Comparing replay.turn-reset with replay.turn-complete tells a
-// turn rebuilt in place (same counts) from one the replay appended to.
+// _h<historyRows>_t<toolRows>_u<userRows>. Comparing replay.turn-reset with
+// replay.turn-complete tells a turn rebuilt in place (same counts) from one the
+// replay appended to; a prepend whose live `u` is 0 has no anchor for the page
+// tail alignment, so the page cannot yield and gets laid down twice.
 function transcriptTurnShape(state: { items: readonly Item[]; assistantSegmentOrdinal: number }): string {
   const assistants = state.items.filter((item) => item.kind === "assistant");
   const historyRows = assistants.filter((item) => item.id.startsWith("he:")).length;
   const toolRows = state.items.filter((item) => item.kind === "tool").length;
-  return `o${state.assistantSegmentOrdinal}_a${assistants.length}_h${historyRows}_t${toolRows}`;
+  const userRows = state.items.filter((item) => item.kind === "user").length;
+  return `o${state.assistantSegmentOrdinal}_a${assistants.length}_h${historyRows}_t${toolRows}_u${userRows}`;
 }
 
 function applyTurnCheckpoint(items: Item[], submissionId: string | undefined, turn: number | undefined): Item[] {
@@ -2970,6 +2973,18 @@ export function useController() {
         const pageItems = liveOwnedIds?.size
           ? projection.items.filter((item) => !liveOwnedIds.has(item.id))
           : projection.items;
+        // Diagnostic: which hydrate path ran, how many whole turns the page
+        // yielded to the live copy (prepend only), how many rows the page
+        // carried, and the live shape it merged into. A prepend whose yield
+        // count is 0 means the anchor comparison found no shared turn, so the
+        // whole page was laid down beside the live rows.
+        const hydrateState = statesRef.current.get(tabId);
+        recordFrontendDiagnostic("runtime", "hydrate.apply", {
+          action: applyMode,
+          sequence: liveOwnedIds?.size ?? 0,
+          intent: projection.items.length,
+          state: hydrateState ? transcriptTurnShape(hydrateState) : "",
+        });
         const page = {
           items: pageItems,
           startTurn: projection.startTurn,
