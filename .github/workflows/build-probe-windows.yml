@@ -19,7 +19,7 @@ name: Build Windows test artifact
 
 on:
   push:
-    branches: [dev, 'test/**']
+    branches: [dev, 'dev/**', 'test/**']
   workflow_dispatch:
     inputs:
       version:
@@ -80,8 +80,8 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           if [ -z "$VERSION" ]; then
             case "$GITHUB_REF_NAME" in
-              dev) VERSION="v1.38.20-dev.${{ github.run_number }}" ;;
-              *)   VERSION="v1.38.20-test.${{ github.run_number }}" ;;
+              dev|dev/*) VERSION="v1.38.20-dev.${{ github.run_number }}" ;;
+              *)         VERSION="v1.38.20-test.${{ github.run_number }}" ;;
             esac
           fi
           ../scripts/desktop-build.sh windows/amd64 "$VERSION" canary
