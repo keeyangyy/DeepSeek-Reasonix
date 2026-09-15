@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102154,
+    "file-size": 102894,
     "function-size": 8270,
     "layering": 1,
     "marker": 0,
@@ -147,7 +147,7 @@
       "file-size": 1613
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4260
+      "file-size": 5000
     },
     "desktop/heartbeat.go": {
       "essay": 7
