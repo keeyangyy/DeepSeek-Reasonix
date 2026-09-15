@@ -5,6 +5,7 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
+type ReplaySeedHandler = (tabId: string, fromSeq: number) => void;
 
 const MAX_REPLAY_PAGES = 32;
 
@@ -21,11 +22,17 @@ export class TurnEventProjector {
   private readonly projectingReplayByTab = new Set<string>();
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
+  private replayStartHandler?: ReplaySeedHandler;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
   bindReset(handler: ResetHandler) { this.resetHandler = handler; }
   unbindReset(handler: ResetHandler) { if (this.resetHandler === handler) this.resetHandler = undefined; }
+  // Notified once before a gap replay projects its first event, so the reducer
+  // can rewind the active turn's segment allocation and let the replay rebuild
+  // that turn in place instead of appending a second copy of it.
+  bindReplayStart(handler: ReplaySeedHandler) { this.replayStartHandler = handler; }
+  unbindReplayStart(handler: ReplaySeedHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -117,6 +124,11 @@ export class TurnEventProjector {
       }
 
       const envelopes = asArray(replay.events).slice().sort((a, b) => a.seq - b.seq);
+      // A replay is re-projecting durable events the surface may already hold.
+      // Tell the reducer before the first event so it rewinds the active turn's
+      // segment allocation; without this the replayed rows land beside the
+      // existing ones and the turn is rendered twice.
+      if (envelopes.length > 0) this.replayStartHandler?.(tabId, cursor);
       for (const envelope of envelopes) {
         if (envelope.seq <= cursor) continue;
         if (envelope.seq !== cursor + 1) throw new Error(`turn event replay gap after ${cursor}`);

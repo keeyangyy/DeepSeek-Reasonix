@@ -838,6 +838,7 @@ type Action =
   | { type: "ask_submit_succeeded"; id: string; epoch: number }
   | { type: "submit_prompt_failed"; id: string; epoch: number }
   | { type: "controller_rebuilt" }
+  | { type: "replay_turn_reset" }
   | { type: "reset" }
   | { type: "context_panel_refresh" };
 
@@ -2422,6 +2423,28 @@ export function reducer(s: State, a: Action): State {
         extensionNotifications: [],
         extensionGenerations: {},
       };
+    case "replay_turn_reset": {
+      // A switch back re-projects the ACTIVE turn from its first event (the
+      // backend's ProjectionCursor returns turnStartSeq - 1 for a live turn).
+      // The transcript still holds everything that turn had produced, and the
+      // replayed rows would otherwise be appended beside it: segment ids come
+      // from assistantSegmentOrdinal, which only ever moved forward, so the
+      // replay allocates a fresh ordinal and the turn renders twice.
+      //
+      // Rewind the turn's segment allocation and drop the live stream so the
+      // replay re-derives the same ids it used the first time (ensureAssistant
+      // reuses the row already holding that id). Rows are NOT removed here: the
+      // replay must be able to rebuild them, and a failed replay leaving a
+      // half-turn is worse than a stale one.
+      if (!s.turnActive && !s.running) return s;
+      return {
+        ...s,
+        currentAssistant: undefined,
+        assistantSegmentOrdinal: 0,
+        live: undefined,
+        pendingSearchSources: undefined,
+      };
+    }
     case "reset": return { ...initialState, meta: metaWithoutCanonicalTodos(s.meta), context: { used: 0, window: s.context.window, sessionTokens: 0, compactRatio: s.context.compactRatio }, balance: s.balance, effort: s.effort, jobs: s.jobs, hydrating: s.hydrating, hydrateReason: s.hydrateReason, hydrateError: s.hydrateError, hydrateHistoryLoaded: s.hydrateHistoryLoaded, hydratePlaceholderItems: s.hydratePlaceholderItems, backendActivationPending: s.backendActivationPending, sessionGen: s.sessionGen + 1, promptEpoch: s.promptEpoch + 1 };
     case "context_panel_refresh": return { ...s, contextPanelSeq: s.contextPanelSeq + 1 };
     case "event": {
@@ -3108,6 +3131,15 @@ export function useController() {
     turnEventProjector.bindReset(resetTurnEventProjection);
     return () => turnEventProjector.unbindReset(resetTurnEventProjection);
   }, [resetTurnEventProjection, turnEventProjector]);
+
+  useEffect(() => {
+    // Before a gap replay re-projects the active turn from its first event,
+    // rewind that turn's segment allocation so the replayed rows reuse their
+    // existing ids instead of being appended as a second copy of the turn.
+    const onReplayStart = (tabId: string) => dispatchTo(tabId, { type: "replay_turn_reset" });
+    turnEventProjector.bindReplayStart(onReplayStart);
+    return () => turnEventProjector.unbindReplayStart(onReplayStart);
+  }, [dispatchTo, turnEventProjector]);
 
   // On-demand full content for a ref-replaced history field (entries carrying
   // refs[] ship a ≤4KiB preview inline). Resolves through the transcript

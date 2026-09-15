@@ -19,6 +19,15 @@ export function ensureAssistant(s: State): State {
   if (s.currentAssistant && s.items.some((item) => item.kind === "assistant" && item.id === s.currentAssistant)) return s;
   const ordinal = s.assistantSegmentOrdinal;
   const id = s.activeTurnId ? `a:${s.activeTurnId}:${ordinal}` : `a${s.seq}`;
+  // Segment ids are derived from the turn's ordinal, so re-projecting a turn
+  // from its first event asks for ids the transcript already holds. Reuse that
+  // row instead of appending a parallel copy: a replay rebuilds the turn in
+  // place. Live projection only ever moves the ordinal forward, so a genuinely
+  // new segment never collides with this.
+  const existing = s.items.some((item) => item.kind === "assistant" && item.id === id);
+  if (existing) {
+    return { ...s, currentAssistant: id, pendingSearchSources: undefined, assistantSegmentOrdinal: ordinal + 1 };
+  }
   const item: AssistantItem = { kind: "assistant", id, text: "", reasoning: "", streaming: true, wasStreamed: true, searchSources: s.pendingSearchSources?.length ? s.pendingSearchSources : undefined };
   return {
     ...s,

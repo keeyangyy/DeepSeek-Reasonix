@@ -1,0 +1,167 @@
+// Run: tsx src/__tests__/live-turn-replay-duplicate.test.ts
+//
+// Regression: leaving a session that is mid-turn and coming back renders the
+// turn's rows a second time.
+//
+// The backend deliberately replays the ACTIVE turn from its first event:
+//   internal/turnevent/ledger.go  ProjectionCursor() -> replayAfter = turnStartSeq - 1
+// (TestLedgerProjectionCursorReplaysOnlyActiveTurn pins `active cursor = (3,1)`).
+// observeRuntime seeds the projector cursor to that point and replays; the
+// reducer applies the replayed events on top of a transcript that ALREADY holds
+// everything the turn had produced. Nothing clears the turn being re-projected,
+// so the replay appends a parallel copy of it.
+//
+// The replay range equals the turn's events so far, which is why the symptom is
+// "as many duplicates as replies there were before switching away".
+//
+// Idempotence is the correct criterion: replaying a turn that is already on
+// screen must leave the transcript's row count for that turn unchanged. A single
+// turn legitimately owns more than one assistant row (a reasoning segment and an
+// answer segment), so an absolute row count is not a valid expectation — only
+// "the replay added nothing" is.
+//
+// Drives the projector and the reducer directly (same shape as
+// turn-event-projection-reset.test.ts) so the duplicate is visible in state.
+
+import assert from "node:assert/strict";
+import type { AppBindings } from "../lib/bridge";
+import type { TurnEventReplayView } from "../lib/types";
+
+// The active turn's events, exactly as ProjectionCursor reports them: starting
+// at the turn's first event (turnStartSeq).
+const replay: TurnEventReplayView = {
+  events: [
+    {
+      turnId: "turn-2",
+      seq: 11,
+      status: "in_progress",
+      event: { kind: "turn_started", turnId: "turn-2", status: "in_progress" },
+    },
+    {
+      turnId: "turn-2",
+      seq: 12,
+      status: "in_progress",
+      event: { kind: "reasoning", turnId: "turn-2", status: "in_progress", reasoning: "用户两个问题：" },
+    },
+    {
+      turnId: "turn-2",
+      seq: 13,
+      status: "in_progress",
+      event: { kind: "tool_dispatch", turnId: "turn-2", status: "in_progress", tool: { id: "tc-1", name: "grep", args: "{}", readOnly: true } },
+    },
+    {
+      turnId: "turn-2",
+      seq: 14,
+      status: "in_progress",
+      event: { kind: "message", turnId: "turn-2", status: "in_progress", text: "先答流程疑问", reasoning: "用户两个问题：" },
+    },
+  ],
+  floorSeq: 11,
+  latestSeq: 14,
+  nextAfterSeq: 14,
+  hasMore: false,
+  resetRequired: false,
+  runtimeEpoch: "epoch-live",
+};
+
+const binding: Partial<AppBindings> = {
+  TurnEventsForTab: async () => replay,
+};
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: { go: { main: { App: binding as AppBindings } } } as Window,
+});
+
+const [{ TurnEventProjector }, { initialState, reducer }] = await Promise.all([
+  import("../lib/turnEventProjection"),
+  import("../lib/useController"),
+]);
+
+let passed = 0;
+let failed = 0;
+function ok(value: boolean, label: string) {
+  if (value) {
+    process.stdout.write(`  PASS  ${label}\n`);
+    passed += 1;
+  } else {
+    process.stdout.write(`  FAIL  ${label}\n`);
+    failed += 1;
+  }
+}
+
+console.log("\nlive turn replay duplicate");
+
+// ---- the transcript as it stands when the user switches away ----------------
+// Turn 1 is complete. Turn 2 is mid-flight: its reasoning segment has settled
+// into a row, a tool call is running, and the answer segment is streaming. This
+// is the state production holds — abandoning the session never removed it.
+const turn2Before = [
+  { kind: "assistant", id: "a:turn-2:0", text: "", reasoning: "用户两个问题：", streaming: false, wasStreamed: true, reasoningComplete: true } as const,
+  { kind: "tool", id: "tc-1", name: "grep", args: "{}", readOnly: true, status: "running" as const } as const,
+  { kind: "assistant", id: "a:turn-2:1", text: "先答流程疑问", reasoning: "用户两个问题：", streaming: true, wasStreamed: true } as const,
+];
+let state = {
+  ...initialState,
+  items: [
+    { kind: "user", id: "history-1", text: "first question" } as const,
+    { kind: "assistant", id: "hist-1-answer", text: "first answer", reasoning: "", streaming: false } as const,
+    { kind: "user", id: "u-live", text: "second question" } as const,
+    ...turn2Before,
+  ],
+  historyPrefixCount: 2,
+  activeTurnId: "turn-2",
+  currentAssistant: "a:turn-2:1",
+  turnActive: true,
+  running: true,
+  // The answer segment is the second one this turn allocated (0 = reasoning).
+  assistantSegmentOrdinal: 2,
+};
+
+const rowsOf = (items: readonly { kind: string; id: string }[]) =>
+  items.filter((item) => item.kind === "assistant" || item.kind === "tool").map((item) => item.id);
+const before = rowsOf(state.items);
+process.stdout.write(`  [info] turn rows before replay: ${JSON.stringify(before)}\n`);
+
+// ---- replay the active turn, as a switch back does --------------------------
+const projected: number[] = [];
+const projector = new TurnEventProjector();
+projector.bind((event) => {
+  projected.push(event.seq ?? 0);
+  state = reducer(state, { type: "event", e: event });
+});
+projector.bindReset(async () => true);
+// Mirrors useController: a replay first rewinds the active turn's segment
+// allocation so the replayed rows rebuild the turn in place.
+projector.bindReplayStart((tabId) => {
+  state = reducer(state, { type: "replay_turn_reset" }) as typeof state;
+});
+
+// observeRuntime with active=true on an unknown cursor seeds the cursor to the
+// active turn's start and replays from there — the switch-back path.
+projector.observeRuntime("tab", "epoch-live", 14, 11, true);
+for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+
+const after = rowsOf(state.items);
+process.stdout.write(`  [info] projected seqs: ${JSON.stringify(projected)}\n`);
+process.stdout.write(`  [info] turn rows after replay: ${JSON.stringify(after)}\n`);
+process.stdout.write(`  [info] items: ${JSON.stringify(state.items.map((i) => ({ kind: i.kind, id: i.id, text: i.kind === "user" || i.kind === "assistant" ? i.text : undefined })), null, 0)}\n`);
+
+ok(projected.length > 0, "the active turn's events are replayed");
+
+// The regression: replaying must not add rows for a turn already on screen.
+ok(
+  after.length === before.length,
+  `replay adds no rows for a turn already rendered (before ${before.length} ${JSON.stringify(before)}, after ${after.length} ${JSON.stringify(after)})`,
+);
+ok(
+  new Set(after).size === after.length,
+  `no row id is duplicated after replay (${JSON.stringify(after)})`,
+);
+
+// The completed turn is untouched, and nothing already on screen was dropped.
+ok(state.items.filter((item) => item.kind === "user" && item.text === "first question").length === 1, "the completed turn is untouched");
+ok(state.items.filter((item) => item.kind === "user" && item.text === "second question").length === 1, "the in-flight prompt stays single");
+ok(before.every((id) => after.includes(id)), "no existing row was dropped by the replay");
+
+console.log(`\n${passed} passed, ${failed} failed`);
+if (failed > 0) process.exit(1);
