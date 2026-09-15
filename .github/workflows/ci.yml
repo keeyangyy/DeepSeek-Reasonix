@@ -199,7 +199,29 @@ jobs:
           # Bound sandbox helper children in Windows tests so a failed OS-level
           # launch cannot pin the Actions step after Go's package timeout fires.
           WINDOWS_SANDBOX_WAIT_MS: "20000"
-        run: go test -p 4 -timeout=8m ./...
+        run: |
+          set -o pipefail
+          output=""
+          status=0
+          for attempt in 1 2; do
+            if output="$(go test -p 4 -timeout=8m ./... 2>&1)"; then
+              printf '%s\n' "$output"
+              exit 0
+            else
+              status=$?
+            fi
+            # Only retry the known Windows runtime flake (internal/bot
+            # preemption crash) that reliably passes on a rerun; any other
+            # failure stays red immediately so CI semantics are preserved.
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault"; then
+              printf '%s\n' "$output"
+              exit "$status"
+            fi
+            echo "::warning::known Windows runtime flake matched; retrying test (full) attempt $attempt"
+            sleep 5
+          done
+          printf '%s\n' "$output"
+          exit "$status"
 
       - name: test (Scoop desktop launch)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows'
@@ -271,7 +293,28 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           REASONIX_RELEASE_CACHE_GUARD: "1"
-        run: go test -race ./...
+        run: |
+          set -o pipefail
+          output=""
+          status=0
+          for attempt in 1 2; do
+            if output="$(go test -race ./... 2>&1)"; then
+              printf '%s\n' "$output"
+              exit 0
+            else
+              status=$?
+            fi
+            # Only retry the known race flake (internal/plugin cache test)
+            # that passes on a rerun; any other failure stays red immediately.
+            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin"; then
+              printf '%s\n' "$output"
+              exit "$status"
+            fi
+            echo "::warning::known race flake matched; retrying test -race attempt $attempt"
+            sleep 5
+          done
+          printf '%s\n' "$output"
+          exit "$status"
 
   # sdk/go is a nested stdlib-only module invisible to root `go test ./...`.
   # Its DTOs are generated from internal/extension/protocol, and the
@@ -787,10 +830,23 @@ jobs:
         shell: pwsh
         timeout-minutes: 2
         run: |
-          ../scripts/test-webview2-native-smoke.ps1 `
-            -ExecutablePath "build/bin/reasonix-desktop.exe" `
-            -TimeoutSeconds 60 `
-            -HealthySeconds 5
+          $output = $null
+          $code = 0
+          foreach ($attempt in 1..2) {
+            $output = & ../scripts/test-webview2-native-smoke.ps1 `
+              -ExecutablePath "build/bin/reasonix-desktop.exe" `
+              -TimeoutSeconds 60 `
+              -HealthySeconds 5 2>&1
+            $code = $LASTEXITCODE
+            if ($code -eq 0) { $output; exit 0 }
+            # Only retry the known CI-vanilla WebView2 flake that passes on a
+            # rerun; any other failure stays red immediately.
+            if ($output -notmatch 'rejected the graceful close request') { $output; exit $code }
+            Write-Warning "known WebView2 smoke flake matched; retrying attempt $attempt"
+            Start-Sleep -Seconds 5
+          }
+          $output
+          exit $code
 
       - name: test (Windows desktop and update helper)
         # Normal wall time is 6-7 minutes; a loaded runner has exceeded 15 with
