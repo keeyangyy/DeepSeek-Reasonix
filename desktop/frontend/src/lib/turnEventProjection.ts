@@ -6,6 +6,7 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
 type ReplaySeedHandler = (tabId: string, fromSeq: number) => void;
+type ReplayDoneHandler = (tabId: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
 
@@ -32,6 +33,7 @@ export class TurnEventProjector {
   // last accepted. See LIVE_DEDUP_WINDOW_MS.
   private readonly liveFingerprintByTab = new Map<string, Map<string, number>>();
   private liveDedupHits = 0;
+  private replayDoneHandler?: ReplayDoneHandler;
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
   private replayStartHandler?: ReplaySeedHandler;
@@ -45,6 +47,8 @@ export class TurnEventProjector {
   // that turn in place instead of appending a second copy of it.
   bindReplayStart(handler: ReplaySeedHandler) { this.replayStartHandler = handler; }
   unbindReplayStart(handler: ReplaySeedHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
+  bindReplayDone(handler: ReplayDoneHandler) { this.replayDoneHandler = handler; }
+  unbindReplayDone(handler: ReplayDoneHandler) { if (this.replayDoneHandler === handler) this.replayDoneHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -207,7 +211,10 @@ export class TurnEventProjector {
         cursor = live.seq;
         this.sequenceByTab.set(tabId, cursor);
       }
-      if (remaining.length === 0) return;
+      if (remaining.length === 0) {
+        this.replayDoneHandler?.(tabId);
+        return;
+      }
       this.gapQueueByTab.set(tabId, remaining);
     }
     recordFrontendDiagnostic("runtime", "turn-events-gap-repair-incomplete", {

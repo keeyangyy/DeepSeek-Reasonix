@@ -1000,6 +1000,18 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
   return { items, seq };
 }
 
+// Diagnostic-only: a compact token describing the active turn's rows, encoded
+// for the whitelisted `state` diagnostic field (see sanitizeEvent in
+// frontendDiagnostics). Format: o<segmentOrdinal>_a<assistantRows>_h<historyRows>
+// _t<toolRows>. Comparing replay.turn-reset with replay.turn-complete tells a
+// turn rebuilt in place (same counts) from one the replay appended to.
+function transcriptTurnShape(state: { items: readonly Item[]; assistantSegmentOrdinal: number }): string {
+  const assistants = state.items.filter((item) => item.kind === "assistant");
+  const historyRows = assistants.filter((item) => item.id.startsWith("he:")).length;
+  const toolRows = state.items.filter((item) => item.kind === "tool").length;
+  return `o${state.assistantSegmentOrdinal}_a${assistants.length}_h${historyRows}_t${toolRows}`;
+}
+
 function applyTurnCheckpoint(items: Item[], submissionId: string | undefined, turn: number | undefined): Item[] {
   if (!submissionId) return items;
   const validTurn = turn !== undefined && Number.isInteger(turn) && turn >= 0;
@@ -3150,9 +3162,22 @@ export function useController() {
     // Before a gap replay re-projects the active turn from its first event,
     // rewind that turn's segment allocation so the replayed rows reuse their
     // existing ids instead of being appended as a second copy of the turn.
-    const onReplayStart = (tabId: string) => dispatchTo(tabId, { type: "replay_turn_reset" });
+    const onReplayStart = (tabId: string) => {
+      // Diagnostic anchor: the turn's shape before the replay rebuilds it.
+      const state = statesRef.current.get(tabId);
+      if (state) recordFrontendDiagnostic("runtime", "replay.turn-reset", { state: transcriptTurnShape(state) });
+      dispatchTo(tabId, { type: "replay_turn_reset" });
+    };
+    const onReplayDone = (tabId: string) => {
+      const state = statesRef.current.get(tabId);
+      if (state) recordFrontendDiagnostic("runtime", "replay.turn-complete", { state: transcriptTurnShape(state) });
+    };
     turnEventProjector.bindReplayStart(onReplayStart);
-    return () => turnEventProjector.unbindReplayStart(onReplayStart);
+    turnEventProjector.bindReplayDone(onReplayDone);
+    return () => {
+      turnEventProjector.unbindReplayStart(onReplayStart);
+      turnEventProjector.unbindReplayDone(onReplayDone);
+    };
   }, [dispatchTo, turnEventProjector]);
 
   // On-demand full content for a ref-replaced history field (entries carrying
