@@ -414,6 +414,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // The main-v2 merge of the default-collapsed preference and the fork-session
 // flow adds ~0.7 KiB to the initial path (measured 2401.2 KiB on CI). Keep
 // the raise explicit and bounded, with headroom for toolchain/hash drift.
-const rawInitialBudgetKiB = 2_402.0;
+// The session-dup probe line (test/live-dup, never back-merged) adds
+// 11.2 KiB raw diagnostics payload on the measured 2401.2 KiB base
+// (2412.4 measured in CI). Keep the raise explicit and bounded on this line.
+const rawInitialBudgetKiB = 2_413.0;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
