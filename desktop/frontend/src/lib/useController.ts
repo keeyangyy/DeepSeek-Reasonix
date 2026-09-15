@@ -3533,7 +3533,9 @@ export function useController() {
         if (!acceptedEpoch) runtimeEpochByTabRef.current.set(targetTabId, e.runtimeEpoch);
       }
       const currentMeta = statesRef.current.get(targetTabId)?.meta;
-      if (e.sessionGeneration !== undefined && (!currentMeta || currentMeta.sessionGeneration === undefined || e.sessionGeneration !== currentMeta.sessionGeneration)) return;
+      // Reject only events from a known older generation; meta with no recorded
+      // generation (edited-prompt rotation) must not drop the live stream.
+      if (e.sessionGeneration !== undefined && currentMeta && currentMeta.sessionGeneration !== undefined && e.sessionGeneration !== currentMeta.sessionGeneration) return;
       if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
@@ -3807,6 +3809,14 @@ export function useController() {
       }
       void submitPromise.then(
         (receipt) => {
+          // Edited prompts rotate the backend session (generation bump);
+          // resync meta so the generation guard accepts the live stream.
+          if (original) {
+            void activeTabFromBackend().then((tab) => {
+              if (!tab) return;
+              dispatchTo(tabId, { type: "optimistic_meta", meta: metaFromTab(tab, statesRef.current.get(tabId)?.meta) });
+            }).catch(() => {});
+          }
           if (receipt && typeof receipt === "object" && "disposition" in receipt && receipt.disposition === "management_handled") return void dispatchTo(tabId, { type: "management_confirmed", submissionId });
           if (receipt && typeof receipt === "object" && "turnId" in receipt && typeof receipt.turnId === "string") {
             dispatchTo(tabId, { type: "turn_admitted", turnId: receipt.turnId, submissionId });
@@ -3819,7 +3829,7 @@ export function useController() {
       rejectTurnSubmission(tabId, submissionId, error);
       throw error;
     }
-  }, [bumpCancelHydrateSeq, dispatchTo, rejectTurnSubmission]);
+  }, [activeTabFromBackend, bumpCancelHydrateSeq, dispatchTo, rejectTurnSubmission]);
 
   const recoverDeliveryToTab = useCallback(async (tabId: string, displayText: string, submitText = displayText) => {
     if (!tabId) throw new Error(t("composer.workspaceStarting"));
