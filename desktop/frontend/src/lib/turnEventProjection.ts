@@ -144,6 +144,33 @@ export class TurnEventProjector {
     return false;
   }
 
+  /**
+   * Resolves once any in-flight replay / gap repair for the tab has settled, or
+   * once a fresh one it triggered has too. A no-op when nothing is running.
+   *
+   * A hydrate that merges the history page races the replay: the page arrives
+   * while the replay is still re-projecting the active turn, so the live rows
+   * the merge sees are a partial rebuild. The apply-mode decision and the
+   * page-tail alignment then compare against that half-built turn and lay the
+   * whole page down beside it. Waiting for the replay to settle first makes
+   * both decisions observe the complete turn.
+   */
+  async waitForIdle(tabId: string): Promise<void> {
+    // A settled repair can chain a follow-up repair from its finally block, so
+    // keep draining until the tab has no repair left.
+    for (let guard = 0; guard < MAX_REPLAY_PAGES; guard += 1) {
+      const repair = this.repairByTab.get(tabId);
+      if (!repair) return;
+      try {
+        await repair;
+      } catch {
+        // gap-repair-failed is recorded in requestReplay; the hydrate proceeds
+        // against whatever did project rather than hanging here.
+        return;
+      }
+    }
+  }
+
   private requestReplay(tabId: string, afterSeq: number, runtimeEpoch?: string) {
     if (typeof app.TurnEventsForTab !== "function") return;
     if (this.repairByTab.has(tabId)) {

@@ -2961,6 +2961,14 @@ export function useController() {
       const applyProj = projection && {
         items: projection.items, revision: projection.revisionKnown ? projection.revision : undefined, digest: projection.digest || undefined,
       };
+      // A replay of the active turn may still be paging in: it is observed on a
+      // runtime rebuild, which is the same moment the switch that loads this
+      // history page happens. Deciding the apply mode and aligning the page tail
+      // against a half-rebuilt turn lays the whole page down beside it (the
+      // duplicate this guards). Wait for the replay to settle so both decisions
+      // see the complete turn.
+      await turnEventProjector.waitForIdle(tabId);
+      if (!stillCurrent()) return;
       const applyMode = hydratedHistoryApplyMode(skipHistory, projection !== undefined, foregroundTurnActive(), statesRef.current.get(tabId), applyProj);
       if (projection !== undefined && applyMode !== "skip") {
         if (deferResetUntilHistory && stillCurrent() && !foregroundTurnActive()) dispatchTo(tabId, { type: "reset" });

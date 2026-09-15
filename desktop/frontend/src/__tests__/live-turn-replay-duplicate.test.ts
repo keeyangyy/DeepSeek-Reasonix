@@ -262,5 +262,34 @@ ok(before.every((id) => after.includes(id)), "no existing row was dropped by the
   ok(rewinds.length === 1, "a gap whose cursor predates the active turn's start rewinds");
 }
 
+// ---- Variant: waitForIdle drains a replay that is still paging -------------
+// A hydrate must not decide the merge while the active turn is only partly
+// re-projected. waitForIdle is a no-op with nothing running and otherwise
+// resolves only after the events have been projected.
+{
+  const idle = new TurnEventProjector();
+  idle.bind(() => {});
+  let idleSettled = false;
+  void idle.waitForIdle("idle-tab").then(() => { idleSettled = true; });
+  for (let attempt = 0; attempt < 5; attempt += 1) await Promise.resolve();
+  ok(idleSettled, "waitForIdle resolves immediately when no replay is running");
+
+  const projectedSeqs: number[] = [];
+  const busy = new TurnEventProjector();
+  busy.bind((event) => { projectedSeqs.push(event.seq ?? 0); });
+  busy.bindReset(async () => true);
+  busy.observeRuntime("busy-tab", "epoch-live", 14, 11, true);
+  let idleAfterReplay = false;
+  let projectedAtResolve = -1;
+  void busy.waitForIdle("busy-tab").then(() => {
+    idleAfterReplay = true;
+    projectedAtResolve = projectedSeqs.length;
+  });
+  ok(!idleAfterReplay, "waitForIdle does not resolve while the replay is still running");
+  for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+  ok(idleAfterReplay, "waitForIdle resolves once the replay settles");
+  ok(projectedAtResolve >= 3, `the replay had projected its events by then (got ${projectedAtResolve})`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
