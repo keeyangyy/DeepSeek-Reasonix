@@ -5,8 +5,18 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
+type ReplaySeedHandler = (tabId: string, fromSeq: number) => void;
+type ReplayDoneHandler = (tabId: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
+
+// A re-delivered live event is indistinguishable from a fresh one when it
+// carries no seq (the backend omits seq on some compatibility paths), so the
+// projector's sequence guard cannot see it and its delta is applied twice,
+// rendering the same reasoning/answer text a second time. Content deltas are
+// incremental, so an identical kind+body reappearing inside this window is a
+// re-delivery rather than new content.
+const LIVE_DEDUP_WINDOW_MS = 50;
 
 // TurnEventProjector is the per-tab ordered projection boundary. While a gap or
 // checkpoint reset is being repaired, live events are held and applied only
@@ -19,13 +29,26 @@ export class TurnEventProjector {
   private readonly epochByTab = new Map<string, string>();
   private readonly generationByTab = new Map<string, number>();
   private readonly projectingReplayByTab = new Set<string>();
+  // Re-delivery guard for seq-less live deltas: kind+body → the time it was
+  // last accepted. See LIVE_DEDUP_WINDOW_MS.
+  private readonly liveFingerprintByTab = new Map<string, Map<string, number>>();
+  private liveDedupHits = 0;
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
+  private replayStartHandler?: ReplaySeedHandler;
+  private replayDoneHandler?: ReplayDoneHandler;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
   bindReset(handler: ResetHandler) { this.resetHandler = handler; }
   unbindReset(handler: ResetHandler) { if (this.resetHandler === handler) this.resetHandler = undefined; }
+  // Notified once before a gap replay projects its first event, so the reducer
+  // can rewind the active turn's segment allocation and let the replay rebuild
+  // that turn in place instead of appending a second copy of it.
+  bindReplayStart(handler: ReplaySeedHandler) { this.replayStartHandler = handler; }
+  unbindReplayStart(handler: ReplaySeedHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
+  bindReplayDone(handler: ReplayDoneHandler) { this.replayDoneHandler = handler; }
+  unbindReplayDone(handler: ReplayDoneHandler) { if (this.replayDoneHandler === handler) this.replayDoneHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -38,19 +61,29 @@ export class TurnEventProjector {
   }
 
   /**
-   * Resolves once any in-flight gap repair / turn-event replay for the tab has
-   * settled (or was already discarded). A no-op when nothing is running. Used
-   * to serialize a history merge against a replay that may still be paging:
-   * the merge must observe the fully-replayed live rows so its dedupe sees the
-   * complete turn instead of racing a later replay page onto the merged page.
+   * Resolves once any in-flight replay / gap repair for the tab has settled, or
+   * once a fresh one it triggered has too. A no-op when nothing is running.
+   *
+   * A hydrate that merges the history page races the replay: the page arrives
+   * while the replay is still re-projecting the active turn, so the live rows
+   * the merge sees are a partial rebuild. The apply-mode decision and the
+   * page-tail alignment then compare against that half-built turn and lay the
+   * whole page down beside it. Waiting for the replay to settle first makes
+   * both decisions observe the complete turn.
    */
   async waitForIdle(tabId: string): Promise<void> {
-    const repair = this.repairByTab.get(tabId);
-    if (!repair) return;
-    try {
-      await repair;
-    } catch {
-      // gap-repair-failed is already recorded in requestReplay; nothing else to do.
+    // A settled repair can chain a follow-up repair from its finally block, so
+    // keep draining until the tab has no repair left.
+    for (let guard = 0; guard < MAX_REPLAY_PAGES; guard += 1) {
+      const repair = this.repairByTab.get(tabId);
+      if (!repair) return;
+      try {
+        await repair;
+      } catch {
+        // gap-repair-failed is recorded in requestReplay; the hydrate proceeds
+        // against whatever did project rather than hanging here.
+        return;
+      }
     }
   }
 
@@ -64,16 +97,45 @@ export class TurnEventProjector {
       this.repairByTab.delete(tabId);
     }
     let projected = this.sequenceByTab.get(tabId);
+    const freshSeed = projected === undefined;
     if (projected === undefined) {
       projected = active ? Math.min(replayAfter ?? latest, latest) : latest;
       this.sequenceByTab.set(tabId, projected);
+    }
+    // Rewind the active turn's segment allocation whenever the replay will
+    // re-project the turn's FIRST event: either a fresh seed that lands on
+    // (or before) the turn start, or a gap whose cursor still predates the
+    // turn start. In both cases the turn's rows are already on screen, so the
+    // replay must rebuild them in place, not append a parallel copy. A gap
+    // backfill whose cursor already sits at-or-past the turn start re-projects
+    // only the still-missing tail; rewinding there would strand the segments
+    // below it, so that case is deliberately left alone.
+    const rewindTurn =
+      active &&
+      replayAfter !== undefined &&
+      latest > projected &&
+      projected <= replayAfter &&
+      (freshSeed || projected < replayAfter);
+    if (rewindTurn) {
+      recordFrontendDiagnostic("runtime", "replay.seed", { sequence: projected, intent: latest });
+      this.replayStartHandler?.(tabId, projected);
     }
     if (latest > projected) this.requestReplay(tabId, projected, runtimeEpoch);
   }
 
   acceptLive(tabId: string, event: WireEvent, runtimeEpoch?: string): boolean {
     if (this.projectingReplayByTab.has(tabId)) return true;
-    if (typeof event.seq !== "number" || event.seq <= 0) return true;
+    if (typeof event.seq !== "number" || event.seq <= 0) {
+      // Nothing to compare against the cursor, so fall back to the re-delivery
+      // guard: a doubled seq-less delta would otherwise be applied twice and
+      // render the same reasoning/answer text a second time.
+      if (this.isDuplicateLiveEvent(tabId, event)) {
+        this.liveDedupHits += 1;
+        recordFrontendDiagnostic("runtime", "live.dedup", { action: event.kind, sequence: this.liveDedupHits });
+        return false;
+      }
+      return true;
+    }
     const last = this.sequenceByTab.get(tabId) ?? 0;
     if (event.seq <= last) return false;
     if (this.repairByTab.has(tabId) || event.seq > last + 1) {
@@ -87,6 +149,26 @@ export class TurnEventProjector {
     }
     this.sequenceByTab.set(tabId, event.seq);
     return true;
+  }
+
+  /** True when this seq-less delta repeats one accepted moments ago. */
+  private isDuplicateLiveEvent(tabId: string, event: WireEvent): boolean {
+    if (event.kind !== "text" && event.kind !== "reasoning") return false;
+    const body = event.text ?? event.reasoning ?? "";
+    if (body === "") return false;
+    const now = Date.now();
+    let seen = this.liveFingerprintByTab.get(tabId);
+    if (!seen) {
+      seen = new Map<string, number>();
+      this.liveFingerprintByTab.set(tabId, seen);
+    }
+    for (const [key, at] of seen) {
+      if (now - at > LIVE_DEDUP_WINDOW_MS) seen.delete(key);
+    }
+    const fingerprint = `${event.kind}|${body}`;
+    if (seen.has(fingerprint)) return true;
+    seen.set(fingerprint, now);
+    return false;
   }
 
   private requestReplay(tabId: string, afterSeq: number, runtimeEpoch?: string) {
@@ -134,6 +216,7 @@ export class TurnEventProjector {
       }
 
       const envelopes = asArray(replay.events).slice().sort((a, b) => a.seq - b.seq);
+      // A replay is re-projecting durable events the surface may already hold.
       for (const envelope of envelopes) {
         if (envelope.seq <= cursor) continue;
         if (envelope.seq !== cursor + 1) throw new Error(`turn event replay gap after ${cursor}`);
@@ -165,7 +248,10 @@ export class TurnEventProjector {
         cursor = live.seq;
         this.sequenceByTab.set(tabId, cursor);
       }
-      if (remaining.length === 0) return;
+      if (remaining.length === 0) {
+        this.replayDoneHandler?.(tabId);
+        return;
+      }
       this.gapQueueByTab.set(tabId, remaining);
     }
     recordFrontendDiagnostic("runtime", "turn-events-gap-repair-incomplete", {

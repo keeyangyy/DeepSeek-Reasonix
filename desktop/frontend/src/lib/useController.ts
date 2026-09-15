@@ -839,6 +839,7 @@ type Action =
   | { type: "ask_submit_succeeded"; id: string; epoch: number }
   | { type: "submit_prompt_failed"; id: string; epoch: number }
   | { type: "controller_rebuilt" }
+  | { type: "replay_turn_reset" }
   | { type: "reset" }
   | { type: "context_panel_refresh" };
 
@@ -998,6 +999,21 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
     }
   }
   return { items, seq };
+}
+
+// Diagnostic-only: a compact token describing the active turn's rows, encoded
+// for the whitelisted `state` diagnostic field (see sanitizeEvent in
+// frontendDiagnostics). Format: o<segmentOrdinal>_a<assistantRows>_h<historyRows>
+// _t<toolRows>_u<userRows>. Comparing replay.turn-reset with
+// replay.turn-complete tells a turn rebuilt in place (same counts) from one the
+// replay appended to; a prepend whose live `u` is 0 has no anchor for the page
+// tail alignment, so the page cannot yield and gets laid down twice.
+function transcriptTurnShape(state: { items: readonly Item[]; assistantSegmentOrdinal: number }): string {
+  const assistants = state.items.filter((item) => item.kind === "assistant");
+  const historyRows = assistants.filter((item) => item.id.startsWith("he:")).length;
+  const toolRows = state.items.filter((item) => item.kind === "tool").length;
+  const userRows = state.items.filter((item) => item.kind === "user").length;
+  return `o${state.assistantSegmentOrdinal}_a${assistants.length}_h${historyRows}_t${toolRows}_u${userRows}`;
 }
 
 function applyTurnCheckpoint(items: Item[], submissionId: string | undefined, turn: number | undefined): Item[] {
@@ -2423,6 +2439,33 @@ export function reducer(s: State, a: Action): State {
         extensionNotifications: [],
         extensionGenerations: {},
       };
+    case "replay_turn_reset": {
+      // A switch back re-projects the ACTIVE turn from its first event (the
+      // backend's ProjectionCursor returns turnStartSeq - 1 for a live turn).
+      // The transcript still holds everything that turn had produced, and the
+      // replayed rows would otherwise be appended beside it: segment ids come
+      // from assistantSegmentOrdinal, which only ever moved forward, so the
+      // replay allocates a fresh ordinal and the turn renders twice.
+      //
+      // Rewind the turn's segment allocation and drop the live stream so the
+      // replay re-derives the same ids it used the first time (ensureAssistant
+      // reuses the row already holding that id). Rows are NOT removed here: the
+      // replay must be able to rebuild them, and a failed replay leaving a
+      // half-turn is worse than a stale one.
+      //
+      // Deliberately NOT gated on turnActive/running: a runtime rebuild makes
+      // the tab momentarily inactive and the backend_status that follows clears
+      // those flags, yet the gap replay still re-projects the turn in exactly
+      // that state.
+      if (s.assistantSegmentOrdinal === 0 && s.currentAssistant === undefined && s.live === undefined) return s;
+      return {
+        ...s,
+        currentAssistant: undefined,
+        assistantSegmentOrdinal: 0,
+        live: undefined,
+        pendingSearchSources: undefined,
+      };
+    }
     case "reset": return { ...initialState, meta: metaWithoutCanonicalTodos(s.meta), context: { used: 0, window: s.context.window, sessionTokens: 0, compactRatio: s.context.compactRatio }, balance: s.balance, effort: s.effort, jobs: s.jobs, hydrating: s.hydrating, hydrateReason: s.hydrateReason, hydrateError: s.hydrateError, hydrateHistoryLoaded: s.hydrateHistoryLoaded, hydratePlaceholderItems: s.hydratePlaceholderItems, backendActivationPending: s.backendActivationPending, sessionGen: s.sessionGen + 1, promptEpoch: s.promptEpoch + 1 };
     case "context_panel_refresh": return { ...s, contextPanelSeq: s.contextPanelSeq + 1 };
     case "event": {
@@ -2954,6 +2997,15 @@ export function useController() {
           ? projection.items.filter((item) => !liveOwned.has(item.id))
           : projection.items;
         const probeRemoved = isPrepend && !inFlight ? duplicateLiveItemIds(projection.items, liveItems) : [];
+        // Diagnostic: which hydrate path ran, how many rows were deduped away
+        // (page side when in-flight, live side when idle), how many rows the
+        // page carried, and the live shape it merged into (o_a_h_t_u token).
+        recordFrontendDiagnostic("runtime", "hydrate.apply", {
+          action: applyMode,
+          sequence: isPrepend ? (inFlight ? liveOwned.size : probeRemoved.length) : 0,
+          intent: projection.items.length,
+          state: probeLive ? transcriptTurnShape(probeLive) : "",
+        });
         probeMerge({
           tabId,
           kind: isPrepend ? "history_prepend" : "history_replace",
@@ -3146,6 +3198,28 @@ export function useController() {
     turnEventProjector.bindReset(resetTurnEventProjection);
     return () => turnEventProjector.unbindReset(resetTurnEventProjection);
   }, [resetTurnEventProjection, turnEventProjector]);
+
+  useEffect(() => {
+    // Before a gap replay re-projects the active turn from its first event,
+    // rewind that turn's segment allocation so the replayed rows reuse their
+    // existing ids instead of being appended as a second copy of the turn.
+    const onReplayStart = (tabId: string) => {
+      // Diagnostic anchor: the turn's shape before the replay rebuilds it.
+      const state = statesRef.current.get(tabId);
+      if (state) recordFrontendDiagnostic("runtime", "replay.turn-reset", { state: transcriptTurnShape(state) });
+      dispatchTo(tabId, { type: "replay_turn_reset" });
+    };
+    const onReplayDone = (tabId: string) => {
+      const state = statesRef.current.get(tabId);
+      if (state) recordFrontendDiagnostic("runtime", "replay.turn-complete", { state: transcriptTurnShape(state) });
+    };
+    turnEventProjector.bindReplayStart(onReplayStart);
+    turnEventProjector.bindReplayDone(onReplayDone);
+    return () => {
+      turnEventProjector.unbindReplayStart(onReplayStart);
+      turnEventProjector.unbindReplayDone(onReplayDone);
+    };
+  }, [dispatchTo, turnEventProjector]);
 
   // On-demand full content for a ref-replaced history field (entries carrying
   // refs[] ship a ≤4KiB preview inline). Resolves through the transcript

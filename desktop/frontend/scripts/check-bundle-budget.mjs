@@ -418,8 +418,10 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 11.2 KiB raw diagnostics payload on the measured 2401.2 KiB base
 // (2412.4 measured in CI). Keep the raise explicit and bounded on this line.
 // The in-flight yield-side dedupe (liveOwnedPageTailIds + the prepend split)
-// adds ~1.0 KiB raw on this line; raise the ceiling to cover it without
-// touching the gzip or largest-chunk gates.
-const rawInitialBudgetKiB = 2_414.0;
+// adds ~1.0 KiB raw on this line; the replay-layer port (rewindTurn +
+// replay_turn_reset + seq-less delta dedupe + hydrate/replay diagnostics)
+// adds a further ~2.2 KiB (2415.6 measured), raising the ceiling to cover it
+// without touching the gzip or largest-chunk gates.
+const rawInitialBudgetKiB = 2_416.0;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
