@@ -163,5 +163,48 @@ ok(state.items.filter((item) => item.kind === "user" && item.text === "first que
 ok(state.items.filter((item) => item.kind === "user" && item.text === "second question").length === 1, "the in-flight prompt stays single");
 ok(before.every((id) => after.includes(id)), "no existing row was dropped by the replay");
 
+// ---- Variant: the tab's turn flags were already cleared ---------------------
+// runtime.rebuilt makes the tab momentarily inactive (cancellable=false), and
+// the backend_status that follows clears turnActive/running. A gap replay still
+// re-projects the turn in that state, so the reset must not depend on those
+// flags being set.
+{
+  let idleState = {
+    ...initialState,
+    items: [
+      { kind: "user", id: "history-1", text: "first question" } as const,
+      { kind: "assistant", id: "hist-1-answer", text: "first answer", reasoning: "", streaming: false } as const,
+      { kind: "user", id: "u-live", text: "second question" } as const,
+      ...turn2Before,
+    ],
+    historyPrefixCount: 2,
+    activeTurnId: "turn-2",
+    currentAssistant: "a:turn-2:1",
+    turnActive: false,
+    running: false,
+    assistantSegmentOrdinal: 2,
+  };
+  const idleProjector = new TurnEventProjector();
+  const idleProjected: number[] = [];
+  idleProjector.bind((event) => {
+    idleProjected.push(event.seq ?? 0);
+    idleState = reducer(idleState, { type: "event", e: event }) as typeof idleState;
+  });
+  idleProjector.bindReset(async () => true);
+  idleProjector.bindReplayStart(() => {
+    idleState = reducer(idleState, { type: "replay_turn_reset" }) as typeof idleState;
+  });
+  idleProjector.observeRuntime("tab-idle", "epoch-live", 14, 11, true);
+  for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+
+  const idleAfter = rowsOf(idleState.items);
+  process.stdout.write(`  [info] (cleared-flags variant) projected: ${JSON.stringify(idleProjected)} rows after: ${JSON.stringify(idleAfter)}\n`);
+  ok(idleProjected.length > 0, "the replay still runs when the tab's flags were cleared");
+  ok(
+    idleAfter.length === before.length,
+    `replay adds no rows when the turn flags were cleared first (before ${before.length}, after ${idleAfter.length} ${JSON.stringify(idleAfter)})`,
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

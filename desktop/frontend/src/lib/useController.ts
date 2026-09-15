@@ -2436,7 +2436,12 @@ export function reducer(s: State, a: Action): State {
       // reuses the row already holding that id). Rows are NOT removed here: the
       // replay must be able to rebuild them, and a failed replay leaving a
       // half-turn is worse than a stale one.
-      if (!s.turnActive && !s.running) return s;
+      //
+      // Deliberately NOT gated on turnActive/running: a runtime rebuild makes
+      // the tab momentarily inactive and the backend_status that follows clears
+      // those flags, yet the gap replay still re-projects the turn in exactly
+      // that state.
+      if (s.assistantSegmentOrdinal === 0 && s.currentAssistant === undefined && s.live === undefined) return s;
       return {
         ...s,
         currentAssistant: undefined,
@@ -3136,7 +3141,24 @@ export function useController() {
     // Before a gap replay re-projects the active turn from its first event,
     // rewind that turn's segment allocation so the replayed rows reuse their
     // existing ids instead of being appended as a second copy of the turn.
-    const onReplayStart = (tabId: string) => dispatchTo(tabId, { type: "replay_turn_reset" });
+    const onReplayStart = (tabId: string) => {
+      // Diagnostic anchor: what the turn looked like when the replay began.
+      // Row counts (never ids or content) are enough to tell a rebuilt-in-place
+      // turn from an appended duplicate.
+      const state = statesRef.current.get(tabId);
+      if (state) {
+        recordFrontendDiagnostic("runtime", "replay.turn-reset", {
+          ordinal: state.assistantSegmentOrdinal,
+          hasCurrentAssistant: state.currentAssistant !== undefined,
+          hasLive: state.live !== undefined,
+          turnActive: state.turnActive,
+          running: state.running,
+          assistantRows: state.items.filter((item) => item.kind === "assistant").length,
+          toolRows: state.items.filter((item) => item.kind === "tool").length,
+        });
+      }
+      dispatchTo(tabId, { type: "replay_turn_reset" });
+    };
     turnEventProjector.bindReplayStart(onReplayStart);
     return () => turnEventProjector.unbindReplayStart(onReplayStart);
   }, [dispatchTo, turnEventProjector]);
