@@ -112,8 +112,12 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_TITLE="${TITLE:-v$VERSION}"
+          # Create the release as a draft: the Windows pipeline attaches the
+          # installer and portable archive a few minutes later, and a public
+          # release must never be visible without its assets. release-windows.yml
+          # publishes it once both assets are uploaded.
           if [ -n "$NOTES" ]; then
-            gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --notes "$NOTES"
+            gh release create "v$VERSION" --draft --target main-v2 --title "$RELEASE_TITLE" --notes "$NOTES"
           else
             # Auto-summary of every change since the previous release tag
             # (commits carry the detail; the notes give the overview).
@@ -131,7 +135,7 @@ jobs:
               git log "$RANGE" --no-merges --pretty=format:'- %s' 2>/dev/null || true
               echo
             } > /tmp/release-notes.md
-            gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --notes-file /tmp/release-notes.md
+            gh release create "v$VERSION" --draft --target main-v2 --title "$RELEASE_TITLE" --notes-file /tmp/release-notes.md
           fi
 
       - name: Dispatch Windows artifact pipeline

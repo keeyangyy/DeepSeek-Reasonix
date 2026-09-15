@@ -103,18 +103,24 @@ jobs:
           exe_asset="Reasonix-windows-amd64-installer-${version}.exe"
           mv dist/Reasonix-windows-amd64.zip "dist/${zip_asset}"
           mv dist/Reasonix-windows-amd64-installer.exe "dist/${exe_asset}"
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG already exists; uploading/overwriting assets."
-            # Drop the pre-versioned asset names from the first fork releases so
-            # re-running the same tag never leaves both old and new names behind.
-            gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64.zip --yes >/dev/null 2>&1 || true
-            gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64-installer.exe --yes >/dev/null 2>&1 || true
-            gh release upload "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" --clobber
-          else
-            gh release create "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" \
+          # release-manual.yml creates this release as a draft before the
+          # Windows build starts, so it is never public without its assets.
+          # Create it here too when this workflow is dispatched on its own.
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG absent; creating it as a draft."
+            gh release create "$RELEASE_TAG" --draft \
               --title "$RELEASE_TAG" \
               --generate-notes
+          else
+            echo "Release $RELEASE_TAG already exists; uploading/overwriting assets."
           fi
+          # Drop the pre-versioned asset names from the first fork releases so
+          # re-running the same tag never leaves both old and new names behind.
+          gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64.zip --yes >/dev/null 2>&1 || true
+          gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64-installer.exe --yes >/dev/null 2>&1 || true
+          gh release upload "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" --clobber
+          # Publish only now that both assets are attached.
+          gh release edit "$RELEASE_TAG" --draft=false
 
       - name: Summarize release
         env:
