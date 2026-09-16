@@ -48,6 +48,7 @@ import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./
 import { sameStringList, sameTodoList } from "./todoVisibility";
 import { resolveSnapshotTurnStartedAt, resolveTurnStartedAt, snapshotPredatesTurnLifecycle } from "./turnTiming";
 import { TurnEventProjector } from "./turnEventProjection";
+import { replayTurnRebuild } from "./replayRebuild";
 import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
 import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
@@ -838,6 +839,7 @@ type Action =
   | { type: "ask_submit_succeeded"; id: string; epoch: number }
   | { type: "submit_prompt_failed"; id: string; epoch: number }
   | { type: "controller_rebuilt" }
+  | { type: "replay_turn_rebuild"; turnId?: string }
   | { type: "reset" }
   | { type: "context_panel_refresh" };
 
@@ -2404,6 +2406,10 @@ export function reducer(s: State, a: Action): State {
     // from the OLD controller is meaningless for the new one and must be
     // dropped, or a genuinely new prompt reusing an old id would be misread
     // as a stale replay of an already-answered prompt and silently ignored.
+    // A full-turn replay is about to start (runtime epoch change / takeover /
+    // first observation of an active tab): drop this turn's already-mounted
+    // rows so the replay rebuilds them exactly once (see replayRebuild.ts).
+    case "replay_turn_rebuild": return replayTurnRebuild(s, a.turnId);
     case "controller_rebuilt":
       // A rebuild restarts the runtime's extension sidecars too, so extension
       // surface state (and the per-surface generation fence) from the old
@@ -3109,6 +3115,14 @@ export function useController() {
     return () => turnEventProjector.unbindReset(resetTurnEventProjection);
   }, [resetTurnEventProjection, turnEventProjector]);
 
+  useEffect(() => {
+    const onReplayStart = (tabId: string, turnId?: string) => {
+      dispatchTo(tabId, { type: "replay_turn_rebuild", turnId });
+    };
+    turnEventProjector.bindReplayStart(onReplayStart);
+    return () => turnEventProjector.unbindReplayStart(onReplayStart);
+  }, [dispatchTo, turnEventProjector]);
+
   // On-demand full content for a ref-replaced history field (entries carrying
   // refs[] ship a ≤4KiB preview inline). Resolves through the transcript
   // store, which patches the projected items by stable id on completion. The
@@ -3214,7 +3228,7 @@ export function useController() {
     const foregroundRunning = foregroundRunningFromRuntimeMeta(tab);
     const runtimeEpoch = tab.runtime?.epoch;
     const latestEventSeq = tab.turnEventSeq ?? 0;
-    turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId));
+    turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId), tab.turnId ?? undefined);
     // Will the reducer reject this as a snapshot that predates the live prompt?
     // Computed on pre-dispatch state so we can schedule an authoritative
     // refetch when a stale idle snapshot is ignored.

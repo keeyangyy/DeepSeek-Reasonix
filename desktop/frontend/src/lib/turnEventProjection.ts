@@ -5,8 +5,17 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
+type ReplayStartHandler = (tabId: string, turnId?: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
+
+// Diagnostics whitelist tokens reject whitespace; compact an error message into
+// a lossy-but-usable token so gap-repair failures stop being silently dropped.
+function diagnosticErrorToken(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const token = raw.replace(/[^a-zA-Z0-9._:-]+/g, ".").replace(/^\.+|\.+$/g, "").slice(0, 64);
+  return token || "unknown";
+}
 
 // TurnEventProjector is the per-tab ordered projection boundary. While a gap or
 // checkpoint reset is being repaired, live events are held and applied only
@@ -21,11 +30,14 @@ export class TurnEventProjector {
   private readonly projectingReplayByTab = new Set<string>();
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
+  private replayStartHandler?: ReplayStartHandler;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
   bindReset(handler: ResetHandler) { this.resetHandler = handler; }
   unbindReset(handler: ResetHandler) { if (this.resetHandler === handler) this.resetHandler = undefined; }
+  bindReplayStart(handler: ReplayStartHandler) { this.replayStartHandler = handler; }
+  unbindReplayStart(handler: ReplayStartHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -37,7 +49,7 @@ export class TurnEventProjector {
     this.repairByTab.delete(tabId);
   }
 
-  observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean) {
+  observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean, turnId?: string) {
     if (runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId)) {
       this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
       this.epochByTab.set(tabId, runtimeEpoch);
@@ -47,11 +59,30 @@ export class TurnEventProjector {
       this.repairByTab.delete(tabId);
     }
     let projected = this.sequenceByTab.get(tabId);
+    const initializing = projected === undefined;
     if (projected === undefined) {
       projected = active ? Math.min(replayAfter ?? latest, latest) : latest;
       this.sequenceByTab.set(tabId, projected);
     }
-    if (latest > projected) this.requestReplay(tabId, projected, runtimeEpoch);
+    if (latest > projected) {
+      // A first observation while the turn is active replays the WHOLE turn
+      // (ProjectionCursor pins replayAfter to the turn start). The transcript
+      // must drop this turn's mounted rows first: applyEvent's delta/append
+      // semantics would otherwise double the live buffer and co-mount replayed
+      // rows next to their already-settled page duplicates. Incremental gap
+      // repairs (non-initializing) never fire this.
+      if (initializing && active && replayAfter !== undefined && replayAfter < latest) {
+        try {
+          this.replayStartHandler?.(tabId, turnId);
+        } catch { /* handler failures must not block the replay */ }
+        recordFrontendDiagnostic("runtime", "turn-events-replay-start", {
+          total: replayAfter,
+          sequence: latest,
+          state: turnId || "",
+        });
+      }
+      this.requestReplay(tabId, projected, runtimeEpoch);
+    }
   }
 
   acceptLive(tabId: string, event: WireEvent, runtimeEpoch?: string): boolean {
@@ -82,7 +113,7 @@ export class TurnEventProjector {
     const repair = this.replayGap(tabId, afterSeq, runtimeEpoch, generation)
       .catch((error) => recordFrontendDiagnostic("runtime", "turn-events-gap-repair-failed", {
         afterSeq: this.sequenceByTab.get(tabId) ?? afterSeq,
-        error: error instanceof Error ? error.message : String(error),
+        error: diagnosticErrorToken(error),
       }))
       .finally(() => {
         if (this.repairByTab.get(tabId) !== repair) return;
