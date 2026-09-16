@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2315,6 +2315,10 @@ export function reducer(s: State, a: Action): State {
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
+      // Dropped rows may include the row the live buffer is streaming into
+      // (page-owns-the-turn handoff); a dangling pointer would make the next
+      // delta recreate a same-id row.
+      const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       return {
         ...s,
         items: compactArchivedToolItems([...a.items, ...rest]),
@@ -2329,6 +2333,8 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "prepend" },
+        currentAssistant: liveDropped ? undefined : s.currentAssistant,
+        live: liveDropped ? undefined : s.live,
       };
     }
     // Ref-resolved full content landed for history items already on screen:
@@ -2936,7 +2942,22 @@ export function useController() {
           digest: projection.digest || undefined,
         };
         dispatchTo(tabId, applyMode === "prepend"
-          ? { type: "history_prepend", ...page, removeIds: duplicateLiveItemIds(projection.items, statesRef.current.get(tabId)?.items ?? []) }
+          ? (() => {
+              const liveState = statesRef.current.get(tabId);
+              const liveItems = liveState?.items ?? [];
+              const removeIds = duplicateLiveItemIds(projection.items, liveItems);
+              // A page fetched after a full-turn replay carries the turn's
+              // persisted rows; the replayed rebuild would co-mount next to
+              // them (v2 log: dup=16). Let the page own the turn: drop the
+              // rebuild rows and same-id tool copies, keep later deltas.
+              if (pageOverlapsLiveContent(projection.items, liveItems)) {
+                const prefix = liveState?.activeTurnId ? `a:${liveState.activeTurnId}:` : undefined;
+                for (const item of liveItems) {
+                  if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
+                }
+              }
+              return { type: "history_prepend", ...page, removeIds };
+            })()
           : { type: "history_replace", ...page });
         addBreadcrumb(
           "tab.hydrate",

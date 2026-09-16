@@ -239,6 +239,23 @@ export function duplicateLiveItemIds(
   return [];
 }
 
+// True when the fetched page already contains content that the mounted
+// live/replay rows also carry (any-position signature match). The page fetch
+// starts after the replay, so its persisted view of the active turn is a
+// superset — the page must own the turn and the replayed rebuild must yield.
+export function pageOverlapsLiveContent(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): boolean {
+  const liveSignatures = new Set<string>();
+  for (const item of liveItems) liveSignatures.add(itemSignature(item));
+  if (liveSignatures.size === 0) return false;
+  for (const item of pageItems) {
+    if (liveSignatures.has(itemSignature(item))) return true;
+  }
+  return false;
+}
+
 export function sameSessionPlaceholderItems<T>(
   target: SessionHydrateIdentity | undefined,
   prev: { meta?: SessionHydrateIdentity; items?: T[] } | undefined,
