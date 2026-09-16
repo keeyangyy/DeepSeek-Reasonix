@@ -1,4 +1,4 @@
-import type { State } from "./useController";
+import type { Item, State } from "./useController";
 
 // HistoryPage row ids carry the page-local prefix `h<startTurn>-` (see
 // historyPageItems); optimistic/live rows never do. Rebuild only drops these
@@ -20,8 +20,7 @@ const HISTORY_PAGE_ROW_ID = /^h\d+-/;
  * turnId-prefix rows only — nothing is lost, the replayed surface simply has
  * no user heading (the same prelude shape the backend cannot rebuild).
  */
-export function replayTurnRebuild(s: State, turnId?: string): State {
-  const prefix = turnId ? `a:${turnId}:` : undefined;
+export function replayTurnRebuild(s: State, turnId?: string): State {  const prefix = turnId ? `a:${turnId}:` : undefined;
   let anchorIndex = -1;
   for (let i = s.items.length - 1; i >= 0; i -= 1) {
     if (s.items[i].kind === "user") { anchorIndex = i; break; }
@@ -48,5 +47,69 @@ export function replayTurnRebuild(s: State, turnId?: string): State {
     currentAssistant: undefined,
     assistantSegmentOrdinal: 0,
     live: undefined,
+  };
+}
+
+// ── Row-level forensics (v2 diagnostics) ─────────────────────────────────────
+// The frontend diagnostic JSON carries no line-level transcript shape, which is
+// why the first fix round could not be verified from a user report. These
+// helpers reduce a mounted transcript to whitelist-safe numbers: row counts,
+// anchor identity, and a duplicate-signature pair count.
+
+function signatureHash(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i += 1) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+function itemSignatureToken(item: Item): string | undefined {
+  // Unsettled/empty assistant rows (streaming placeholders, replay residue)
+  // share one empty signature by construction — they are not user-visible
+  // duplicates. Only rows with content participate in the duplicate count.
+  if (item.kind === "assistant" && !item.text.trim() && !item.reasoning.trim()) return undefined;
+  const body = item.kind === "assistant" ? `${item.text}\u0000${item.reasoning}`
+    : item.kind === "tool" ? `${item.name}\u0000${item.args ?? ""}`
+    : item.kind === "user" ? item.text
+    : item.id;
+  return `${item.kind}:${signatureHash(body)}`;
+}
+
+/** How many rows carry a signature that at least one other row also carries. */
+export function transcriptDuplicateSignatureCount(items: ReadonlyArray<Item>): number {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const sig = itemSignatureToken(item);
+    if (!sig) continue;
+    counts.set(sig, (counts.get(sig) ?? 0) + 1);
+  }
+  let duplicates = 0;
+  for (const count of counts.values()) if (count > 1) duplicates += count - 1;
+  return duplicates;
+}
+
+export type ReplayRebuildSnapshot = {
+  rows: number;
+  liveRows: number;
+  userRows: number;
+  anchor: string;
+  duplicates: number;
+};
+
+/** Snapshot of the transcript the rebuild is about to clear (pre-dispatch). */
+export function replayRebuildSnapshot(s: State, turnId?: string): ReplayRebuildSnapshot {
+  const prefix = turnId ? `a:${turnId}:` : undefined;
+  let liveRows = 0;
+  let userRows = 0;
+  let anchor = "";
+  for (const item of s.items) {
+    if (prefix && item.id.startsWith(prefix)) liveRows += 1;
+    if (item.kind === "user") { userRows += 1; anchor = item.id; }
+  }
+  return {
+    rows: s.items.length,
+    liveRows,
+    userRows,
+    anchor,
+    duplicates: transcriptDuplicateSignatureCount(s.items),
   };
 }

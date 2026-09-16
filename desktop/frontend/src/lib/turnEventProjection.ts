@@ -128,9 +128,12 @@ export class TurnEventProjector {
 
   private async replayGap(tabId: string, afterSeq: number, requestedEpoch: string | undefined, generation: number) {
     let cursor = afterSeq;
+    let projectedCount = 0;
+    let latestSeq = 0;
     for (let page = 0; page < MAX_REPLAY_PAGES; page += 1) {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);
+      latestSeq = replay.latestSeq;
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const currentEpoch = this.epochByTab.get(tabId);
       if ((requestedEpoch && currentEpoch && requestedEpoch !== currentEpoch) ||
@@ -153,6 +156,7 @@ export class TurnEventProjector {
         if (envelope.seq !== cursor + 1) throw new Error(`turn event replay gap after ${cursor}`);
         this.projectEnvelope(tabId, envelope, requestedEpoch);
         cursor = envelope.seq;
+        projectedCount += 1;
         this.sequenceByTab.set(tabId, cursor);
       }
       if (replay.hasMore) {
@@ -179,8 +183,21 @@ export class TurnEventProjector {
         cursor = live.seq;
         this.sequenceByTab.set(tabId, cursor);
       }
-      if (remaining.length === 0) return;
+      if (remaining.length === 0) {
+        recordFrontendDiagnostic("runtime", "turn-events-replay-finished", {
+          sequence: projectedCount,
+          afterSeq: cursor,
+          total: latestSeq,
+        });
+        return;
+      }
       this.gapQueueByTab.set(tabId, remaining);
+      recordFrontendDiagnostic("runtime", "turn-events-gap-replay-leftover", {
+        sequence: projectedCount,
+        afterSeq: cursor,
+        total: remaining.length,
+      });
+      return;
     }
     recordFrontendDiagnostic("runtime", "turn-events-gap-repair-incomplete", {
       afterSeq: this.sequenceByTab.get(tabId) ?? cursor,

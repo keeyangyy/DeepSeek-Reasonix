@@ -18,6 +18,7 @@ const [{ initialState, reducer }, { TurnEventProjector }] = await Promise.all([
   import("../lib/useController"),
   import("../lib/turnEventProjection"),
 ]);
+const { transcriptDuplicateSignatureCount, replayRebuildSnapshot } = await import("../lib/replayRebuild");
 
 type ReducerState = ReturnType<typeof reducer>;
 type Item = ReducerState["items"][number];
@@ -120,6 +121,23 @@ console.log("\nreplayed turn applies exactly once after rebuild");
   state = reducer(state, { type: "event", e: { kind: "text", turnId: "turn-x", text: "hello world" } });
   eq(state.live?.id, "a:turn-x:1", "baseline: replay lands on the existing currentAssistant buffer");
   eq(state.live?.text, "streamed so farhello world", "baseline bug: replayed delta doubles the live buffer");
+}
+
+console.log("\nrow-level forensics helpers");
+
+{
+  eq(transcriptDuplicateSignatureCount(switchAwayState().items), 0, "no duplicates in a clean mounted transcript (empty rows excluded)");
+  const dupItems: Item[] = [
+    ...switchAwayState().items,
+    assistant("h9-9", "old answer", false),          // same signature as h0-1 (settled content)
+    assistant("a:turn-x:2", "", true),               // empty streaming row — excluded from the count
+  ];
+  eq(transcriptDuplicateSignatureCount(dupItems), 1, "one settled duplicate pair; empty rows do not count");
+  const snapshot = replayRebuildSnapshot(switchAwayState(), "turn-x");
+  eq(snapshot.rows, 6, "snapshot counts all rows");
+  eq(snapshot.liveRows, 2, "snapshot counts this turn's a:* rows");
+  eq(snapshot.userRows, 2, "snapshot counts user rows (page + optimistic)");
+  eq(snapshot.anchor, "u0", "snapshot anchors on the last user row");
 }
 
 console.log("\nTurnEventProjector fires replayStart before the first replayed envelope");

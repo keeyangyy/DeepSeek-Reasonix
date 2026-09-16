@@ -48,7 +48,7 @@ import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./
 import { sameStringList, sameTodoList } from "./todoVisibility";
 import { resolveSnapshotTurnStartedAt, resolveTurnStartedAt, snapshotPredatesTurnLifecycle } from "./turnTiming";
 import { TurnEventProjector } from "./turnEventProjection";
-import { replayTurnRebuild } from "./replayRebuild";
+import { replayTurnRebuild, replayRebuildSnapshot, transcriptDuplicateSignatureCount } from "./replayRebuild";
 import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
 import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
@@ -3117,6 +3117,17 @@ export function useController() {
 
   useEffect(() => {
     const onReplayStart = (tabId: string, turnId?: string) => {
+      const state = statesRef.current.get(tabId);
+      if (state) {
+        const snapshot = replayRebuildSnapshot(state, turnId);
+        recordFrontendDiagnostic("transcript", "replay-rebuild-snapshot", {
+          sequence: snapshot.rows,
+          total: snapshot.liveRows,
+          mounted: snapshot.userRows,
+          state: snapshot.anchor,
+          error: `dup${snapshot.duplicates}`,
+        });
+      }
       dispatchTo(tabId, { type: "replay_turn_rebuild", turnId });
     };
     turnEventProjector.bindReplayStart(onReplayStart);
@@ -3570,6 +3581,18 @@ export function useController() {
         void refreshCheckpoints(targetTabId);
         invalidateSharedQuery("MetaForTab", [targetTabId]);
         void refreshMetaForTab(targetTabId);
+        // Row-level forensics: the reducer batch above has not been applied
+        // yet, so sample after it lands. `d<n>` counts duplicate signatures —
+        // the direct observable of the co-mounted-row defect.
+        setTimeout(() => {
+          const doneState = statesRef.current.get(targetTabId);
+          if (!doneState) return;
+          recordFrontendDiagnostic("transcript", "turn-done-snapshot", {
+            sequence: doneState.items.length,
+            mounted: transcriptDuplicateSignatureCount(doneState.items),
+            state: `seq${doneState.assistantSegmentOrdinal}`,
+          });
+        }, 50);
       }
       if (e.kind === "turn_done" || e.kind === "notice") {
         app.JobsForTab(targetTabId).then((jobs) => dispatchTo(targetTabId, { type: "jobs", jobs: asArray(jobs) })).catch(() => {});
