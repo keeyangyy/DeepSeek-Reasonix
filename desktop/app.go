@@ -3712,11 +3712,12 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 	}
 	if loaded == nil {
 		var err error
-		loaded, err = loadResumableSession(sessionPath)
-		if err != nil {
+		if loaded, err = loadResumableSession(sessionPath); err != nil {
 			return err
 		}
 	}
+	// Wait out a still-starting detached copy before rebuilding this session.
+	a.awaitOwnedSessionRuntime(tab, sessionPath)
 	// Session rebinding is a candidate transaction. Keep the source controller,
 	// lease, runtime key, epoch, and profile live until the target controller has
 	// built, restored, validated, and acquired its own lease. The lifecycle
