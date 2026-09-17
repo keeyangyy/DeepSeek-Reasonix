@@ -83,6 +83,15 @@ func (a *App) propagateSessionCustomTitleToTopic(sessionPath, fallbackTopicID st
 		return
 	}
 	a.updateOpenTopicTitle(topicID, title, observedSource)
+	// The rename path emitted a tree refresh before this propagation ran, so
+	// that snapshot still carried the stale topic label. Emit again now that
+	// the topic layer is current (mirrors the tail of RenameTopic).
+	changedDirs := a.updateTopicSessionTitles(topicID, title)
+	if len(changedDirs) > 0 {
+		a.emitProjectTreeChangedForSessionDirs(changedDirs...)
+	} else {
+		a.emitProjectTreeMetadataChanged()
+	}
 }
 
 // autoTitleGateLog records why an auto-title pass could not name its topic.

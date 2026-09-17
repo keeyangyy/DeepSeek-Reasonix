@@ -39,9 +39,28 @@ func newAIRenameTestApp(t *testing.T, name, prompt string) (*App, *control.Contr
 	return app, ctrl, path
 }
 
-// TestAIRenameSessionUpdatesTopicTitle reproduces the sidebar disconnect:
-// after AIRenameSession the topic layer (topic state store) must reflect the
-// new title, otherwise the sidebar topic label never changes.
+// TestAIRenameSessionEmitsRefreshAfterTopicUpdate guards the ordering fixed
+// after user testing: the rename path emits a tree refresh first (topic layer
+// still stale at that point), so propagating the title to the topic layer must
+// emit its own refresh afterwards, or the sidebar lags until the next click.
+func TestAIRenameSessionEmitsRefreshAfterTopicUpdate(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	app, _, _ := newAIRenameTestApp(t, "refresh-order", "debug the login redirect loop")
+
+	refreshes := 0
+	app.projectTreeChangedHook = func() { refreshes++ }
+
+	if _, err := app.AIRenameSession("topic-login"); err != nil {
+		t.Fatalf("AIRenameSession: %v", err)
+	}
+	if refreshes < 2 {
+		t.Fatalf("project tree refreshes = %d, want >=2 (rename + topic propagation)", refreshes)
+	}
+}
+
+// TestAIRenameSessionUpdatesTopicTitle: the topic layer (state store) must
+// reflect the new title after AIRenameSession, otherwise the sidebar topic
+// label never changes.
 func TestAIRenameSessionUpdatesTopicTitle(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	app, _, _ := newAIRenameTestApp(t, "topic-sync", "debug the login redirect loop")
