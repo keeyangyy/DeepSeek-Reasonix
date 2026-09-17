@@ -129,6 +129,10 @@ func (a *App) openTopicTabPreferLiveActivation(scope, workspaceRoot, topicID, se
 		// A TurnDone missed while the runtime was detached leaves a permanent
 		// spinner; reconcile against the controller's real turn state on open.
 		a.reconcileTabActivityStatus(promoted)
+		// TurnDone also never schedules the auto-title pass while detached
+		// (sink app binding is nil); the topic keeps its default label, so
+		// backfill it now that the transcript is back on disk.
+		a.maybeAutoTitleTopic(promoted)
 		a.emitProjectTreeRuntimeChangedWithLegacy()
 		return enrichTabMeta(meta), nil
 	}
