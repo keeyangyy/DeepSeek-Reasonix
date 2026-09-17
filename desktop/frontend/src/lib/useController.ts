@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -3166,7 +3166,7 @@ export function useController() {
     const targetTabId = tabId || activeTabIdRef.current;
     if (!targetTabId) return false;
     const state = statesRef.current.get(targetTabId);
-    if (!state?.historyHasOlder || state.historyOlderLoading || state.running) return false;
+    if (!state?.historyHasOlder || state.historyOlderLoading) return false;
     const sessionPath = state.meta?.sessionPath ?? "";
     const sessionRevision = state.meta?.sessionRevision ?? state.historyRevision;
     const sessionDigest = state.meta?.sessionDigest ?? state.historyDigest;
@@ -3186,17 +3186,12 @@ export function useController() {
       if (!current) return false;
       const currentRevision = current?.meta?.sessionRevision ?? current?.historyRevision;
       const currentDigest = current?.meta?.sessionDigest ?? current?.historyDigest;
-      const fingerprintMatches = (expected: number | undefined, actual: number | undefined) =>
-        expected === undefined || expected <= 0 ? true : actual === expected;
-      const digestMatches = (expected: string | undefined, actual: string | undefined) =>
-        !expected || actual === expected;
-      // A replace-level hydrate while the page was in flight clears
-      // historyOlderLoading; a metadata or canonical-identity change also
-      // makes the page belong to a different transcript generation.
+      // Forward revision drift is a save landing mid-load; only a regression
+      // (rebind/rewind) invalidates the page. The digest is the same-revision
+      // canonical check and is skipped once the revision has moved on.
       if (!current.historyOlderLoading || (current.meta?.sessionPath ?? "") !== sessionPath ||
-        !fingerprintMatches(sessionRevision, currentRevision) || !digestMatches(sessionDigest, currentDigest) ||
-        (result !== undefined && (!fingerprintMatches(sessionRevision, result.revisionKnown ? result.revision : undefined) ||
-          !digestMatches(sessionDigest, result.digest)))) {
+        !historyPageFingerprintAccepts(sessionRevision, currentRevision, sessionDigest, currentDigest) ||
+        (result !== undefined && (!historyPageFingerprintAccepts(sessionRevision, result.revisionKnown ? result.revision : undefined, sessionDigest, result.digest)))) {
         dispatchTo(targetTabId, { type: "history_older_error", error: "history identity changed" });
         return false;
       }
