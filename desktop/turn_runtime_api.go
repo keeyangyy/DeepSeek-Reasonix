@@ -156,21 +156,21 @@ type turnEventReader interface {
 }
 
 type TurnEventReplayView struct {
-	Events             []turnevent.Envelope `json:"events"`
-	FloorSequence      uint64               `json:"floorSeq"`
-	LatestSequence     uint64               `json:"latestSeq"`
-	NextAfterSequence  uint64               `json:"nextAfterSeq"`
-	HasMore            bool                 `json:"hasMore"`
-	ResetRequired      bool                 `json:"resetRequired"`
+	Events            []turnevent.Envelope `json:"events"`
+	FloorSequence     uint64               `json:"floorSeq"`
+	LatestSequence    uint64               `json:"latestSeq"`
+	NextAfterSequence uint64               `json:"nextAfterSeq"`
+	HasMore           bool                 `json:"hasMore"`
+	ResetRequired     bool                 `json:"resetRequired"`
 	// NotReady marks a transiently unavailable backend (controller still
 	// starting). The frontend waits silently instead of counting a repair
 	// failure; every other error path leaves it false.
-	NotReady           bool                 `json:"notReady,omitempty"`
-	TranscriptRevision int64                `json:"transcriptRevision,omitempty"`
-	TranscriptDigest   string               `json:"transcriptDigest,omitempty"`
-	HeadID             string               `json:"headId,omitempty"`
-	LeafMessageID      string               `json:"leafMessageId,omitempty"`
-	RuntimeEpoch       string               `json:"runtimeEpoch,omitempty"`
+	NotReady           bool   `json:"notReady,omitempty"`
+	TranscriptRevision int64  `json:"transcriptRevision,omitempty"`
+	TranscriptDigest   string `json:"transcriptDigest,omitempty"`
+	HeadID             string `json:"headId,omitempty"`
+	LeafMessageID      string `json:"leafMessageId,omitempty"`
+	RuntimeEpoch       string `json:"runtimeEpoch,omitempty"`
 }
 
 // workspaceNotReady reports whether the tab is in a transient startup window
