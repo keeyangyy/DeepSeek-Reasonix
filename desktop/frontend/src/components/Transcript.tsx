@@ -257,7 +257,12 @@ export function Transcript(props: TranscriptProps) {
   const questionNavigatorRef = useRef<TranscriptQuestionNavigatorHandle>(null);
   const history = useMemo(() => new TranscriptHistoryRequest(transcriptKernel), [transcriptKernel]);
   const requestOlder = useTranscriptCommand((turn?: number, trigger: HistoryLoadTrigger = "viewport-user") => {
-    if (!onLoadOlderHistory || !hasOlderHistory || loadingOlderHistory || running) return Promise.resolve(false);
+    // User-intent loads (viewport-user / question-jump / retry) stay available
+    // while the turn is streaming — the kernel's reader/tail intent keeps the
+    // viewport anchored, and gating on `running` here left streaming sessions
+    // unable to page history at all (cf89a2c0: 51 top-hits, zero loads).
+    // Machine-driven auto-fill keeps its own running gate below.
+    if (!onLoadOlderHistory || !hasOlderHistory || loadingOlderHistory) return Promise.resolve(false);
     if (trigger !== "question-jump" && trigger !== "retry") beginStructural("prepend");
     return history.load(() => onLoadOlderHistory(turn, trigger));
   });

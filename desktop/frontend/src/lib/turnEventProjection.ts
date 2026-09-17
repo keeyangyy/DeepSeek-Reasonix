@@ -8,6 +8,7 @@ type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<bool
 type ReplayStartHandler = (tabId: string, turnId?: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
+const REPAIR_COOLDOWN_MS = 500;
 
 // Diagnostics whitelist tokens reject whitespace; compact an error message into
 // a lossy-but-usable token so gap-repair failures stop being silently dropped.
@@ -28,6 +29,8 @@ export class TurnEventProjector {
   private readonly epochByTab = new Map<string, string>();
   private readonly generationByTab = new Map<string, number>();
   private readonly latestByTab = new Map<string, number>();
+  private readonly repairCooldownUntilByTab = new Map<string, number>();
+  private readonly repairCooldownTimerByTab = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly projectingReplayByTab = new Set<string>();
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
@@ -49,6 +52,12 @@ export class TurnEventProjector {
     this.projectingReplayByTab.delete(tabId);
     this.pendingRepairByTab.delete(tabId);
     this.repairByTab.delete(tabId);
+    const cooldownTimer = this.repairCooldownTimerByTab.get(tabId);
+    if (cooldownTimer !== undefined) {
+      clearTimeout(cooldownTimer);
+      this.repairCooldownTimerByTab.delete(tabId);
+    }
+    this.repairCooldownUntilByTab.delete(tabId);
   }
 
   /**
@@ -90,6 +99,13 @@ export class TurnEventProjector {
     let projected = this.sequenceByTab.get(tabId);
     const initializing = projected === undefined;
     if (projected === undefined) {
+      // Poison-pill guard: a snapshot taken before the tab's controller (and
+      // its turn-event ledger) is bound reports latest=0 with no turn id.
+      // Initializing the cursor at 0 here made every later live event demand a
+      // full checkpoint-reset replay from sequence 0 (875100f7/e6748f7d: 22+
+      // gap-repair failures per open). Stay uninitialized; the next snapshot
+      // carrying a real sequence initializes correctly.
+      if (latest === 0 && !active) return;
       projected = active ? Math.min(replayAfter ?? latest, latest) : latest;
       this.sequenceByTab.set(tabId, projected);
     }
@@ -118,9 +134,11 @@ export class TurnEventProjector {
       const queued = this.gapQueueByTab.get(tabId) ?? [];
       queued.push(event);
       this.gapQueueByTab.set(tabId, queued);
-      if (!this.repairByTab.has(tabId)) {
-        this.requestReplay(tabId, last, event.runtimeEpoch ?? runtimeEpoch);
-      }
+      // Always (re)register the desired replay position: while a repair is
+      // in flight this merges into pendingRepair (consumed by its finally),
+      // otherwise it starts one. Without the in-flight write a failure
+      // cooldown would leave the queued rows with no driver (875100f7).
+      this.requestReplay(tabId, last, event.runtimeEpoch ?? runtimeEpoch);
       return false;
     }
     this.sequenceByTab.set(tabId, event.seq);
@@ -133,21 +151,65 @@ export class TurnEventProjector {
       this.pendingRepairByTab.set(tabId, { afterSeq, runtimeEpoch });
       return;
     }
+    // Uninitialized cursor: replay(0) against a compacted ledger would throw
+    // straight into the heavyweight checkpoint-reset loop. The queued live
+    // rows stay parked; the next real snapshot initializes the cursor and
+    // observeRuntime then drains them.
+    if (this.sequenceByTab.get(tabId) === undefined && afterSeq === 0) {
+      this.pendingRepairByTab.set(tabId, { afterSeq, runtimeEpoch });
+      return;
+    }
+    // Failure cooldown: after a failed repair the tab waits out a short quiet
+    // window before retrying. Bursts of live events during the cooldown only
+    // refresh the pending request (the pre-existing merge semantics), so a
+    // hot turn cannot spawn one repair per event (875100f7: 110 failures).
+    const cooldownUntil = this.repairCooldownUntilByTab.get(tabId) ?? 0;
+    const now = Date.now();
+    if (now < cooldownUntil) {
+      this.repairAfterCooldown(tabId, afterSeq, runtimeEpoch);
+      return;
+    }
     const generation = this.generationByTab.get(tabId) ?? 0;
     const repair = this.replayGap(tabId, afterSeq, runtimeEpoch, generation)
-      .catch((error) => recordFrontendDiagnostic("runtime", "turn-events-gap-repair-failed", {
-        afterSeq: this.sequenceByTab.get(tabId) ?? afterSeq,
-        error: diagnosticErrorToken(error),
-      }))
+      .catch((error) => {
+        this.repairCooldownUntilByTab.set(tabId, Date.now() + REPAIR_COOLDOWN_MS);
+        recordFrontendDiagnostic("runtime", "turn-events-gap-repair-failed", {
+          afterSeq: this.sequenceByTab.get(tabId) ?? afterSeq,
+          error: diagnosticErrorToken(error),
+        });
+      })
       .finally(() => {
         if (this.repairByTab.get(tabId) !== repair) return;
         this.repairByTab.delete(tabId);
         const pending = this.pendingRepairByTab.get(tabId);
         if (!pending) return;
-        this.pendingRepairByTab.delete(tabId);
-        this.requestReplay(tabId, pending.afterSeq, pending.runtimeEpoch);
+        this.repairAfterCooldown(tabId, pending.afterSeq, pending.runtimeEpoch);
       });
     this.repairByTab.set(tabId, repair);
+  }
+
+  /**
+   * Schedule a retry after the failure cooldown elapses. The timer closure
+   * carries its own afterSeq/epoch (no shared-state race with later
+   * pendingRepair merges — whichever request lands last in the map wins only
+   * if a timer is still absent).
+   */
+  private repairAfterCooldown(tabId: string, afterSeq: number, runtimeEpoch?: string) {
+    this.pendingRepairByTab.set(tabId, { afterSeq, runtimeEpoch });
+    if (this.repairCooldownTimerByTab.has(tabId)) return;
+    const until = this.repairCooldownUntilByTab.get(tabId) ?? 0;
+    const wait = Math.max(0, until - Date.now());
+    this.repairCooldownTimerByTab.set(
+      tabId,
+      setTimeout(() => {
+        this.repairCooldownTimerByTab.delete(tabId);
+        // Consume the freshest merged request, falling back to this timer's
+        // own payload when a racing consumer already emptied the map.
+        const pending = this.pendingRepairByTab.get(tabId) ?? { afterSeq, runtimeEpoch };
+        this.pendingRepairByTab.delete(tabId);
+        this.requestReplay(tabId, pending.afterSeq, pending.runtimeEpoch);
+      }, wait),
+    );
   }
 
   private async replayGap(tabId: string, afterSeq: number, requestedEpoch: string | undefined, generation: number) {
@@ -156,6 +218,11 @@ export class TurnEventProjector {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
+      // A transiently unavailable backend (controller still starting) is a
+      // structured wait, not a repair failure: keep the queued live rows and
+      // leave the cursor alone; the next real snapshot or the cooldown timer
+      // re-drives the repair.
+      if (replay.notReady) return;
       const currentEpoch = this.epochByTab.get(tabId);
       if ((requestedEpoch && currentEpoch && requestedEpoch !== currentEpoch) ||
         (replay.runtimeEpoch && currentEpoch && replay.runtimeEpoch !== currentEpoch)) {

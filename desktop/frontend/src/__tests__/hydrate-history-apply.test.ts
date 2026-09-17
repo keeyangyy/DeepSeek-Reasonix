@@ -8,6 +8,7 @@ import {
   hydratedHistoryApplyMode,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
+  revisionNotOlder,
   shouldPreferResidentHistory,
 } from "../lib/hydrateHistoryApply";
 
@@ -186,6 +187,12 @@ ok(
   }) === "replace",
   "empty idle surface still applies history",
 );
+
+ok(revisionNotOlder(undefined, 1502) === true, "no expected revision accepts any page");
+ok(revisionNotOlder(1501, 1502) === true, "forward revision drift is accepted (a save landed mid-load)");
+ok(revisionNotOlder(1501, 1501) === true, "equal revisions are accepted");
+ok(revisionNotOlder(1502, 1501) === false, "a revision regression is rejected (rebind/rewind)");
+ok(revisionNotOlder(1501, undefined) === true, "an unknown actual revision cannot prove a regression");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

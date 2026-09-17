@@ -150,6 +150,39 @@ export function shouldPreferResidentHistory(reset: boolean, preserveCachedHistor
   return !reset && preserveCachedHistory !== false;
 }
 
+/**
+ * Revision comparison for history pages read while the session keeps being
+ * written: a load that starts at revision N and finishes after a save has
+ * bumped it to N+1 carries correct content (the older page is the same data,
+ * the session just moved on). Only a REGRESSION is fatal — that is a different
+ * transcript generation (rebind/rewind). Strict equality here mis-killed every
+ * page load during streaming (46f624e1: 13 consecutive identity failures).
+ */
+export function revisionNotOlder(expected: number | undefined, actual: number | undefined): boolean {
+  if (expected === undefined || expected <= 0) return true;
+  if (actual === undefined) return true;
+  return actual >= expected;
+}
+
+/**
+ * Full identity acceptance for a history page load: a forward revision drift
+ * (a save landed while the page was in flight) is accepted; an equal revision
+ * must match the digest; a regression (rebind/rewind) is rejected.
+ */
+export function historyPageFingerprintAccepts(
+  expectedRevision: number | undefined,
+  actualRevision: number | undefined,
+  expectedDigest: string | undefined,
+  actualDigest: string | undefined,
+): boolean {
+  if (!revisionNotOlder(expectedRevision, actualRevision)) return false;
+  if (
+    expectedRevision !== undefined && expectedRevision > 0 &&
+    actualRevision !== undefined && actualRevision > expectedRevision
+  ) return true;
+  return !expectedDigest || actualDigest === expectedDigest;
+}
+
 function sameHydrateFingerprint(state: HydrateLiveState | undefined, projection: HydrateProjection | undefined): boolean {
   if (!state || !projection) return false;
   const revision = projection.revision ?? 0;
