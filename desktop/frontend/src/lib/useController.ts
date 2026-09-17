@@ -48,7 +48,22 @@ import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./
 import { sameStringList, sameTodoList } from "./todoVisibility";
 import { resolveSnapshotTurnStartedAt, resolveTurnStartedAt, snapshotPredatesTurnLifecycle } from "./turnTiming";
 import { TurnEventProjector } from "./turnEventProjection";
-import { replayTurnRebuild, replayRebuildSnapshot, transcriptDuplicateSignatureCount } from "./replayRebuild";
+import { replayTurnRebuild, replayRebuildSnapshot, transcriptDumpJson, transcriptDuplicateSignatureCount } from "./replayRebuild";
+
+// Row-level forensic dump: id/kind/content of every mounted row. reason marks
+// the lifecycle point (rebuild / page-apply / message / turn-done). The getter
+// defers to call time (setTimeout) so reducer batches land before sampling.
+function dumpTranscript(get: () => { items: Item[] } | undefined, reason: string, delayMs = 30): void {
+  setTimeout(() => {
+    const state = get();
+    if (!state) return;
+    recordFrontendDiagnostic("transcript", "transcript.item-dump", {
+      reason,
+      sequence: state.items.length,
+      dump: transcriptDumpJson(state.items),
+    });
+  }, delayMs);
+}
 import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
 import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
@@ -2959,6 +2974,7 @@ export function useController() {
               return { type: "history_prepend", ...page, removeIds };
             })()
           : { type: "history_replace", ...page });
+        dumpTranscript(() => statesRef.current.get(tabId), `page-apply:${applyMode}`, 60);
         addBreadcrumb(
           "tab.hydrate",
           `history page ${tabId} items=${projection.items.length} turns=${projection.startTurn}-${projection.endTurn}/${projection.totalTurns} ms=${Date.now() - historyStartedAt}`,
@@ -3147,6 +3163,11 @@ export function useController() {
           mounted: snapshot.userRows,
           state: snapshot.anchor,
           error: `dup${snapshot.duplicates}`,
+        });
+        recordFrontendDiagnostic("transcript", "transcript.item-dump", {
+          reason: "rebuild",
+          sequence: state.items.length,
+          dump: transcriptDumpJson(state.items),
         });
       }
       dispatchTo(tabId, { type: "replay_turn_rebuild", turnId });
@@ -3585,6 +3606,7 @@ export function useController() {
       if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
+      if (e.kind === "message") dumpTranscript(() => statesRef.current.get(targetTabId), `message:${e.turnId ?? ""}`);
       if (e.kind === "text" || e.kind === "reasoning") {
         if (e.submissionId) dispatchTo(targetTabId, { type: "send_confirmed", submissionId: e.submissionId });
         textBatch.push({ tabId: targetTabId, e });
@@ -3613,6 +3635,7 @@ export function useController() {
             mounted: transcriptDuplicateSignatureCount(doneState.items),
             state: `seq${doneState.assistantSegmentOrdinal}`,
           });
+          dumpTranscript(() => statesRef.current.get(targetTabId), "turn-done", 0);
         }, 50);
       }
       if (e.kind === "turn_done" || e.kind === "notice") {

@@ -113,3 +113,46 @@ export function replayRebuildSnapshot(s: State, turnId?: string): ReplayRebuildS
     duplicates: transcriptDuplicateSignatureCount(s.items),
   };
 }
+
+const DUMP_TEXT_LIMIT = 120;
+const DUMP_SECONDARY_LIMIT = 48;
+
+function clip(text: string | undefined, limit: number): string {
+  const value = text ?? "";
+  return value.length > limit ? `${value.slice(0, limit)}…(${value.length})` : value;
+}
+
+/**
+ * Full row-level dump of the mounted transcript: every row's id (id-family
+ * prefix included), kind, and bounded content — the ground truth of what the
+ * render array actually holds. Serialized once per forensic event; payload is
+ * bounded by the clip limits (a few hundred rows stay well under 100 KiB).
+ */
+export function transcriptDumpJson(items: ReadonlyArray<Item>): string {
+  return JSON.stringify(items.map((item) => {
+    const row: Record<string, unknown> = { i: item.id, k: item.kind };
+    if (item.kind === "user") {
+      row.x = clip(item.text, DUMP_TEXT_LIMIT);
+      if (item.checkpointTurn !== undefined) row.ct = item.checkpointTurn;
+      if (item.historyTurn !== undefined) row.ht = item.historyTurn;
+      if (item.submissionId) row.sid = clip(item.submissionId, 48);
+    } else if (item.kind === "assistant") {
+      row.x = clip(item.text, DUMP_TEXT_LIMIT);
+      row.r = clip(item.reasoning, DUMP_SECONDARY_LIMIT);
+      if (item.streaming) row.s = 1;
+    } else if (item.kind === "tool") {
+      row.n = clip(item.name, 48);
+      row.x = clip(item.output, DUMP_SECONDARY_LIMIT);
+      row.st = item.status;
+      if (item.error) row.e = 1;
+    } else if (item.kind === "notice") {
+      row.x = clip(item.text, DUMP_SECONDARY_LIMIT);
+      row.l = item.level;
+    } else if (item.kind === "phase") {
+      row.x = clip(item.text, DUMP_SECONDARY_LIMIT);
+    } else if (item.kind === "compaction") {
+      row.x = clip(item.summary, DUMP_SECONDARY_LIMIT);
+    }
+    return row;
+  }));
+}

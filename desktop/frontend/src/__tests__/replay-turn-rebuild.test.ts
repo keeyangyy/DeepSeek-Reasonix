@@ -18,7 +18,7 @@ const [{ initialState, reducer }, { TurnEventProjector }] = await Promise.all([
   import("../lib/useController"),
   import("../lib/turnEventProjection"),
 ]);
-const { transcriptDuplicateSignatureCount, replayRebuildSnapshot } = await import("../lib/replayRebuild");
+const { transcriptDuplicateSignatureCount, replayRebuildSnapshot, transcriptDumpJson } = await import("../lib/replayRebuild");
 
 type ReducerState = ReturnType<typeof reducer>;
 type Item = ReducerState["items"][number];
@@ -138,6 +138,13 @@ console.log("\nrow-level forensics helpers");
   eq(snapshot.liveRows, 2, "snapshot counts this turn's a:* rows");
   eq(snapshot.userRows, 2, "snapshot counts user rows (page + optimistic)");
   eq(snapshot.anchor, "u0", "snapshot anchors on the last user row");
+
+  const dump = JSON.parse(transcriptDumpJson(switchAwayState().items)) as Array<{ i: string; k: string; x?: string; s?: number }>;
+  eq(dump.length, 6, "dump carries every row");
+  eq(dump.map((row) => row.i).join(","), "h0-0,h0-1,u0,h0-2,a:turn-x:0,a:turn-x:1", "dump preserves row ids in order (id families visible)");
+  eq(dump[3]?.x, "settled segment", "dump carries row content");
+  eq(dump[5]?.s, 1, "dump flags streaming rows");
+  eq(transcriptDumpJson(switchAwayState().items).length < 4096, true, "bounded payload per dump");
 }
 
 console.log("\nTurnEventProjector fires replayStart before the first replayed envelope");
