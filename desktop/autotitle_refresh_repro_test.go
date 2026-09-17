@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"reasonix/internal/agent"
 	"reasonix/internal/control"
+	"reasonix/internal/event"
 	"reasonix/internal/provider"
+	"reasonix/internal/tool"
 )
 
 // Reproduction tests for the session-title/UI disconnect: explicit renames
@@ -55,6 +60,134 @@ func TestAIRenameSessionEmitsRefreshAfterTopicUpdate(t *testing.T) {
 	}
 	if refreshes < 2 {
 		t.Fatalf("project tree refreshes = %d, want >=2 (rename + topic propagation)", refreshes)
+	}
+}
+
+// TestReattachBackfillsAutoTitle: switching back to a detached session must
+// snapshot its transcript and run the auto-title pass, because TurnDone no
+// longer routes to the App while the runtime is detached (app==nil in the
+// sink binding), so the topic stayed "新的会话" until the next in-session turn.
+func TestReattachBackfillsAutoTitle(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	root := globalTabWorkspaceRoot()
+	dir := desktopSessionDir(root)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+
+	sourcePath := filepath.Join(dir, "idle-source.jsonl")
+	targetPath := filepath.Join(dir, "detached-target.jsonl")
+	writeHistoryTestSession(t, sourcePath, "source prompt")
+	writeHistoryTestSession(t, targetPath, "debug the payment webhook retry storm")
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.readyHook = func() {}
+	// Real flows index the topic with an auto source when its first user turn
+	// lands (ensureTabTopicIndexedForUserTurn); without it the auto-title
+	// gate (source != auto) refuses before the transcript is ever read.
+	if err := ensureTopicIndexedWithCreatedAt(
+		"global", "", "topic-detached", defaultTopicTitle, topicTitleSourceAuto, time.Now().UnixMilli(),
+	); err != nil {
+		t.Fatalf("index detached topic: %v", err)
+	}
+	sourceSink := &tabEventSink{tabID: "visible", app: app, ctx: app.ctx}
+	targetSink := &tabEventSink{tabID: "detached", app: app}
+	installNoopRuntimeEvents(app, sourceSink, targetSink)
+	sourceCtrl := control.New(control.Options{
+		SessionDir: dir, SessionPath: sourcePath, Label: "source", Sink: sourceSink,
+	})
+	// The detached target carries transcript content (its turns happened while
+	// detached, with autosave stopped). Build the controller the same way
+	// controllerWithContent does so the snapshot below has something to write.
+	targetSess := agent.NewSession("system")
+	targetSess.Add(provider.Message{Role: provider.RoleUser, Content: "debug the payment webhook retry storm"})
+	targetSess.Add(provider.Message{Role: provider.RoleAssistant, Content: "acknowledged"})
+	targetAg := agent.New(stubProvider{}, tool.NewRegistry(), targetSess, agent.Options{}, event.Discard)
+	targetCtrl := control.New(control.Options{
+		Executor: targetAg, SessionDir: dir, SessionPath: targetPath, Label: "target", Sink: targetSink,
+	})
+	tab := &WorkspaceTab{
+		ID: "visible", Scope: "global", WorkspaceRoot: root,
+		// 这个是"被切走的另一个话题"的 tab：它自己的 TopicID 不是
+		// topic-detached，切出时它被 keepOnlyVisibleTab 剪掉/挂起。
+		TopicID: "topic-source", TopicTitle: defaultTopicTitle,
+		topicTitleSource: topicTitleSourceAuto,
+		SessionPath:      sourcePath, Ctrl: sourceCtrl, Ready: true, sink: sourceSink,
+		disabledMCP: map[string]ServerView{},
+	}
+	app.tabs[tab.ID] = tab
+	app.tabOrder = []string{tab.ID}
+	app.activeTabID = tab.ID
+	if err := tab.ensureSessionLease(sourcePath); err != nil {
+		t.Fatalf("lease source: %v", err)
+	}
+	app.mu.Lock()
+	app.newSessionRuntimeLocked(tab, sessionRuntimeKey(sourcePath))
+	app.advanceSessionRuntimeEpochLocked(tab)
+	app.mu.Unlock()
+
+	targetLease, err := agent.TryAcquireSessionLease(targetPath)
+	if err != nil {
+		t.Fatalf("lease target: %v", err)
+	}
+	detachedTarget := &WorkspaceTab{
+		ID: detachedRuntimeTabID(sessionRuntimeKey(targetPath)), Scope: "global",
+		WorkspaceRoot: root, TopicID: "topic-detached", TopicTitle: defaultTopicTitle,
+		topicTitleSource: topicTitleSourceAuto,
+		SessionPath:      targetPath, Ctrl: targetCtrl,
+		Ready: true, sink: targetSink, disabledMCP: map[string]ServerView{},
+	}
+	detachedTarget.adoptSessionLease(targetLease)
+	// The detached turns are on disk only after a snapshot; detached runtimes
+	// do not autosave, so persist the transcript the way the out-going
+	// switch path (snapshotTabForAction) already does before this point.
+	if err := detachedTarget.Ctrl.Snapshot(); err != nil {
+		t.Fatalf("snapshot detached target: %v", err)
+	}
+	app.mu.Lock()
+	app.detachedSessions[sessionRuntimeKey(targetPath)] = detachedTarget
+	app.newSessionRuntimeLocked(detachedTarget, sessionRuntimeKey(targetPath))
+	app.advanceSessionRuntimeEpochLocked(detachedTarget)
+	app.mu.Unlock()
+	t.Cleanup(func() {
+		sourceCtrl.Close()
+		targetCtrl.Close()
+		tab.releaseSessionLease()
+		detachedTarget.releaseSessionLease()
+	})
+
+	// 真实 UI 的"切换出去再点回来"走 openTopicTabPreferLiveActivation 的
+	// promote 分支（复用 detached runtime 而非重新构建），这正是补命名的
+	// 插入点。直接用该入口切回，验证补命名生效。
+	if _, err := app.openTopicTabPreferLiveActivation("global", "", "topic-detached", targetPath, true); err != nil {
+		t.Fatalf("open topic back: %v", err)
+	}
+	// promote 分支会新建/复用 detached 运行时对应的 tab 并从
+	// detachedSessions 移除；验证确实走了该分支。
+	app.mu.RLock()
+	promoted := app.tabs[detachedRuntimeTabID(sessionRuntimeKey(targetPath))]
+	stillDetached := app.detachedSessions[sessionRuntimeKey(targetPath)]
+	app.mu.RUnlock()
+	if stillDetached != nil {
+		t.Fatalf("detached runtime was not promoted: %v", stillDetached)
+	}
+	if promoted == nil || promoted.Ctrl != targetCtrl {
+		t.Fatalf("promoted tab Ctrl = %v, want detached target %p", promoted, targetCtrl)
+	}
+	if promoted.TopicTitle != topicTitleFromText("debug the payment webhook retry storm") {
+		t.Fatalf("promoted tab TopicTitle = %q, want auto title", promoted.TopicTitle)
+	}
+
+	// The write went through the same root maybeAutoTitleTopic derives from
+	// the global-scope tab (titleRoot = "").
+	got := loadTopicTitle("", "topic-detached")
+	want := topicTitleFromText("debug the payment webhook retry storm")
+	if got != want {
+		t.Fatalf("topic title after reattach = %q, want %q", got, want)
+	}
+	if tab.topicTitleSource != topicTitleSourceAuto {
+		t.Fatalf("tab topic source after reattach = %q, want auto", tab.topicTitleSource)
 	}
 }
 
