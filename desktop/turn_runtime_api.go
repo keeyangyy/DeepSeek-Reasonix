@@ -162,11 +162,32 @@ type TurnEventReplayView struct {
 	NextAfterSequence  uint64               `json:"nextAfterSeq"`
 	HasMore            bool                 `json:"hasMore"`
 	ResetRequired      bool                 `json:"resetRequired"`
+	// NotReady marks a transiently unavailable backend (controller still
+	// starting). The frontend waits silently instead of counting a repair
+	// failure; every other error path leaves it false.
+	NotReady           bool                 `json:"notReady,omitempty"`
 	TranscriptRevision int64                `json:"transcriptRevision,omitempty"`
 	TranscriptDigest   string               `json:"transcriptDigest,omitempty"`
 	HeadID             string               `json:"headId,omitempty"`
 	LeafMessageID      string               `json:"leafMessageId,omitempty"`
 	RuntimeEpoch       string               `json:"runtimeEpoch,omitempty"`
+}
+
+// workspaceNotReady reports whether the tab is in a transient startup window
+// (no permanent startup failure yet), so a replay caller can retry later.
+func (a *App) workspaceNotReady(tab *WorkspaceTab) bool {
+	if tab == nil {
+		return true
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if strings.TrimSpace(tab.StartupErr) != "" {
+		return false
+	}
+	if issue := a.sessionRuntimeViewLocked(tab).Issue; issue != nil && strings.TrimSpace(issue.Message) != "" {
+		return false
+	}
+	return true
 }
 
 // TurnEventsForTab supplies the durable suffix used to repair sequence gaps or
@@ -175,6 +196,12 @@ func (a *App) TurnEventsForTab(tabID string, afterSeq uint64) (TurnEventReplayVi
 	empty := TurnEventReplayView{Events: []turnevent.Envelope{}}
 	tab, ctrl := a.tabAndCtrlByID(tabID)
 	if ctrl == nil {
+		// A transient startup window is a structured not-ready marker, not an
+		// error: the frontend waits for the next real snapshot instead of
+		// counting a repair failure and looping (875100f7: 22+ failures per open).
+		if a.workspaceNotReady(tab) {
+			return TurnEventReplayView{Events: []turnevent.Envelope{}, NotReady: true}, nil
+		}
 		return empty, a.workspaceNotReadyErr(tab)
 	}
 	reader, ok := ctrl.(turnEventReader)

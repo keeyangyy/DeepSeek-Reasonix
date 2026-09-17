@@ -4,8 +4,8 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102894,
-    "function-size": 8270,
+    "file-size": 102196,
+    "function-size": 8265,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
@@ -144,10 +144,10 @@
       "file-size": 264
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1613
+      "file-size": 1614
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 5000
+      "file-size": 4302
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -275,8 +275,8 @@
     "desktop/tabs.go": {
       "complexity": 42,
       "essay": 68,
-      "file-size": 7616,
-      "function-size": 364,
+      "file-size": 7615,
+      "function-size": 359,
       "struct-state": 23
     },
     "desktop/tabs_order_test.go": {
