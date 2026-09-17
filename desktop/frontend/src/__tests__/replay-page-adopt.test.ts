@@ -9,6 +9,7 @@
 //   序列推进到已知 latest、清滞留队列；后续 live 事件（seq>latest）正常投影。
 
 import type { AppBindings } from "../lib/bridge";
+import type { TurnEventReplayView } from "../lib/types";
 
 const binding: Partial<AppBindings> = {};
 Object.defineProperty(globalThis, "window", {
@@ -43,9 +44,9 @@ console.log("\nadoptPage halts an in-flight replay and adopts the page's view");
   eq(typeof (projector as unknown as { adoptPage?: unknown }).adoptPage, "function", "projector exposes adoptPage");
 
   // 重放页挂起：repair 进行中，页面（replace）落位
-  let releaseReplay!: (view: unknown) => void;
-  binding.TurnEventsForTab = async (_tabId: string, afterSeq: number) => new Promise((resolve) => {
-    releaseReplay = (view: unknown) => resolve(view);
+  let releaseReplay!: (view: TurnEventReplayView) => void;
+  binding.TurnEventsForTab = async (_tabId: string, afterSeq: number) => new Promise<TurnEventReplayView>((resolve) => {
+    releaseReplay = (view: TurnEventReplayView) => resolve(view);
     void afterSeq;
   });
   projector.observeRuntime("tab", "epoch-a", 100, 42, true, "turn-x");

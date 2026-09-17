@@ -105,7 +105,7 @@ console.log("\nreplayed turn applies exactly once after rebuild");
   state = reducer(state, { type: "event", e: { kind: "turn_started", turnId: "turn-x", turnStartedAt: 100 } });
   state = reducer(state, { type: "event", e: { kind: "text", turnId: "turn-x", text: "hello world" } });
   state = reducer(state, { type: "event", e: { kind: "message", turnId: "turn-x", text: "hello world", reasoning: "" } });
-  const turnRows = state.items.filter((item) => item.kind === "assistant" && (item.id === "a:turn-x:0" || item.id.startsWith("a:turn-x:")));
+  const turnRows = state.items.filter((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.id.startsWith("a:turn-x:"));
   eq(turnRows.length, 1, "exactly one rebuilt assistant row for the turn");
   eq(turnRows[0]?.text, "hello world", "rebuilt row text equals the replayed full text (no doubling)");
   eq(state.items.some((item) => item.id === "u0"), true, "user anchor survives the replayed rebuild");
