@@ -5,8 +5,17 @@ import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types"
 
 type WireHandler = (event: WireEvent) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
+type ReplayStartHandler = (tabId: string, turnId?: string) => void;
 
 const MAX_REPLAY_PAGES = 32;
+
+// Diagnostics whitelist tokens reject whitespace; compact an error message into
+// a lossy-but-usable token so gap-repair failures stop being silently dropped.
+function diagnosticErrorToken(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const token = raw.replace(/[^a-zA-Z0-9._:-]+/g, ".").replace(/^\.+|\.+$/g, "").slice(0, 64);
+  return token || "unknown";
+}
 
 // TurnEventProjector is the per-tab ordered projection boundary. While a gap or
 // checkpoint reset is being repaired, live events are held and applied only
@@ -18,26 +27,61 @@ export class TurnEventProjector {
   private readonly gapQueueByTab = new Map<string, WireEvent[]>();
   private readonly epochByTab = new Map<string, string>();
   private readonly generationByTab = new Map<string, number>();
+  private readonly latestByTab = new Map<string, number>();
   private readonly projectingReplayByTab = new Set<string>();
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
+  private replayStartHandler?: ReplayStartHandler;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
   bindReset(handler: ResetHandler) { this.resetHandler = handler; }
   unbindReset(handler: ResetHandler) { if (this.resetHandler === handler) this.resetHandler = undefined; }
+  bindReplayStart(handler: ReplayStartHandler) { this.replayStartHandler = handler; }
+  unbindReplayStart(handler: ReplayStartHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
     this.sequenceByTab.delete(tabId);
     this.gapQueueByTab.delete(tabId);
     this.epochByTab.delete(tabId);
+    this.latestByTab.delete(tabId);
     this.projectingReplayByTab.delete(tabId);
     this.pendingRepairByTab.delete(tabId);
     this.repairByTab.delete(tabId);
   }
 
-  observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean) {
+  /**
+   * The transcript page just replaced/augmented the surface and already owns
+   * every durable row up to the last known backend sequence. An in-flight
+   * full-turn replay would keep projecting that same content as fresh rows on
+   * top of the page (v3 log: co-mounted he-family and a-family duplicates), so
+   * the replay is superseded here: its generation is bumped (the paging loop
+   * bails at its next checkpoint), the cursor jumps to the latest known
+   * sequence, and any gap-queued live rows — whose content the page also
+   * carries — are dropped. Live events past the adopted sequence keep flowing
+   * normally.
+   */
+  adoptPage(tabId: string) {
+    this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
+    const knownLatest = this.latestByTab.get(tabId);
+    if (knownLatest !== undefined) {
+      const current = this.sequenceByTab.get(tabId) ?? 0;
+      this.sequenceByTab.set(tabId, Math.max(current, knownLatest));
+    }
+    this.gapQueueByTab.delete(tabId);
+    this.pendingRepairByTab.delete(tabId);
+    // Drop the in-flight repair from the map too: its promise exits via the
+    // generation check on its own, but leaving it registered would park every
+    // subsequent live event in the gap queue instead of projecting it.
+    this.repairByTab.delete(tabId);
+    recordFrontendDiagnostic("runtime", "turn-events-page-adopted", {
+      afterSeq: this.sequenceByTab.get(tabId) ?? 0,
+      total: knownLatest ?? 0,
+    });
+  }
+
+  observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean, turnId?: string) {
     if (runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId)) {
       this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
       this.epochByTab.set(tabId, runtimeEpoch);
@@ -46,12 +90,32 @@ export class TurnEventProjector {
       this.pendingRepairByTab.delete(tabId);
       this.repairByTab.delete(tabId);
     }
+    if (latest > (this.latestByTab.get(tabId) ?? 0)) this.latestByTab.set(tabId, latest);
     let projected = this.sequenceByTab.get(tabId);
+    const initializing = projected === undefined;
     if (projected === undefined) {
       projected = active ? Math.min(replayAfter ?? latest, latest) : latest;
       this.sequenceByTab.set(tabId, projected);
     }
-    if (latest > projected) this.requestReplay(tabId, projected, runtimeEpoch);
+    if (latest > projected) {
+      // A first observation while the turn is active replays the WHOLE turn
+      // (ProjectionCursor pins replayAfter to the turn start). The transcript
+      // must drop this turn's mounted rows first: applyEvent's delta/append
+      // semantics would otherwise double the live buffer and co-mount replayed
+      // rows next to their already-settled page duplicates. Incremental gap
+      // repairs (non-initializing) never fire this.
+      if (initializing && active && replayAfter !== undefined && replayAfter < latest) {
+        try {
+          this.replayStartHandler?.(tabId, turnId);
+        } catch { /* handler failures must not block the replay */ }
+        recordFrontendDiagnostic("runtime", "turn-events-replay-start", {
+          total: replayAfter,
+          sequence: latest,
+          state: turnId || "",
+        });
+      }
+      this.requestReplay(tabId, projected, runtimeEpoch);
+    }
   }
 
   acceptLive(tabId: string, event: WireEvent, runtimeEpoch?: string): boolean {
@@ -82,7 +146,7 @@ export class TurnEventProjector {
     const repair = this.replayGap(tabId, afterSeq, runtimeEpoch, generation)
       .catch((error) => recordFrontendDiagnostic("runtime", "turn-events-gap-repair-failed", {
         afterSeq: this.sequenceByTab.get(tabId) ?? afterSeq,
-        error: error instanceof Error ? error.message : String(error),
+        error: diagnosticErrorToken(error),
       }))
       .finally(() => {
         if (this.repairByTab.get(tabId) !== repair) return;
@@ -97,9 +161,12 @@ export class TurnEventProjector {
 
   private async replayGap(tabId: string, afterSeq: number, requestedEpoch: string | undefined, generation: number) {
     let cursor = afterSeq;
+    let projectedCount = 0;
+    let latestSeq = 0;
     for (let page = 0; page < MAX_REPLAY_PAGES; page += 1) {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);
+      latestSeq = replay.latestSeq;
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const currentEpoch = this.epochByTab.get(tabId);
       if ((requestedEpoch && currentEpoch && requestedEpoch !== currentEpoch) ||
@@ -122,6 +189,7 @@ export class TurnEventProjector {
         if (envelope.seq !== cursor + 1) throw new Error(`turn event replay gap after ${cursor}`);
         this.projectEnvelope(tabId, envelope, requestedEpoch);
         cursor = envelope.seq;
+        projectedCount += 1;
         this.sequenceByTab.set(tabId, cursor);
       }
       if (replay.hasMore) {
@@ -148,8 +216,21 @@ export class TurnEventProjector {
         cursor = live.seq;
         this.sequenceByTab.set(tabId, cursor);
       }
-      if (remaining.length === 0) return;
+      if (remaining.length === 0) {
+        recordFrontendDiagnostic("runtime", "turn-events-replay-finished", {
+          sequence: projectedCount,
+          afterSeq: cursor,
+          total: latestSeq,
+        });
+        return;
+      }
       this.gapQueueByTab.set(tabId, remaining);
+      recordFrontendDiagnostic("runtime", "turn-events-gap-replay-leftover", {
+        sequence: projectedCount,
+        afterSeq: cursor,
+        total: remaining.length,
+      });
+      return;
     }
     recordFrontendDiagnostic("runtime", "turn-events-gap-repair-incomplete", {
       afterSeq: this.sequenceByTab.get(tabId) ?? cursor,

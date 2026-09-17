@@ -96,6 +96,25 @@ export function sameSessionHydrateIdentity(
 }
 
 /**
+ * Identity a tab switch is judged against. An explicit optimistic tab wins;
+ * when the caller has none (a click on an already-open tab) the tab's own
+ * retained meta stands in — preserving that tab's mounted surface is the point,
+ * and the page fingerprint/revision checks still guard correctness on apply.
+ */
+export function switchTargetIdentity(
+  optimisticTab: SessionHydrateIdentity | undefined,
+  retainedMeta: SessionHydrateIdentity | undefined,
+): SessionHydrateIdentity | undefined {
+  if (optimisticTab?.sessionPath) {
+    return { sessionPath: optimisticTab.sessionPath, sessionGeneration: optimisticTab.sessionGeneration };
+  }
+  if (retainedMeta?.sessionPath) {
+    return { sessionPath: retainedMeta.sessionPath, sessionGeneration: retainedMeta.sessionGeneration };
+  }
+  return undefined;
+}
+
+/**
  * Adopt only a live runtime tail that has never been bound to persisted
  * history. This is the compatibility bridge for background runtime events
  * that predate the tab metadata snapshot: it must never retain a resident
@@ -237,6 +256,23 @@ export function duplicateLiveItemIds(
     if (same) return liveItems.slice(0, k).map((item) => item.id);
   }
   return [];
+}
+
+// True when the fetched page already contains content that the mounted
+// live/replay rows also carry (any-position signature match). The page fetch
+// starts after the replay, so its persisted view of the active turn is a
+// superset — the page must own the turn and the replayed rebuild must yield.
+export function pageOverlapsLiveContent(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): boolean {
+  const liveSignatures = new Set<string>();
+  for (const item of liveItems) liveSignatures.add(itemSignature(item));
+  if (liveSignatures.size === 0) return false;
+  for (const item of pageItems) {
+    if (liveSignatures.has(itemSignature(item))) return true;
+  }
+  return false;
 }
 
 export function sameSessionPlaceholderItems<T>(

@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -48,6 +48,22 @@ import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./
 import { sameStringList, sameTodoList } from "./todoVisibility";
 import { resolveSnapshotTurnStartedAt, resolveTurnStartedAt, snapshotPredatesTurnLifecycle } from "./turnTiming";
 import { TurnEventProjector } from "./turnEventProjection";
+import { replayTurnRebuild, replayRebuildSnapshot, transcriptDumpJson, transcriptDuplicateSignatureCount } from "./replayRebuild";
+
+// Row-level forensic dump: id/kind/content of every mounted row. reason marks
+// the lifecycle point (rebuild / page-apply / message / turn-done). The getter
+// defers to call time (setTimeout) so reducer batches land before sampling.
+function dumpTranscript(get: () => { items: Item[] } | undefined, reason: string, delayMs = 30): void {
+  setTimeout(() => {
+    const state = get();
+    if (!state) return;
+    recordFrontendDiagnostic("transcript", "transcript.item-dump", {
+      reason,
+      sequence: state.items.length,
+      dump: transcriptDumpJson(state.items),
+    });
+  }, delayMs);
+}
 import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
 import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
@@ -838,6 +854,7 @@ type Action =
   | { type: "ask_submit_succeeded"; id: string; epoch: number }
   | { type: "submit_prompt_failed"; id: string; epoch: number }
   | { type: "controller_rebuilt" }
+  | { type: "replay_turn_rebuild"; turnId?: string }
   | { type: "reset" }
   | { type: "context_panel_refresh" };
 
@@ -2313,6 +2330,10 @@ export function reducer(s: State, a: Action): State {
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
+      // Dropped rows may include the row the live buffer is streaming into
+      // (page-owns-the-turn handoff); a dangling pointer would make the next
+      // delta recreate a same-id row.
+      const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       return {
         ...s,
         items: compactArchivedToolItems([...a.items, ...rest]),
@@ -2327,6 +2348,8 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "prepend" },
+        currentAssistant: liveDropped ? undefined : s.currentAssistant,
+        live: liveDropped ? undefined : s.live,
       };
     }
     // Ref-resolved full content landed for history items already on screen:
@@ -2404,6 +2427,10 @@ export function reducer(s: State, a: Action): State {
     // from the OLD controller is meaningless for the new one and must be
     // dropped, or a genuinely new prompt reusing an old id would be misread
     // as a stale replay of an already-answered prompt and silently ignored.
+    // A full-turn replay is about to start (runtime epoch change / takeover /
+    // first observation of an active tab): drop this turn's already-mounted
+    // rows so the replay rebuilds them exactly once (see replayRebuild.ts).
+    case "replay_turn_rebuild": return replayTurnRebuild(s, a.turnId);
     case "controller_rebuilt":
       // A rebuild restarts the runtime's extension sidecars too, so extension
       // surface state (and the per-surface generation fence) from the old
@@ -2930,8 +2957,28 @@ export function useController() {
           digest: projection.digest || undefined,
         };
         dispatchTo(tabId, applyMode === "prepend"
-          ? { type: "history_prepend", ...page, removeIds: duplicateLiveItemIds(projection.items, statesRef.current.get(tabId)?.items ?? []) }
+          ? (() => {
+              const liveState = statesRef.current.get(tabId);
+              const liveItems = liveState?.items ?? [];
+              const removeIds = duplicateLiveItemIds(projection.items, liveItems);
+              // A page fetched after a full-turn replay carries the turn's
+              // persisted rows; the replayed rebuild would co-mount next to
+              // them (v2 log: dup=16). Let the page own the turn: drop the
+              // rebuild rows and same-id tool copies, keep later deltas.
+              if (pageOverlapsLiveContent(projection.items, liveItems)) {
+                const prefix = liveState?.activeTurnId ? `a:${liveState.activeTurnId}:` : undefined;
+                for (const item of liveItems) {
+                  if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
+                }
+              }
+              return { type: "history_prepend", ...page, removeIds };
+            })()
           : { type: "history_replace", ...page });
+        dumpTranscript(() => statesRef.current.get(tabId), `page-apply:${applyMode}`, 60);
+        // The page owns every durable row up to the last known sequence; a
+        // still-running full-turn replay would re-project that content on top
+        // of the page (v3 log: co-mounted he:/a: rows). Supersede it.
+        turnEventProjector.adoptPage(tabId);
         addBreadcrumb(
           "tab.hydrate",
           `history page ${tabId} items=${projection.items.length} turns=${projection.startTurn}-${projection.endTurn}/${projection.totalTurns} ms=${Date.now() - historyStartedAt}`,
@@ -3101,6 +3148,9 @@ export function useController() {
       revision: projection.revisionKnown ? projection.revision : undefined,
       digest: projection.digest || undefined,
     });
+    // The rebased page carries the same durable rows the post-floor replay
+    // would rebuild — adopt it instead of co-mounting both.
+    turnEventProjector.adoptPage(tabId);
     return true;
   }, [dispatchTo, ensureTranscriptSubscription]);
 
@@ -3108,6 +3158,30 @@ export function useController() {
     turnEventProjector.bindReset(resetTurnEventProjection);
     return () => turnEventProjector.unbindReset(resetTurnEventProjection);
   }, [resetTurnEventProjection, turnEventProjector]);
+
+  useEffect(() => {
+    const onReplayStart = (tabId: string, turnId?: string) => {
+      const state = statesRef.current.get(tabId);
+      if (state) {
+        const snapshot = replayRebuildSnapshot(state, turnId);
+        recordFrontendDiagnostic("transcript", "replay-rebuild-snapshot", {
+          sequence: snapshot.rows,
+          total: snapshot.liveRows,
+          mounted: snapshot.userRows,
+          state: snapshot.anchor,
+          error: `dup${snapshot.duplicates}`,
+        });
+        recordFrontendDiagnostic("transcript", "transcript.item-dump", {
+          reason: "rebuild",
+          sequence: state.items.length,
+          dump: transcriptDumpJson(state.items),
+        });
+      }
+      dispatchTo(tabId, { type: "replay_turn_rebuild", turnId });
+    };
+    turnEventProjector.bindReplayStart(onReplayStart);
+    return () => turnEventProjector.unbindReplayStart(onReplayStart);
+  }, [dispatchTo, turnEventProjector]);
 
   // On-demand full content for a ref-replaced history field (entries carrying
   // refs[] ship a ≤4KiB preview inline). Resolves through the transcript
@@ -3214,7 +3288,7 @@ export function useController() {
     const foregroundRunning = foregroundRunningFromRuntimeMeta(tab);
     const runtimeEpoch = tab.runtime?.epoch;
     const latestEventSeq = tab.turnEventSeq ?? 0;
-    turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId));
+    turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId), tab.turnId ?? undefined);
     // Will the reducer reject this as a snapshot that predates the live prompt?
     // Computed on pre-dispatch state so we can schedule an authoritative
     // refetch when a stale idle snapshot is ignored.
@@ -3539,6 +3613,7 @@ export function useController() {
       if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
+      if (e.kind === "message") dumpTranscript(() => statesRef.current.get(targetTabId), `message:${e.turnId ?? ""}`);
       if (e.kind === "text" || e.kind === "reasoning") {
         if (e.submissionId) dispatchTo(targetTabId, { type: "send_confirmed", submissionId: e.submissionId });
         textBatch.push({ tabId: targetTabId, e });
@@ -3556,6 +3631,19 @@ export function useController() {
         void refreshCheckpoints(targetTabId);
         invalidateSharedQuery("MetaForTab", [targetTabId]);
         void refreshMetaForTab(targetTabId);
+        // Row-level forensics: the reducer batch above has not been applied
+        // yet, so sample after it lands. `d<n>` counts duplicate signatures —
+        // the direct observable of the co-mounted-row defect.
+        setTimeout(() => {
+          const doneState = statesRef.current.get(targetTabId);
+          if (!doneState) return;
+          recordFrontendDiagnostic("transcript", "turn-done-snapshot", {
+            sequence: doneState.items.length,
+            mounted: transcriptDuplicateSignatureCount(doneState.items),
+            state: `seq${doneState.assistantSegmentOrdinal}`,
+          });
+          dumpTranscript(() => statesRef.current.get(targetTabId), "turn-done", 0);
+        }, 50);
       }
       if (e.kind === "turn_done" || e.kind === "notice") {
         app.JobsForTab(targetTabId).then((jobs) => dispatchTo(targetTabId, { type: "jobs", jobs: asArray(jobs) })).catch(() => {});
@@ -4626,7 +4714,7 @@ export function useController() {
     const previousTabId = activeTabIdRef.current;
     const targetState = statesRef.current.get(tabId);
     const currentTargetIdentity = targetState?.meta ?? listedSessionIdentityByTabRef.current.get(tabId);
-    const targetIdentity = optimisticTab ? { sessionPath: optimisticTab.sessionPath, sessionGeneration: optimisticTab.sessionGeneration } : undefined;
+    const targetIdentity = switchTargetIdentity(optimisticTab, targetState?.meta);
     const targetSessionPath = optimisticTab?.sessionPath;
     const targetSessionRevision = optimisticTab?.sessionRevision;
     const targetSessionDigest = optimisticTab?.sessionDigest;
