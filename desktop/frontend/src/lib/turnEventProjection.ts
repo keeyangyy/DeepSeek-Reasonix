@@ -27,6 +27,7 @@ export class TurnEventProjector {
   private readonly gapQueueByTab = new Map<string, WireEvent[]>();
   private readonly epochByTab = new Map<string, string>();
   private readonly generationByTab = new Map<string, number>();
+  private readonly latestByTab = new Map<string, number>();
   private readonly projectingReplayByTab = new Set<string>();
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
@@ -44,9 +45,40 @@ export class TurnEventProjector {
     this.sequenceByTab.delete(tabId);
     this.gapQueueByTab.delete(tabId);
     this.epochByTab.delete(tabId);
+    this.latestByTab.delete(tabId);
     this.projectingReplayByTab.delete(tabId);
     this.pendingRepairByTab.delete(tabId);
     this.repairByTab.delete(tabId);
+  }
+
+  /**
+   * The transcript page just replaced/augmented the surface and already owns
+   * every durable row up to the last known backend sequence. An in-flight
+   * full-turn replay would keep projecting that same content as fresh rows on
+   * top of the page (v3 log: co-mounted he-family and a-family duplicates), so
+   * the replay is superseded here: its generation is bumped (the paging loop
+   * bails at its next checkpoint), the cursor jumps to the latest known
+   * sequence, and any gap-queued live rows — whose content the page also
+   * carries — are dropped. Live events past the adopted sequence keep flowing
+   * normally.
+   */
+  adoptPage(tabId: string) {
+    this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
+    const knownLatest = this.latestByTab.get(tabId);
+    if (knownLatest !== undefined) {
+      const current = this.sequenceByTab.get(tabId) ?? 0;
+      this.sequenceByTab.set(tabId, Math.max(current, knownLatest));
+    }
+    this.gapQueueByTab.delete(tabId);
+    this.pendingRepairByTab.delete(tabId);
+    // Drop the in-flight repair from the map too: its promise exits via the
+    // generation check on its own, but leaving it registered would park every
+    // subsequent live event in the gap queue instead of projecting it.
+    this.repairByTab.delete(tabId);
+    recordFrontendDiagnostic("runtime", "turn-events-page-adopted", {
+      afterSeq: this.sequenceByTab.get(tabId) ?? 0,
+      total: knownLatest ?? 0,
+    });
   }
 
   observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean, turnId?: string) {
@@ -58,6 +90,7 @@ export class TurnEventProjector {
       this.pendingRepairByTab.delete(tabId);
       this.repairByTab.delete(tabId);
     }
+    if (latest > (this.latestByTab.get(tabId) ?? 0)) this.latestByTab.set(tabId, latest);
     let projected = this.sequenceByTab.get(tabId);
     const initializing = projected === undefined;
     if (projected === undefined) {

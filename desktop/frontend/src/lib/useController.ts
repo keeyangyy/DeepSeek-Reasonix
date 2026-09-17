@@ -2975,6 +2975,10 @@ export function useController() {
             })()
           : { type: "history_replace", ...page });
         dumpTranscript(() => statesRef.current.get(tabId), `page-apply:${applyMode}`, 60);
+        // The page owns every durable row up to the last known sequence; a
+        // still-running full-turn replay would re-project that content on top
+        // of the page (v3 log: co-mounted he:/a: rows). Supersede it.
+        turnEventProjector.adoptPage(tabId);
         addBreadcrumb(
           "tab.hydrate",
           `history page ${tabId} items=${projection.items.length} turns=${projection.startTurn}-${projection.endTurn}/${projection.totalTurns} ms=${Date.now() - historyStartedAt}`,
@@ -3144,6 +3148,9 @@ export function useController() {
       revision: projection.revisionKnown ? projection.revision : undefined,
       digest: projection.digest || undefined,
     });
+    // The rebased page carries the same durable rows the post-floor replay
+    // would rebuild — adopt it instead of co-mounting both.
+    turnEventProjector.adoptPage(tabId);
     return true;
   }, [dispatchTo, ensureTranscriptSubscription]);
 
