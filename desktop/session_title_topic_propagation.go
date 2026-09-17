@@ -46,7 +46,7 @@ func (a *App) propagateSessionCustomTitleToTopic(sessionPath, fallbackTopicID st
 			return
 		}
 		var ok bool
-		scope, workspaceRoot, ok = a.findTopicLocation(topicID)
+		scope, _, ok = a.findTopicLocation(topicID)
 		if !ok {
 			scope = ""
 		}
