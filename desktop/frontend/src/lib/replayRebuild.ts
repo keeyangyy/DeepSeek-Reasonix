@@ -67,8 +67,11 @@ function itemSignatureToken(item: Item): string | undefined {
   // share one empty signature by construction — they are not user-visible
   // duplicates. Only rows with content participate in the duplicate count.
   if (item.kind === "assistant" && !item.text.trim() && !item.reasoning.trim()) return undefined;
+  // Repeated identical tool calls (same name+args) and recurring notices are
+  // legitimate content, not co-mounted duplicates — they are keyed by their
+  // unique row id and excluded from the count.
+  if (item.kind === "tool" || item.kind === "notice") return undefined;
   const body = item.kind === "assistant" ? `${item.text}\u0000${item.reasoning}`
-    : item.kind === "tool" ? `${item.name}\u0000${item.args ?? ""}`
     : item.kind === "user" ? item.text
     : item.id;
   return `${item.kind}:${signatureHash(body)}`;
