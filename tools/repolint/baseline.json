@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102196,
+    "file-size": 102197,
     "function-size": 8265,
     "layering": 1,
     "marker": 0,
@@ -275,7 +275,7 @@
     "desktop/tabs.go": {
       "complexity": 42,
       "essay": 68,
-      "file-size": 7615,
+      "file-size": 7616,
       "function-size": 359,
       "struct-state": 23
     },
