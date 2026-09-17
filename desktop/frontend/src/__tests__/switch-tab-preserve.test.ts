@@ -6,6 +6,8 @@
 // 修复：optimisticTab 缺失时回退用目标 tab 自身保留的 meta 判定——
 // 保留该 tab 自己的会话表面总是安全的（页 fingerprint/revision 校验兜底）。
 
+export {};
+
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: {},
