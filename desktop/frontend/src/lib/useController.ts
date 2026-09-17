@@ -48,22 +48,7 @@ import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./
 import { sameStringList, sameTodoList } from "./todoVisibility";
 import { resolveSnapshotTurnStartedAt, resolveTurnStartedAt, snapshotPredatesTurnLifecycle } from "./turnTiming";
 import { TurnEventProjector } from "./turnEventProjection";
-import { replayTurnRebuild, replayRebuildSnapshot, transcriptDumpJson, transcriptDuplicateSignatureCount } from "./replayRebuild";
-
-// Row-level forensic dump: id/kind/content of every mounted row. reason marks
-// the lifecycle point (rebuild / page-apply / message / turn-done). The getter
-// defers to call time (setTimeout) so reducer batches land before sampling.
-function dumpTranscript(get: () => { items: Item[] } | undefined, reason: string, delayMs = 30): void {
-  setTimeout(() => {
-    const state = get();
-    if (!state) return;
-    recordFrontendDiagnostic("transcript", "transcript.item-dump", {
-      reason,
-      sequence: state.items.length,
-      dump: transcriptDumpJson(state.items),
-    });
-  }, delayMs);
-}
+import { replayTurnRebuild } from "./replayRebuild";
 import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
 import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
@@ -2974,7 +2959,6 @@ export function useController() {
               return { type: "history_prepend", ...page, removeIds };
             })()
           : { type: "history_replace", ...page });
-        dumpTranscript(() => statesRef.current.get(tabId), `page-apply:${applyMode}`, 60);
         // The page owns every durable row up to the last known sequence; a
         // still-running full-turn replay would re-project that content on top
         // of the page (v3 log: co-mounted he:/a: rows). Supersede it.
@@ -3161,22 +3145,6 @@ export function useController() {
 
   useEffect(() => {
     const onReplayStart = (tabId: string, turnId?: string) => {
-      const state = statesRef.current.get(tabId);
-      if (state) {
-        const snapshot = replayRebuildSnapshot(state, turnId);
-        recordFrontendDiagnostic("transcript", "replay-rebuild-snapshot", {
-          sequence: snapshot.rows,
-          total: snapshot.liveRows,
-          mounted: snapshot.userRows,
-          state: snapshot.anchor,
-          error: `dup${snapshot.duplicates}`,
-        });
-        recordFrontendDiagnostic("transcript", "transcript.item-dump", {
-          reason: "rebuild",
-          sequence: state.items.length,
-          dump: transcriptDumpJson(state.items),
-        });
-      }
       dispatchTo(tabId, { type: "replay_turn_rebuild", turnId });
     };
     turnEventProjector.bindReplayStart(onReplayStart);
@@ -3613,7 +3581,6 @@ export function useController() {
       if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
-      if (e.kind === "message") dumpTranscript(() => statesRef.current.get(targetTabId), `message:${e.turnId ?? ""}`);
       if (e.kind === "text" || e.kind === "reasoning") {
         if (e.submissionId) dispatchTo(targetTabId, { type: "send_confirmed", submissionId: e.submissionId });
         textBatch.push({ tabId: targetTabId, e });
@@ -3631,19 +3598,6 @@ export function useController() {
         void refreshCheckpoints(targetTabId);
         invalidateSharedQuery("MetaForTab", [targetTabId]);
         void refreshMetaForTab(targetTabId);
-        // Row-level forensics: the reducer batch above has not been applied
-        // yet, so sample after it lands. `d<n>` counts duplicate signatures —
-        // the direct observable of the co-mounted-row defect.
-        setTimeout(() => {
-          const doneState = statesRef.current.get(targetTabId);
-          if (!doneState) return;
-          recordFrontendDiagnostic("transcript", "turn-done-snapshot", {
-            sequence: doneState.items.length,
-            mounted: transcriptDuplicateSignatureCount(doneState.items),
-            state: `seq${doneState.assistantSegmentOrdinal}`,
-          });
-          dumpTranscript(() => statesRef.current.get(targetTabId), "turn-done", 0);
-        }, 50);
       }
       if (e.kind === "turn_done" || e.kind === "notice") {
         app.JobsForTab(targetTabId).then((jobs) => dispatchTo(targetTabId, { type: "jobs", jobs: asArray(jobs) })).catch(() => {});

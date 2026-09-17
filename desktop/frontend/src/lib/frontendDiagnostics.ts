@@ -54,8 +54,6 @@ export type FrontendDiagnosticEvent = {
   state?: string;
   errorName?: string;
   errorCode?: string;
-  /** Row-level transcript dump (only on transcript.item-dump events). */
-  dump?: string;
   width?: number;
   height?: number;
   x?: number;
@@ -333,14 +331,6 @@ function sanitizeEvent(t: number, type: string, fields: EventFields): FrontendDi
   for (const field of STRING_FIELDS) {
     const value = safeToken(fields[field]);
     if (value !== undefined) target[field] = value;
-  }
-  // Row-level forensics channel: the whitelist compaction cannot carry a
-  // transcript dump, so item-dump events bypass it verbatim (bounded payload —
-  // see transcriptDumpJson in replayRebuild.ts).
-  if (type === "transcript.item-dump" && typeof fields.dump === "string") {
-    event.dump = fields.dump;
-    const reason = safeToken(fields.reason);
-    if (reason) target.reason = reason;
   }
   if (Array.isArray(fields.sources)) {
     const sources = [...new Set(fields.sources.filter((value): value is FrontendDiagnosticEvent["sources"] extends Array<infer Item> ? Item : never => (
