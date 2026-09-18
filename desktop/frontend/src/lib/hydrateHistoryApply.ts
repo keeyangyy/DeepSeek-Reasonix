@@ -252,7 +252,7 @@ export function hydratedHistoryApplyMode(
   return (state?.historyTotalTurns ?? 0) === 0 ? "prepend" : "skip";
 }
 
-type SignatureItem = {
+export type SignatureItem = {
   kind: string;
   id: string;
   text?: string;
@@ -265,7 +265,7 @@ type SignatureItem = {
   generation?: number;
 };
 
-function itemSignature(item: SignatureItem): string {
+export function itemSignature(item: SignatureItem): string {
   switch (item.kind) {
     case "tool": return `tool|${item.id}|${item.name ?? ""}`;
     case "extension": return `extension|${item.surfaceKey ?? ""}|${item.generation ?? 0}`;
@@ -306,6 +306,22 @@ export function pageOverlapsLiveContent(
     if (liveSignatures.has(itemSignature(item))) return true;
   }
   return false;
+}
+
+// Rows whose content duplicates an earlier row — the long-term net for
+// low-frequency double-render reports. Signature-based (same kind + content),
+// so two rows carrying the same message from different id namespaces are
+// caught; deliberately identical user messages also match, which the reader of
+// the diagnostics is expected to allow for.
+export function duplicateItemRows(items: readonly SignatureItem[]): SignatureItem[] {
+  const seen = new Set<string>();
+  const dupes: SignatureItem[] = [];
+  for (const item of items) {
+    const signature = itemSignature(item);
+    if (seen.has(signature)) dupes.push(item);
+    else seen.add(signature);
+  }
+  return dupes;
 }
 
 // Terminal frontend rows (optimistic submits, steer notices) whose content the

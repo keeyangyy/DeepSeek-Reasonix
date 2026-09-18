@@ -27,7 +27,7 @@ import { aliasActivationRequest, noteActivationRequested, noteActivationSettled,
 import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
 import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
-import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
+import { frontendDiagnosticsActive, recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import { uiPerfTracker } from "./uiPerf";
 import { getLocale, t } from "./i18n";
 import {
@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, pageCoveredLiveItemIds, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, pageCoveredLiveItemIds, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2626,22 +2626,33 @@ export function useController() {
     const next = reducer(prev, action);
     if (prev !== next) {
       states.set(tabId, next);
-      // PROBE(items-tail): row-level tail snapshot after page actions and turn
-      // ends — pins row order / status for switch-in anomalies (order probe).
+      // Row-level diagnostics (durable, active-only): after page actions and
+      // turn ends, snapshot the tail rows and scan for duplicate content. The
+      // tail shows switch-in order/status anomalies; the duplicate scan is the
+      // long-term net for the low-frequency double-render reports.
       if (
-        action.type === "history_prepend" || action.type === "history_replace" ||
-        action.type === "history_rebase" || (action.type === "event" && action.e.kind === "turn_done")
+        frontendDiagnosticsActive() &&
+        (action.type === "history_prepend" || action.type === "history_replace" ||
+          action.type === "history_rebase" || (action.type === "event" && action.e.kind === "turn_done"))
       ) {
-        const tail = next.items.slice(-6).map((it) => {
+        const describe = (it: SignatureItem) => {
           const status = "status" in it && typeof it.status === "string" ? `:${it.status}` : "";
           const label = "text" in it && typeof it.text === "string" ? it.text.slice(0, 12)
             : ("name" in it && typeof it.name === "string" ? it.name : "");
           return `${it.kind}:${it.id}${status}:${label}`;
-        }).join(" | ");
+        };
         recordFrontendDiagnostic("history", "items.tail", {
           reason: action.type,
-          state: `cur=${next.currentAssistant ?? "-"} >> ${tail}`,
+          state: `cur=${next.currentAssistant ?? "-"} >> ${next.items.slice(-6).map(describe).join(" | ")}`,
         });
+        const dupes = duplicateItemRows(next.items);
+        if (dupes.length > 0) {
+          recordFrontendDiagnostic("history", "items.dupes", {
+            reason: action.type,
+            total: dupes.length,
+            state: dupes.slice(0, 6).map(describe).join(" | "),
+          });
+        }
       }
       // A tab with a live or in-flight turn is pinned out of transcript-store
       // eviction; its cached rows must survive until the turn settles.
