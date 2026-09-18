@@ -2626,6 +2626,23 @@ export function useController() {
     const next = reducer(prev, action);
     if (prev !== next) {
       states.set(tabId, next);
+      // PROBE(items-tail): row-level tail snapshot after page actions and turn
+      // ends — pins row order / status for switch-in anomalies (order probe).
+      if (
+        action.type === "history_prepend" || action.type === "history_replace" ||
+        action.type === "history_rebase" || (action.type === "event" && action.e.kind === "turn_done")
+      ) {
+        const tail = next.items.slice(-6).map((it) => {
+          const status = "status" in it && typeof it.status === "string" ? `:${it.status}` : "";
+          const label = "text" in it && typeof it.text === "string" ? it.text.slice(0, 12)
+            : ("name" in it && typeof it.name === "string" ? it.name : "");
+          return `${it.kind}:${it.id}${status}:${label}`;
+        }).join(" | ");
+        recordFrontendDiagnostic("history", "items.tail", {
+          reason: action.type,
+          state: `cur=${next.currentAssistant ?? "-"} >> ${tail}`,
+        });
+      }
       // A tab with a live or in-flight turn is pinned out of transcript-store
       // eviction; its cached rows must survive until the turn settles.
       getTranscriptStore().setPinned(tabId, Boolean(next.running || next.turnActive || next.live));
