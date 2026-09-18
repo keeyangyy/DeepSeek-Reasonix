@@ -2347,7 +2347,7 @@ export function reducer(s: State, a: Action): State {
       // appends (dedup by summary so repeated hydrates do not stack cards).
       if (a.record?.inProgress) {
         if (s.items.some((it) => it.kind === "compaction" && it.pending)) return s;
-        const items = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }];
+        const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }];
         assertNoDuplicateItems(items, "latest_compaction");
         return { ...s, seq: s.seq + 1, items };
       }
@@ -2360,7 +2360,7 @@ export function reducer(s: State, a: Action): State {
         assertNoDuplicateItems(filled, "latest_compaction");
         return { ...s, items: filled };
       }
-      const items = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }];
+      const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }];
       assertNoDuplicateItems(items, "latest_compaction");
       return { ...s, seq: s.seq + 1, items };
     }
