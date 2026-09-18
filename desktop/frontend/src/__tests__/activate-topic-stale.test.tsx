@@ -172,6 +172,7 @@ window.go = {
       BalanceForTab: async () => balance,
       JobsForTab: async () => jobs,
       CheckpointsForTab: async () => checkpoints,
+      LatestCompactionForTab: async () => null,
       HistoryForTab: async (tabID: string) => {
         if (tabID === "tab-x") return [userMessage("history X")];
         if (tabID === "tab-y") return [userMessage("history Y")];
