@@ -290,5 +290,15 @@ const assistantRow = (id: string, text: string) =>
   ok(next.currentAssistant === "h:9", "the streaming pointer re-points at the page's in-flight assistant row");
 }
 
+// Recorder token rule (frontendDiagnostics.safeToken): row descriptors must
+// survive ^[a-zA-Z0-9._:-]{1,64}$ or the whole field is dropped silently —
+// keep this shape in sync with the describe() used by the items.tail probe.
+const safeTokenRe = /^[a-zA-Z0-9._:-]{1,64}$/;
+const descriptor = (kind: string, id: string, status: string | undefined, length: number) =>
+  `${kind.charAt(0)}.${id.slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}${status ? `.${status}` : ""}.${length}`;
+ok(safeTokenRe.test(descriptor("assistant", "h:entry-1234", "running", 0)), "row descriptor passes the recorder token rule");
+ok(safeTokenRe.test(descriptor("user", "u12", undefined, 42)), "status-less descriptor passes the recorder token rule");
+ok(safeTokenRe.test(descriptor("tool", "call_abc/def", "stopped", 7)), "descriptor scrubs non-token id characters");
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

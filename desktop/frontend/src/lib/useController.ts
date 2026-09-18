@@ -2643,15 +2643,23 @@ export function useController() {
           action.type === "history_rebase";
         const turnEdge = action.type === "event" && (action.e.kind === "turn_done" || action.e.kind === "turn_started");
         if (pageAction || turnEdge) {
+          // Descriptors must satisfy the recorder's safeToken rule
+          // ([a-zA-Z0-9._:-]{1,64}); text is recorded as its length because
+          // non-ASCII content cannot pass that token charset.
           const describe = (it: SignatureItem) => {
-            const status = "status" in it && typeof it.status === "string" ? `:${it.status}` : "";
-            const raw = "text" in it && typeof it.text === "string" ? it.text
-              : ("name" in it && typeof it.name === "string" ? it.name : "");
-            return `${it.kind}:${it.id}${status}:${raw.slice(0, 10).replace(/\s+/g, "_")}`;
+            const status = typeof it.status === "string" && it.status ? `.${it.status}` : "";
+            const length = typeof it.text === "string" ? it.text.length : 0;
+            const id = it.id.slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "");
+            return `${it.kind.charAt(0)}.${id}${status}.${length}`;
+          };
+          const slots = (rows: readonly SignatureItem[]) => {
+            const described = rows.slice(0, 6).map(describe);
+            return Object.fromEntries(described.map((value, index) => [`r${index}`, value]));
           };
           recordFrontendDiagnostic("history", "items.tail", {
             reason: action.type,
-            state: `cur=${next.currentAssistant ?? "-"}>${next.items.slice(-6).map(describe).join("|")}`,
+            state: `cur:${(next.currentAssistant ?? "-").slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}`,
+            ...slots(next.items.slice(-6).reverse()),
           });
           if (pageAction) {
             const nextIds = new Set(next.items.map((item) => item.id));
@@ -2660,7 +2668,7 @@ export function useController() {
               recordFrontendDiagnostic("history", "items.removed", {
                 reason: action.type,
                 total: removed.length,
-                state: removed.slice(0, 6).map(describe).join("|"),
+                ...slots(removed),
               });
             }
           }
@@ -2669,7 +2677,7 @@ export function useController() {
             recordFrontendDiagnostic("history", "items.dupes", {
               reason: action.type,
               total: dupes.length,
-              state: dupes.slice(0, 6).map(describe).join("|"),
+              ...slots(dupes),
             });
           }
         }
