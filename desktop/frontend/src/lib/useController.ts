@@ -27,7 +27,7 @@ import { aliasActivationRequest, noteActivationRequested, noteActivationSettled,
 import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
 import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
-import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
+import { frontendDiagnosticsActive, recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import { uiPerfTracker } from "./uiPerf";
 import { getLocale, t } from "./i18n";
 import {
@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -1850,6 +1850,8 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     }
     case "steer":
       if (isHostRecoveryGuidance(e.text ?? "")) return s;
+      // Notice rows have no id merge: a re-projected steer must not append a second copy.
+      if (e.itemId !== undefined && s.items.some((item) => item.kind === "notice" && item.inboxItemId === e.itemId)) return s;
       return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: `s${s.seq}`, level: "info", text: `${STEER_NOTICE_PREFIX}${e.text ?? ""}`, inboxItemId: e.itemId }] };
     case "approval_request": {
       if (s.cancelRequested) return s;
@@ -2273,7 +2275,7 @@ export function reducer(s: State, a: Action): State {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       return {
         ...s,
-        items: compactArchivedToolItems(a.items),
+        items: compactArchivedToolItems(liftLiveToolStatus(a.items, s.items)),
         historyPrefixCount: a.items.length,
         pendingSubmissionId: undefined,
         hydrateHistoryLoaded: true,
@@ -2286,6 +2288,9 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
+        // The previous streaming row is gone with the replaced items; re-point the
+        // delta stream at the page's in-flight assistant row (see page-owner).
+        currentAssistant: pageAssistantPointer(s.currentAssistant, a.items),
       };
     case "history_rebase": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
@@ -2321,7 +2326,7 @@ export function reducer(s: State, a: Action): State {
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       return {
         ...s,
-        items: compactArchivedToolItems([...a.items, ...rest]),
+        items: compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...rest]),
         historyPrefixCount: a.items.length + retainedPrefix.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2333,7 +2338,9 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "prepend" },
-        currentAssistant: liveDropped ? undefined : s.currentAssistant,
+        // The page owns the in-flight turn now: hand the delta stream to the page's
+        // own assistant row (a cleared pointer would rebuild a tail duplicate).
+        currentAssistant: liveDropped ? pageInFlightAssistantId(a.items) : s.currentAssistant,
         live: liveDropped ? undefined : s.live,
       };
     }
@@ -2624,6 +2631,57 @@ export function useController() {
     const next = reducer(prev, action);
     if (prev !== next) {
       states.set(tabId, next);
+      // Row-level diagnostics (durable, active-only): after page actions and
+      // turn edges, snapshot the tail rows, record the rows an action removed
+      // (an anomaly that "disappears on refresh" leaves its copies here), and
+      // scan for duplicate content — the long-term net for double-render
+      // reports. Values must stay whitespace-free: the recorder drops fields
+      // whose value contains whitespace (first probe round recorded all-empty
+      // tails for exactly that reason).
+      if (frontendDiagnosticsActive()) {
+        const pageAction = action.type === "history_prepend" || action.type === "history_replace" ||
+          action.type === "history_rebase";
+        const turnEdge = action.type === "event" && (action.e.kind === "turn_done" || action.e.kind === "turn_started");
+        if (pageAction || turnEdge) {
+          // Descriptors must satisfy the recorder's safeToken rule
+          // ([a-zA-Z0-9._:-]{1,64}); text is recorded as its length because
+          // non-ASCII content cannot pass that token charset.
+          const describe = (it: SignatureItem) => {
+            const status = typeof it.status === "string" && it.status ? `.${it.status}` : "";
+            const length = typeof it.text === "string" ? it.text.length : 0;
+            const id = it.id.slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "");
+            return `${it.kind.charAt(0)}.${id}${status}.${length}`;
+          };
+          const slots = (rows: readonly SignatureItem[]) => {
+            const described = rows.slice(0, 6).map(describe);
+            return Object.fromEntries(described.map((value, index) => [`r${index}`, value]));
+          };
+          recordFrontendDiagnostic("history", "items.tail", {
+            reason: action.type,
+            state: `cur:${(next.currentAssistant ?? "-").slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}`,
+            ...slots(next.items.slice(-6).reverse()),
+          });
+          if (pageAction) {
+            const nextIds = new Set(next.items.map((item) => item.id));
+            const removed = prev.items.filter((item) => !nextIds.has(item.id));
+            if (removed.length > 0) {
+              recordFrontendDiagnostic("history", "items.removed", {
+                reason: action.type,
+                total: removed.length,
+                ...slots(removed),
+              });
+            }
+          }
+          const dupes = duplicateItemRows(next.items);
+          if (dupes.length > 0) {
+            recordFrontendDiagnostic("history", "items.dupes", {
+              reason: action.type,
+              total: dupes.length,
+              ...slots(dupes),
+            });
+          }
+        }
+      }
       // A tab with a live or in-flight turn is pinned out of transcript-store
       // eviction; its cached rows must survive until the turn settles.
       getTranscriptStore().setPinned(tabId, Boolean(next.running || next.turnActive || next.live));
@@ -2955,6 +3013,8 @@ export function useController() {
                 for (const item of liveItems) {
                   if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
                 }
+                // Frontend-local rows (uN/sN) never match page ids — drop page-covered ones.
+                removeIds.push(...pageCoveredLiveItemIds(projection.items, liveItems));
               }
               return { type: "history_prepend", ...page, removeIds };
             })()
@@ -3201,8 +3261,9 @@ export function useController() {
         return false;
       }
       if (result.kind === "reload") {
-        // The cursor went stale (session rewritten): the store reloaded the
-        // latest page; replace instead of prepend.
+        // Stale cursor: the store reloaded the latest page — replace, and let the
+        // page supersede an in-flight full-turn replay (as 2965/3137 do).
+        recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-enter" });
         dispatchTo(targetTabId, {
           type: "history_replace",
           items: result.items,
@@ -3212,6 +3273,8 @@ export function useController() {
           revision: result.revisionKnown ? result.revision : undefined,
           digest: result.digest || undefined,
         });
+        turnEventProjector.adoptPage(targetTabId);
+        recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-adopted" });
       } else {
         dispatchTo(targetTabId, {
           type: "history_prepend",

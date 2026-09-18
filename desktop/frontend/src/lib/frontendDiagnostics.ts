@@ -52,6 +52,13 @@ export type FrontendDiagnosticEvent = {
   estimateSource?: string;
   foldState?: string;
   state?: string;
+  // Row-snapshot slots (see STRING_FIELDS): one row descriptor per slot.
+  r0?: string;
+  r1?: string;
+  r2?: string;
+  r3?: string;
+  r4?: string;
+  r5?: string;
   errorName?: string;
   errorCode?: string;
   width?: number;
@@ -218,6 +225,9 @@ const STRING_FIELDS = [
   "source", "eventSource", "action", "target", "targetRole", "targetTag", "keyClass", "pointerType", "inputType", "visibility", "phase",
   "reason", "rejectedReason", "result", "status", "mode", "previousMode", "owner", "writeKind", "rowKind", "layoutVersion", "layoutVariant", "estimateSource", "foldState", "state", "errorName", "errorCode", "error",
   "directoryState", "changeReason", "outcome", "trigger", "scope", "variant", "timeFilter",
+  // Row-snapshot slots for items.tail/dupes/removed (each value is one
+  // safeToken-compliant row descriptor, ≤64 chars: kind.id[-status].length).
+  "r0", "r1", "r2", "r3", "r4", "r5",
 ] as const;
 const GEOMETRY_SOURCES = new Set([
   "footer-resize", "row-measure", "data-change", "viewport-resize", "fold-change", "typography-change", "items-rendered",

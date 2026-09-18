@@ -1,11 +1,15 @@
 // Run: tsx src/__tests__/hydrate-history-apply.test.ts
 
+import { initialState, reducer } from "../lib/useController";
+
 import {
   activeTabHydrationPlan,
   canAdoptUnboundLiveSurface,
   duplicateLiveItemIds,
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
+  pageCoveredLiveItemIds,
+  pageOverlapsLiveContent,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
   revisionNotOlder,
@@ -193,6 +197,108 @@ ok(revisionNotOlder(1501, 1502) === true, "forward revision drift is accepted (a
 ok(revisionNotOlder(1501, 1501) === true, "equal revisions are accepted");
 ok(revisionNotOlder(1502, 1501) === false, "a revision regression is rejected (rebind/rewind)");
 ok(revisionNotOlder(1501, undefined) === true, "an unknown actual revision cannot prove a regression");
+
+// Page-covered terminal rows: frontend-local ids (uN/sN) never match page ids,
+// so the id-based removal leaves the optimistic submit / steer notice mounted
+// next to the page's own copy of the same message.
+const pageUser = (id: string, text: string) => ({ kind: "user", id, text });
+const liveUser = (id: string, text: string) => ({ kind: "user", id, text });
+const pageNotice = (id: string, text: string) => ({ kind: "notice", id, text });
+const liveNotice = (id: string, text: string) => ({ kind: "notice", id, text });
+
+ok(
+  pageCoveredLiveItemIds([pageUser("h:7", "inserted mid-turn")], [liveUser("u4", "inserted mid-turn")]).join() === "u4",
+  "a page-owned optimistic submit is dropped with its frontend-local id",
+);
+ok(
+  pageCoveredLiveItemIds([pageNotice("h:9", "↪ steer text")], [liveNotice("s3", "↪ steer text")]).join() === "s3",
+  "a page-owned steer notice is dropped with its frontend-local id",
+);
+ok(
+  pageCoveredLiveItemIds(
+    [pageUser("h:7", "same text")],
+    [liveUser("u4", "same text"), liveUser("u5", "same text")],
+  ).join() === "u4",
+  "count based: a second identical submit keeps its not-yet-persisted row",
+);
+ok(
+  pageCoveredLiveItemIds(
+    [pageUser("h:7", "same text"), pageUser("h:9", "same text")],
+    [liveUser("u4", "same text"), liveUser("u5", "same text")],
+  ).join() === "u4,u5",
+  "two page rows cover both live copies",
+);
+ok(
+  pageCoveredLiveItemIds([pageUser("h:7", "persisted")], [liveUser("u4", "not persisted yet")]).length === 0,
+  "content the page does not carry keeps its frontend row",
+);
+ok(
+  pageCoveredLiveItemIds([{ kind: "assistant", id: "h:3", text: "half" }], [{ kind: "assistant", id: "a:t1:0", text: "half" }]).length === 0,
+  "assistant rows are owned by the turn-level rules, not this cleanup",
+);
+
+// Streaming rows grow after the page snapshot, so exact signatures never match:
+// the page's copy is an earlier prefix of the live text and must still count as
+// overlap (otherwise the whole page-owns-the-turn cleanup is skipped and the
+// rebuilt rows co-mount = the low-frequency duplicate).
+ok(
+  pageOverlapsLiveContent(
+    [{ kind: "assistant", id: "h:9", text: "part" }],
+    [{ kind: "assistant", id: "a:t1:0", text: "part with more streamed text" }],
+  ) === true,
+  "a page snapshot that prefixes the live text still overlaps",
+);
+ok(
+  pageOverlapsLiveContent(
+    [{ kind: "assistant", id: "h:9", text: "unrelated" }],
+    [{ kind: "assistant", id: "a:t1:0", text: "something else" }],
+  ) === false,
+  "unrelated text rows are not overlap",
+);
+
+// Page handoff: the page's in-flight turn must not co-mount with the rebuilt
+// live rows, the streaming pointer must follow the page row, and a live
+// "running" tool status must survive a page copy that only knows "stopped".
+type ReducerState = ReturnType<typeof reducer>;
+const toolRow = (id: string, status: "running" | "stopped" | "done") =>
+  ({ kind: "tool" as const, id, name: "wait", args: "", readOnly: true, status, output: "" });
+const assistantRow = (id: string, text: string) =>
+  ({ kind: "assistant" as const, id, text, reasoning: "", streaming: true });
+
+{
+  const base: ReducerState = {
+    ...initialState,
+    historyRevision: 5,
+    items: [assistantRow("a:t1:0", "streamed so far"), toolRow("call-1", "running")],
+    currentAssistant: "a:t1:0",
+    live: { id: "a:t1:0", text: "streamed so far", reasoning: "" },
+  };
+  const next = reducer(base, {
+    type: "history_prepend",
+    items: [assistantRow("h:9", "streamed"), toolRow("call-1", "stopped")],
+    removeIds: ["a:t1:0", "call-1"],
+    startTurn: 1,
+    totalTurns: 3,
+    hasOlder: false,
+    revision: 6,
+    digest: "d6",
+  });
+  ok(next.items.filter((it) => it.id === "call-1").length === 1, "page tool row does not co-mount with the live copy");
+  const tool = next.items.find((it) => it.id === "call-1");
+  ok(tool?.kind === "tool" && tool.status === "running", "a live running tool keeps its status when the page copy says stopped");
+  ok(next.items.filter((it) => it.kind === "assistant").length === 1, "the superseded live assistant row does not remain beside the page copy");
+  ok(next.currentAssistant === "h:9", "the streaming pointer re-points at the page's in-flight assistant row");
+}
+
+// Recorder token rule (frontendDiagnostics.safeToken): row descriptors must
+// survive ^[a-zA-Z0-9._:-]{1,64}$ or the whole field is dropped silently —
+// keep this shape in sync with the describe() used by the items.tail probe.
+const safeTokenRe = /^[a-zA-Z0-9._:-]{1,64}$/;
+const descriptor = (kind: string, id: string, status: string | undefined, length: number) =>
+  `${kind.charAt(0)}.${id.slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}${status ? `.${status}` : ""}.${length}`;
+ok(safeTokenRe.test(descriptor("assistant", "h:entry-1234", "running", 0)), "row descriptor passes the recorder token rule");
+ok(safeTokenRe.test(descriptor("user", "u12", undefined, 42)), "status-less descriptor passes the recorder token rule");
+ok(safeTokenRe.test(descriptor("tool", "call_abc/def", "stopped", 7)), "descriptor scrubs non-token id characters");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
