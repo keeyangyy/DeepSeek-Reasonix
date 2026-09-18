@@ -227,6 +227,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	}
 	fmt.Fprintf(&b, "temperature       = %s\n", formatFloat(c.Agent.Temperature))
 	renderRecoveryAndCompletionValidation(&b, c)
+	renderAgentTaskBudget(&b, c)
 	if lang := c.ReasoningLanguage(); lang != "auto" {
 		fmt.Fprintf(&b, "reasoning_language = %q   # visible reasoning language: auto|zh|en\n", lang)
 	} else {
@@ -894,6 +895,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		anyAgent = true
 	}
 	diffRecoveryAndCompletionValidation(&agentBuf, *c, *d, &anyAgent)
+	diffAgentTaskBudget(&agentBuf, *c, *d, &anyAgent)
 	if c.Agent.ReasoningLanguage != d.Agent.ReasoningLanguage {
 		if l := c.ReasoningLanguage(); l != "auto" {
 			fmt.Fprintf(&agentBuf, "reasoning_language = %q\n", l)
