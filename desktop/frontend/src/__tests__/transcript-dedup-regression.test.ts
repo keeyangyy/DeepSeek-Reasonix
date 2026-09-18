@@ -12,6 +12,7 @@
 import { TranscriptStore } from "../lib/transcriptStore";
 import { TurnEventProjector } from "../lib/turnEventProjection";
 import {
+  assertNoDuplicateItems,
   duplicateLiveItemIds,
   duplicateItemRows,
   findDuplicateItemIds,
@@ -466,6 +467,32 @@ console.log("\ntranscript dedup regression");
   eq(dedupedRest.length, 2, "history_prepend defensive dedup removes the missed duplicate");
   eq(dedupedRest.find((i) => i.id === "l1")?.text, "dup", "history_prepend keeps non-duplicate items");
   eq(dedupedRest.find((i) => i.id === "l3")?.text, "new", "history_prepend keeps the tail");
+}
+
+// 14. assertNoDuplicateItems 测试 ────────────────────────────────────────────
+{
+  const unique = [
+    { kind: "user" as const, id: "u1", text: "a" },
+    { kind: "assistant" as const, id: "a1", text: "b", reasoning: "" },
+  ];
+  const dupes = [
+    { kind: "user" as const, id: "u1", text: "a" },
+    { kind: "user" as const, id: "u1", text: "a" },
+  ];
+
+  // 唯一列表不应抛出
+  assertNoDuplicateItems(unique, "unique-items");
+
+  // 重复列表应在 test 环境下抛出
+  let threw = false;
+  try {
+    assertNoDuplicateItems(dupes, "duplicate-items");
+  } catch (e) {
+    threw = true;
+    ok((e as Error).message.includes("duplicate-items"), "assertion error includes label");
+    ok((e as Error).message.includes("u1"), "assertion error includes duplicate id");
+  }
+  ok(threw, "assertNoDuplicateItems throws on duplicate ids in test env");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

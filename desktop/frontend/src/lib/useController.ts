@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, findDuplicateItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, findDuplicateItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2321,9 +2321,11 @@ export function reducer(s: State, a: Action): State {
       const liveTail = s.items.slice(Math.min(s.historyPrefixCount, s.items.length));
       const duplicates = new Set(findDuplicateItemIds(a.items, liveTail));
       const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
+      const merged = compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail]));
+      assertNoDuplicateItems(merged, "history_rebase");
       return {
         ...s,
-        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail])),
+        items: merged,
         historyPrefixCount: a.items.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2345,15 +2347,22 @@ export function reducer(s: State, a: Action): State {
       // appends (dedup by summary so repeated hydrates do not stack cards).
       if (a.record?.inProgress) {
         if (s.items.some((it) => it.kind === "compaction" && it.pending)) return s;
-        return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }] };
+        const items = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }];
+        assertNoDuplicateItems(items, "latest_compaction");
+        return { ...s, seq: s.seq + 1, items };
       }
       if (!a.record?.summary || s.items.some((it) => it.kind === "compaction" && !it.pending && it.summary === a.record.summary)) return s;
       const pendingIdx = s.items.findIndex((it) => it.kind === "compaction" && it.pending);
       const filled: Item[] | undefined = pendingIdx >= 0
         ? s.items.map((it, i) => (i === pendingIdx ? { ...it, pending: false, trigger: a.record!.trigger ?? "", messages: a.record!.messages ?? 0, summary: a.record!.summary ?? "", archive: "" } : it))
         : undefined;
-      if (filled) return { ...s, items: filled };
-      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }] };
+      if (filled) {
+        assertNoDuplicateItems(filled, "latest_compaction");
+        return { ...s, items: filled };
+      }
+      const items = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }];
+      assertNoDuplicateItems(items, "latest_compaction");
+      return { ...s, seq: s.seq + 1, items };
     }
     case "history_prepend": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
@@ -2373,9 +2382,11 @@ export function reducer(s: State, a: Action): State {
       // (page-owns-the-turn handoff); a dangling pointer would make the next
       // delta recreate a same-id row.
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
+      const merged = compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...dedupedRest]);
+      assertNoDuplicateItems(merged, "history_prepend");
       return {
         ...s,
-        items: compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...dedupedRest]),
+        items: merged,
         historyPrefixCount: a.items.length + retainedPrefix.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
