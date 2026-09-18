@@ -213,7 +213,14 @@ export class TurnEventProjector {
   }
 
   private async replayGap(tabId: string, afterSeq: number, requestedEpoch: string | undefined, generation: number) {
-    let cursor = afterSeq;
+    // A re-fired repair can carry a stale afterSeq: acceptLive always
+    // (re)registers the desired position, and while a repair is in flight that
+    // writes pendingRepair at the cursor of its gap event — an older position.
+    // The cursor is monotonic and everything below it was already projected,
+    // so clamp: projecting from the stale position replays already-mounted
+    // rows (observed as mid-turn steer notices doubled at the transcript
+    // bottom, with the cursor regressing afterwards).
+    let cursor = Math.max(afterSeq, this.sequenceByTab.get(tabId) ?? 0);
     for (let page = 0; page < MAX_REPLAY_PAGES; page += 1) {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);

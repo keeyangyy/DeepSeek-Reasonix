@@ -1850,6 +1850,9 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     }
     case "steer":
       if (isHostRecoveryGuidance(e.text ?? "")) return s;
+      // Notice rows have no id-based merge: a re-projected steer must not append
+      // a second copy at the transcript bottom (stale re-fire of the gap replay).
+      if (e.itemId !== undefined && s.items.some((item) => item.kind === "notice" && item.inboxItemId === e.itemId)) return s;
       return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: `s${s.seq}`, level: "info", text: `${STEER_NOTICE_PREFIX}${e.text ?? ""}`, inboxItemId: e.itemId }] };
     case "approval_request": {
       if (s.cancelRequested) return s;
@@ -3201,8 +3204,9 @@ export function useController() {
         return false;
       }
       if (result.kind === "reload") {
-        // The cursor went stale (session rewritten): the store reloaded the
-        // latest page; replace instead of prepend.
+        // Stale cursor: the store reloaded the latest page — replace, and let
+        // the page supersede an in-flight full-turn replay (as 2965/3137 do),
+        // else the rebuild co-mounts next to the page's copy of the turn.
         dispatchTo(targetTabId, {
           type: "history_replace",
           items: result.items,
@@ -3212,6 +3216,7 @@ export function useController() {
           revision: result.revisionKnown ? result.revision : undefined,
           digest: result.digest || undefined,
         });
+        turnEventProjector.adoptPage(targetTabId);
       } else {
         dispatchTo(targetTabId, {
           type: "history_prepend",
