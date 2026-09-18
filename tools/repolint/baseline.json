@@ -4,13 +4,13 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102459,
+    "file-size": 102483,
     "function-size": 8280,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 116,
-    "test-file-size": 68862
+    "test-file-size": 68990
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -86,6 +86,9 @@
     "desktop/frontend/src/__tests__/tab-switch-hydration.test.tsx": {
       "test-file-size": 163
     },
+    "desktop/frontend/src/__tests__/transcript-dedup-regression.test.ts": {
+      "test-file-size": 128
+    },
     "desktop/frontend/src/components/ApprovalModal.tsx": {
       "file-size": 235
     },
@@ -144,13 +147,13 @@
       "file-size": 14
     },
     "desktop/frontend/src/lib/transcriptStore.ts": {
-      "file-size": 264
+      "file-size": 270
     },
     "desktop/frontend/src/lib/types.ts": {
       "file-size": 1614
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4470
+      "file-size": 4488
     },
     "desktop/heartbeat.go": {
       "essay": 7

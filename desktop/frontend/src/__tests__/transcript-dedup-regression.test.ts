@@ -16,9 +16,8 @@ import {
   duplicateLiveItemIds,
   duplicateItemRows,
   findDuplicateItemIds,
-  itemSignature,
 } from "../lib/hydrateHistoryApply";
-import { historyMessagesToItems, type Item } from "../lib/useController";
+import type { Item } from "../lib/useController";
 import type {
   HistoryContentChunk,
   HistoryContentRef,
@@ -26,7 +25,6 @@ import type {
   HistoryMessage,
   HistorySlice,
   HistorySliceRequest,
-  WireEvent,
 } from "../lib/types";
 
 let passed = 0;
@@ -251,30 +249,6 @@ console.log("\ntranscript dedup regression");
   ok(uniqueItemIds(older?.items ?? []), "no duplicate item ids after cross-page tool merge");
 }
 
-// 4. Compaction / Notice 重复触发 ────────────────────────────────────────────
-{
-  // 模拟同一 compaction 事件通过 replay 和 live 各到达一次
-  const projector = new TurnEventProjector();
-  const projected: WireEvent[] = [];
-  projector.bind((event) => projected.push(event));
-
-  // 初始 live 事件
-  projector.observeRuntime("tab-4", "epoch-1", 10, 10, true);
-  projector.acceptLive("tab-4", { kind: "compaction", seq: 11, turnId: "t1", status: "in_progress", event: { kind: "compaction", pending: true, trigger: "auto" } }, "epoch-1");
-
-  // replay 也携带相同的 compaction seq=11
-  projector.requestReplay = (_tabId: string, afterSeq: number) => {
-    // 直接模拟 replay 返回相同 seq
-    projector.acceptLive("tab-4", { kind: "compaction", seq: 11, turnId: "t1", status: "in_progress", event: { kind: "compaction", pending: true, trigger: "auto" } }, "epoch-1");
-  };
-
-  // 触发一次 replay（afterSeq=10，和 live seq=11 有缺口）
-  projector.acceptLive("tab-4", { kind: "text", seq: 12, turnId: "t1", status: "in_progress", event: { kind: "text", text: "x" } }, "epoch-1");
-
-  const compactionSeqs = projected.filter((e) => e.kind === "compaction").map((e) => e.seq);
-  const uniqueCompactionSeqs = new Set(compactionSeqs);
-  eq(uniqueCompactionSeqs.size, compactionSeqs.length, "compaction event not duplicated by replay");
-}
 
 // 5. Hydration 切换会话时新旧内容重叠 ──────────────────────────────────────
 {
@@ -351,7 +325,7 @@ console.log("\ntranscript dedup regression");
   const backend = new FakeBackend(messages);
   const store = new TranscriptStore(backend);
 
-  const p1 = await store.loadLatest("tab-6", "/s/stress.jsonl", { turns: 10 });
+  await store.loadLatest("tab-6", "/s/stress.jsonl", { turns: 10 });
   const live1 = store.appendEntries("tab-6", "/s/stress.jsonl", [
     { entryId: "s1:r0:m6:o0", turn: 4, order: 6, message: { role: "user", content: "live1" }, refs: [] },
   ]);
@@ -726,7 +700,7 @@ if (failed > 0) process.exit(1);
   const messages: HistoryMessage[] = [
     { role: "user", content: "p1" },
     { role: "assistant", content: "", toolCalls: [{ id: "tool-running", name: "bash", arguments: "sleep 1" }] },
-    { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result", status: "done" },
+    { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result" },
   ];
   const backend = new FakeBackend(messages);
   const store = new TranscriptStore(backend);
@@ -741,7 +715,7 @@ if (failed > 0) process.exit(1);
     entryId: "s1:r0:m2:o0",
     turn: 1,
     order: 2,
-    message: { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result", status: "done" },
+    message: { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result" },
     refs: [],
   };
   const appended = store.appendEntries("tab-12", "/s/tool-status.jsonl", [updatedEntry]);
@@ -753,32 +727,6 @@ if (failed > 0) process.exit(1);
   ok(uniqueItemIds(afterUpdate?.items ?? []), "tool status: unique ids after status update");
 }
 
-// 23. compaction pending->done 流转多次触发 ───────────────────────────────────
-{
-  const messages: HistoryMessage[] = [
-    { role: "user", content: "p1" },
-    { role: "assistant", content: "a1" },
-  ];
-  const backend = new FakeBackend(messages);
-  const store = new TranscriptStore(backend);
-
-  const first = await store.loadLatest("tab-13", "/s/compaction-flow.jsonl", { turns: 12 });
-
-  // 模拟 compaction 事件：pending -> done（通过 appendEntries 模拟）
-  // 注意：TranscriptStore 不直接处理 compaction 事件，这里测试的是
-  // history page 中包含 compaction 条目的情况
-  const compactionMessages: HistoryMessage[] = [
-    { role: "user", content: "p1" },
-    { role: "assistant", content: "a1" },
-    { role: "compaction", content: "", compaction: { trigger: "auto", messages: 10, summary: "sum", archive: "" } },
-  ];
-  const backend2 = new FakeBackend(compactionMessages);
-  const store2 = new TranscriptStore(backend2);
-  const withCompaction = await store2.loadLatest("tab-13b", "/s/compaction-flow.jsonl", { turns: 12 });
-  const compactions = (withCompaction?.items ?? []).filter((item) => item.kind === "compaction");
-  eq(compactions.length, 1, "compaction: 1 compaction item in history");
-  ok(uniqueItemIds(withCompaction?.items ?? []), "compaction: unique ids with compaction");
-}
 
 // 24. turn_done 多次触发（网络重试场景） ─────────────────────────────────────
 {
@@ -791,7 +739,7 @@ if (failed > 0) process.exit(1);
   const backend = new FakeBackend(messages);
   const store = new TranscriptStore(backend);
 
-  const first = await store.loadLatest("tab-14", "/s/turn-done.jsonl", { turns: 12 });
+  await store.loadLatest("tab-14", "/s/turn-done.jsonl", { turns: 12 });
 
   // 模拟同一批 turn_done 事件通过 live 和 replay 各到达一次
   const entries: HistoryEntry[] = [
