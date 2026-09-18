@@ -13,6 +13,7 @@ import {
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
   revisionNotOlder,
+  replaceRemoveIds,
   shouldPreferResidentHistory,
 } from "../lib/hydrateHistoryApply";
 
@@ -299,6 +300,21 @@ const descriptor = (kind: string, id: string, status: string | undefined, length
 ok(safeTokenRe.test(descriptor("assistant", "h:entry-1234", "running", 0)), "row descriptor passes the recorder token rule");
 ok(safeTokenRe.test(descriptor("user", "u12", undefined, 42)), "status-less descriptor passes the recorder token rule");
 ok(safeTokenRe.test(descriptor("tool", "call_abc/def", "stopped", 7)), "descriptor scrubs non-token id characters");
+
+// Complete prepend removal: same-id live rows, active-turn rebuild prefix,
+// and page-covered terminal rows are all dropped — a page overlapping the
+// mounted rows must not leave same-toolCallId duplicates behind (observed:
+// 21 duplicates under an older page, plus a steer notice trailing the tools).
+{
+  const pageTools = [toolRow("call-a", "done"), toolRow("call-b", "done")];
+  const liveTools = [toolRow("call-a", "running"), toolRow("call-b", "running")];
+  const ids = replaceRemoveIds([...pageTools, { kind: "notice", id: "he:n1", text: "↪ hi" }], [...liveTools, { kind: "notice", id: "s7", text: "↪ hi" }], "turn-1", ["call-b"]);
+  ok(ids.includes("call-a") && ids.includes("call-b"), "same-id live tools are removed by the complete prepend removal");
+  ok(ids.includes("s7"), "a page-covered steer notice is removed from the live tail");
+  ok(ids.includes("call-a") && !ids.includes("call-x"), "unrelated live ids stay");
+  const prefixIds = replaceRemoveIds([], [{ kind: "assistant", id: "a:turn-1:0", text: "x" }], "turn-1", []);
+  ok(prefixIds.includes("a:turn-1:0"), "active-turn rebuild rows are covered by the prefix rule");
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
