@@ -495,5 +495,450 @@ console.log("\ntranscript dedup regression");
   ok(threw, "assertNoDuplicateItems throws on duplicate ids in test env");
 }
 
+// 15. 大规模去重压力测试 ──────────────────────────────────────────────────────
+{
+  const pageItems: Item[] = [];
+  const liveItems: Item[] = [];
+  const duplicateCount = 300;
+  for (let i = 0; i < 1000; i++) {
+    pageItems.push({ kind: "user" as const, id: `p${i}`, text: `page-${i}` });
+  }
+  for (let i = 0; i < 500; i++) {
+    if (i < duplicateCount) {
+      liveItems.push({ kind: "user" as const, id: `l${i}`, text: `page-${i}` });
+    } else {
+      liveItems.push({ kind: "user" as const, id: `l${i}`, text: `live-${i}` });
+    }
+  }
+
+  const dupes = findDuplicateItemIds(pageItems, liveItems);
+  eq(dupes.length, duplicateCount, "stress: finds exactly 300 duplicates in large dataset");
+  eq(new Set(dupes).size, duplicateCount, "stress: duplicate ids are unique");
+
+  const retained = liveItems.filter((item) => !dupes.includes(item.id));
+  eq(retained.length, 500 - duplicateCount, "stress: retains exactly 200 non-duplicates");
+  ok(uniqueItemIds(retained), "stress: retained items have unique ids");
+  ok(uniqueItemIds([...pageItems, ...retained]), "stress: merged page+retained have unique ids");
+}
+
+// 16. 极端边界条件 ────────────────────────────────────────────────────────────
+{
+  // 空列表
+  eq(findDuplicateItemIds([], []).length, 0, "edge: empty lists produce no duplicates");
+  eq(findDuplicateItemIds([], [{ kind: "user" as const, id: "x", text: "" }]).length, 0, "edge: empty a-list produces no duplicates");
+  eq(findDuplicateItemIds([{ kind: "user" as const, id: "x", text: "" }], []).length, 0, "edge: empty b-list produces no duplicates");
+
+  // 空字符串内容
+  const emptyA = [{ kind: "user" as const, id: "a1", text: "" }];
+  const emptyB = [{ kind: "user" as const, id: "b1", text: "" }];
+  eq(findDuplicateItemIds(emptyA, emptyB).length, 1, "edge: empty text is still a duplicate");
+
+  // 特殊字符内容
+  const specialA = [{ kind: "user" as const, id: "a1", text: "x\n\ty\t\"quote\" 'apos'" }];
+  const specialB = [{ kind: "user" as const, id: "b1", text: "x\n\ty\t\"quote\" 'apos'" }];
+  eq(findDuplicateItemIds(specialA, specialB).length, 1, "edge: special characters handled correctly");
+
+  // 超长内容
+  const longText = "a".repeat(10000);
+  const longA = [{ kind: "user" as const, id: "a1", text: longText }];
+  const longB = [{ kind: "user" as const, id: "b1", text: longText }];
+  eq(findDuplicateItemIds(longA, longB).length, 1, "edge: long text content handled correctly");
+}
+
+// 17. ID 稳定性验证（多次 rebase/prepend 后 ID 不变） ────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+    { role: "user", content: "p2" },
+    { role: "assistant", content: "a2" },
+    { role: "user", content: "p3" },
+    { role: "assistant", content: "a3" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  // 初始加载
+  const first = await store.loadLatest("tab-9", "/s/stability.jsonl", { turns: 10 });
+  const firstIds = itemIds(first?.items ?? []);
+
+  // 模拟 live tail 追加（不重复）
+  store.appendEntries("tab-9", "/s/stability.jsonl", [
+    { entryId: "s1:r0:m6:o0", turn: 4, order: 6, message: { role: "user", content: "live1" }, refs: [] },
+  ]);
+
+  // 模拟 older page prepend
+  await store.loadOlder("tab-9", "/s/stability.jsonl", { turns: 10 });
+
+  // 再次 loadLatest
+  const later = await store.loadLatest("tab-9", "/s/stability.jsonl", { turns: 10 });
+  const laterIds = itemIds(later?.items ?? []);
+
+  // 前 N 条（page 部分）的 ID 应该保持不变
+  const commonLength = Math.min(firstIds.length, laterIds.length);
+  let stableCount = 0;
+  for (let i = 0; i < commonLength; i++) {
+    if (firstIds[i] === laterIds[i]) stableCount++;
+  }
+  ok(stableCount === commonLength, "id stability: common prefix ids unchanged after operations");
+}
+
+// 18. 签名碰撞测试（相同 kind+text 但不同 reasoning） ───────────────────────
+{
+  const itemsA = [
+    { kind: "assistant" as const, id: "a1", text: "hello", reasoning: "reasoning-1" },
+    { kind: "assistant" as const, id: "a2", text: "hello", reasoning: "reasoning-2" },
+  ];
+  const itemsB = [
+    { kind: "assistant" as const, id: "b1", text: "hello", reasoning: "reasoning-1" },
+  ];
+
+  const dupes = findDuplicateItemIds(itemsA, itemsB);
+  eq(dupes.length, 1, "signature: different reasoning creates different signature");
+  eq(dupes[0], "b1", "signature: only exact match is duplicate");
+
+  // reasoning 为 undefined 的情况
+  const itemsC = [
+    { kind: "assistant" as const, id: "c1", text: "hello", reasoning: "" },
+  ];
+  const itemsD = [
+    { kind: "assistant" as const, id: "d1", text: "hello", reasoning: undefined },
+  ];
+  eq(findDuplicateItemIds(itemsC, itemsD).length, 1, "signature: empty string equals undefined reasoning");
+}
+
+// 19. 复杂工具链跨页错位 ──────────────────────────────────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "", toolCalls: [
+      { id: "call-1", name: "bash", arguments: "cmd1" },
+      { id: "call-2", name: "read_file", arguments: "f1" },
+    ]},
+    { role: "tool", toolCallId: "call-1", toolName: "bash", content: "result-1" },
+    { role: "tool", toolCallId: "call-2", toolName: "read_file", content: "result-2" },
+    { role: "user", content: "p2" },
+    { role: "assistant", content: "done" },
+  ];
+
+  // newest page 只有 call-2 的 result，older page 有 call-1 和 call-2
+  const backend = new FakeBackend(messages);
+  backend.HistorySliceForTab = async (_tabID, req) => {
+    if (!req.cursor) {
+      // newest page: only call-2 result (index 3)
+      return backend.slice(3, messages.length);
+    }
+    const decoded = JSON.parse(atob(req.cursor)) as { before?: number };
+    return backend.slice(0, Math.min(decoded.before ?? 0, 3));
+  };
+
+  const store = new TranscriptStore(backend);
+  const first = await store.loadLatest("tab-10", "/s/tool-chain.jsonl", { turns: 12 });
+  const firstTools = (first?.items ?? []).filter((item) => item.kind === "tool");
+  eq(firstTools.length, 1, "tool chain: newest page shows only available tool result");
+
+  const older = await store.loadOlder("tab-10", "/s/tool-chain.jsonl", { turns: 12 });
+  const olderTools = (older?.items ?? []).filter((item) => item.kind === "tool");
+  eq(olderTools.length, 2, "tool chain: older page adds missing tool call");
+  eq(olderTools[0]?.id, "call-1", "tool chain: first tool is call-1");
+  eq(olderTools[1]?.id, "call-2", "tool chain: second tool is call-2");
+  ok(uniqueItemIds(older?.items ?? []), "tool chain: no duplicate ids after merge");
+}
+
+// 20. 并发交替操作（loadLatest 和 loadOlder 交替） ──────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+    { role: "user", content: "p2" },
+    { role: "assistant", content: "a2" },
+    { role: "user", content: "p3" },
+    { role: "assistant", content: "a3" },
+    { role: "user", content: "p4" },
+    { role: "assistant", content: "a4" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  // 初始加载最新页（p3, a3, p4, a4）
+  const first = await store.loadLatest("tab-11", "/s/interleaved.jsonl", { turns: 10 });
+  ok(uniqueItemIds(first?.items ?? []), "interleaved: initial load has unique ids");
+
+  // 加载 older page（prepend: p1, a1, p2, a2）
+  const older = await store.loadOlder("tab-11", "/s/interleaved.jsonl", { turns: 10 });
+  ok(uniqueItemIds(older?.items ?? []), "interleaved: prepend produces unique ids");
+
+  // 再次 loadLatest（rebase: 新的最新页可能是 p3, a3, p4, a4 或其他）
+  const later = await store.loadLatest("tab-11", "/s/interleaved.jsonl", { turns: 10 });
+  ok(uniqueItemIds(later?.items ?? []), "interleaved: rebase after prepend produces unique ids");
+
+  // 验证：无论如何交替，最终状态不应有重复内容签名（kind+text）
+  const finalItems = later?.items ?? [];
+  const signatures = new Set<string>();
+  let dupes = 0;
+  for (const item of finalItems) {
+    const sig = `${item.kind}:${(item as any).text ?? (item as any).summary ?? ""}`;
+    if (signatures.has(sig)) dupes++;
+    else signatures.add(sig);
+  }
+  eq(dupes, 0, "interleaved: no duplicate content signatures after alternating loads");
+
+  // 额外验证：所有 item id 都是字符串且非空
+  const allIds = itemIds(finalItems);
+  ok(allIds.every((id) => typeof id === "string" && id.length > 0), "interleaved: all item ids are non-empty strings");
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+if (failed > 0) process.exit(1);
+
+// 21. 多 tab 并发操作同一会话 ────────────────────────────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  // 两个 tab 同时加载同一会话
+  const tab1 = await store.loadLatest("tab-a", "/s/multi-tab.jsonl", { turns: 10 });
+  const tab2 = await store.loadLatest("tab-b", "/s/multi-tab.jsonl", { turns: 10 });
+
+  eq(itemIds(tab1?.items ?? []).length, itemIds(tab2?.items ?? []).length, "multi-tab: same length");
+  eq(JSON.stringify(itemIds(tab1?.items ?? [])), JSON.stringify(itemIds(tab2?.items ?? [])), "multi-tab: same ids");
+  ok(uniqueItemIds(tab1?.items ?? []), "multi-tab: tab-1 unique ids");
+  ok(uniqueItemIds(tab2?.items ?? []), "multi-tab: tab-2 unique ids");
+
+  // 一个 tab 追加 live，另一个 tab 不应受影响
+  store.appendEntries("tab-a", "/s/multi-tab.jsonl", [
+    { entryId: "s1:r0:m2:o0", turn: 2, order: 2, message: { role: "user", content: "live-a" }, refs: [] },
+  ]);
+  const tab1After = store.peek("tab-a", "/s/multi-tab.jsonl");
+  const tab2After = store.peek("tab-b", "/s/multi-tab.jsonl");
+
+  eq((tab1After?.items ?? []).length, (tab2?.items ?? []).length + 1, "multi-tab: only active tab updated");
+  ok(uniqueItemIds(tab1After?.items ?? []), "multi-tab: tab-1 still unique after live");
+  ok(uniqueItemIds(tab2After?.items ?? []), "multi-tab: tab-2 still unique");
+}
+
+// 22. tool status 状态流转（running -> done/error 多次触发） ─────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "", toolCalls: [{ id: "tool-running", name: "bash", arguments: "sleep 1" }] },
+    { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result", status: "done" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  const first = await store.loadLatest("tab-12", "/s/tool-status.jsonl", { turns: 12 });
+  const firstTools = (first?.items ?? []).filter((item) => item.kind === "tool");
+  eq(firstTools.length, 1, "tool status: initial load has 1 tool");
+  eq(firstTools[0]?.status, "done", "tool status: initial status is done");
+
+  // 模拟 tool 状态从 running -> done 的更新
+  const updatedEntry: HistoryEntry = {
+    entryId: "s1:r0:m2:o0",
+    turn: 1,
+    order: 2,
+    message: { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result", status: "done" },
+    refs: [],
+  };
+  const appended = store.appendEntries("tab-12", "/s/tool-status.jsonl", [updatedEntry]);
+  eq(appended.length, 0, "tool status: re-appending same entry produces no new items");
+
+  const afterUpdate = store.peek("tab-12", "/s/tool-status.jsonl");
+  const afterTools = (afterUpdate?.items ?? []).filter((item) => item.kind === "tool");
+  eq(afterTools.length, 1, "tool status: still 1 tool after update");
+  ok(uniqueItemIds(afterUpdate?.items ?? []), "tool status: unique ids after status update");
+}
+
+// 23. compaction pending->done 流转多次触发 ───────────────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  const first = await store.loadLatest("tab-13", "/s/compaction-flow.jsonl", { turns: 12 });
+
+  // 模拟 compaction 事件：pending -> done（通过 appendEntries 模拟）
+  // 注意：TranscriptStore 不直接处理 compaction 事件，这里测试的是
+  // history page 中包含 compaction 条目的情况
+  const compactionMessages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+    { role: "compaction", content: "", compaction: { trigger: "auto", messages: 10, summary: "sum", archive: "" } },
+  ];
+  const backend2 = new FakeBackend(compactionMessages);
+  const store2 = new TranscriptStore(backend2);
+  const withCompaction = await store2.loadLatest("tab-13b", "/s/compaction-flow.jsonl", { turns: 12 });
+  const compactions = (withCompaction?.items ?? []).filter((item) => item.kind === "compaction");
+  eq(compactions.length, 1, "compaction: 1 compaction item in history");
+  ok(uniqueItemIds(withCompaction?.items ?? []), "compaction: unique ids with compaction");
+}
+
+// 24. turn_done 多次触发（网络重试场景） ─────────────────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+    { role: "user", content: "p2" },
+    { role: "assistant", content: "a2" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  const first = await store.loadLatest("tab-14", "/s/turn-done.jsonl", { turns: 12 });
+
+  // 模拟同一批 turn_done 事件通过 live 和 replay 各到达一次
+  const entries: HistoryEntry[] = [
+    { entryId: "s1:r0:m0:o0", turn: 1, order: 0, message: { role: "user", content: "p1" }, refs: [] },
+    { entryId: "s1:r0:m1:o0", turn: 1, order: 1, message: { role: "assistant", content: "a1" }, refs: [] },
+  ];
+
+  // 第一次追加（live）
+  const live1 = store.appendEntries("tab-14", "/s/turn-done.jsonl", entries);
+  // 第二次追加（replay，相同 entryId）
+  const live2 = store.appendEntries("tab-14", "/s/turn-done.jsonl", entries);
+
+  eq(live1.length, 0, "turn-done: first duplicate append produces no items");
+  eq(live2.length, 0, "turn-done: second duplicate append produces no items");
+
+  const after = store.peek("tab-14", "/s/turn-done.jsonl");
+  const userCount = countByKind(after?.items ?? [], "user");
+  const assistantCount = countByKind(after?.items ?? [], "assistant");
+  eq(userCount, 2, "turn-done: user count unchanged after duplicate turn-done");
+  eq(assistantCount, 2, "turn-done: assistant count unchanged after duplicate turn-done");
+  ok(uniqueItemIds(after?.items ?? []), "turn-done: unique ids after duplicate events");
+}
+
+// 25. 相同文本不同 ID 的 assistant 消息（签名碰撞边界） ─────────────────────
+{
+  const itemsA = [
+    { kind: "assistant" as const, id: "a1", text: "same text", reasoning: "reasoning-1" },
+    { kind: "assistant" as const, id: "a2", text: "same text", reasoning: "reasoning-2" },
+  ];
+  const itemsB = [
+    { kind: "assistant" as const, id: "b1", text: "same text", reasoning: "reasoning-1" },
+  ];
+
+  const dupes = findDuplicateItemIds(itemsA, itemsB);
+  eq(dupes.length, 1, "collision: only exact reasoning match is duplicate");
+  eq(dupes[0], "b1", "collision: duplicate id is b1");
+
+  // 验证：即使文本相同，只要 reasoning 不同就不是重复
+  // itemsA 有 2 条 reasoning 不同的 assistant，itemsB 只有 1 条匹配其中一条
+  // dupes.length 应该是 1（只有 b1 匹配），itemsB.length 也是 1
+  // 所以不是所有 itemsB 都是重复的（这里恰好都是，因为只有一条）
+  // 改为验证：如果 itemsB 有两条，其中一条匹配，另一条不匹配
+  const itemsA2 = [
+    { kind: "assistant" as const, id: "a1", text: "same text", reasoning: "reasoning-1" },
+    { kind: "assistant" as const, id: "a2", text: "same text", reasoning: "reasoning-2" },
+  ];
+  const itemsB2 = [
+    { kind: "assistant" as const, id: "b1", text: "same text", reasoning: "reasoning-1" },
+    { kind: "assistant" as const, id: "b2", text: "same text", reasoning: "reasoning-3" },
+  ];
+  const dupes2 = findDuplicateItemIds(itemsA2, itemsB2);
+  eq(dupes2.length, 1, "collision: only 1 of 2 items B is duplicate");
+  ok(dupes2.length < itemsB2.length, "collision: not all items B are duplicates");
+}
+
+// 26. 极端嵌套工具调用 ──────────────────────────────────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "", toolCalls: [
+      { id: "call-outer", name: "bash", arguments: "echo outer" },
+      { id: "call-inner", name: "bash", arguments: "echo inner" },
+    ]},
+    { role: "tool", toolCallId: "call-outer", toolName: "bash", content: "outer-result" },
+    { role: "tool", toolCallId: "call-inner", toolName: "bash", content: "inner-result" },
+    { role: "assistant", content: "done" },
+  ];
+
+  // newest page 只有 inner-result，older page 有 outer 和 inner
+  const backend = new FakeBackend(messages);
+  backend.HistorySliceForTab = async (_tabID, req) => {
+    if (!req.cursor) {
+      return backend.slice(3, messages.length); // only inner-result
+    }
+    const decoded = JSON.parse(atob(req.cursor)) as { before?: number };
+    return backend.slice(0, Math.min(decoded.before ?? 0, 3));
+  };
+
+  const store = new TranscriptStore(backend);
+  const first = await store.loadLatest("tab-15", "/s/nested-tools.jsonl", { turns: 12 });
+  const firstTools = (first?.items ?? []).filter((item) => item.kind === "tool");
+  eq(firstTools.length, 1, "nested tools: newest page shows 1 tool");
+  eq(firstTools[0]?.id, "call-inner", "nested tools: tool is call-inner");
+
+  const older = await store.loadOlder("tab-15", "/s/nested-tools.jsonl", { turns: 12 });
+  const olderTools = (older?.items ?? []).filter((item) => item.kind === "tool");
+  eq(olderTools.length, 2, "nested tools: older page adds outer tool");
+  ok(uniqueItemIds(older?.items ?? []), "nested tools: unique ids after merge");
+}
+
+// 27. rewind 操作后的状态一致性 ──────────────────────────────────────────────
+{
+  const messages: HistoryMessage[] = [
+    { role: "user", content: "p1" },
+    { role: "assistant", content: "a1" },
+    { role: "user", content: "p2" },
+    { role: "assistant", content: "a2" },
+    { role: "user", content: "p3" },
+    { role: "assistant", content: "a3" },
+  ];
+  const backend = new FakeBackend(messages);
+  const store = new TranscriptStore(backend);
+
+  // 加载全部历史
+  const full = await store.loadLatest("tab-16", "/s/rewind.jsonl", { turns: 10 });
+  const fullIds = itemIds(full?.items ?? []);
+  ok(uniqueItemIds(full?.items ?? []), "rewind: initial full load unique");
+
+  // 模拟 rewind：加载更早的页面（prepend 更早的内容）
+  // 这里通过 loadOlder 模拟，但 FakeBackend 的 before 逻辑限制，
+  // 我们改为直接测试：如果重新 loadLatest 相同数据，ID 应该稳定
+  const reloaded = await store.loadLatest("tab-16", "/s/rewind.jsonl", { turns: 10 });
+  const reloadedIds = itemIds(reloaded?.items ?? []);
+
+  eq(fullIds.length, reloadedIds.length, "rewind: same item count after reload");
+  let sameCount = 0;
+  for (let i = 0; i < fullIds.length; i++) {
+    if (fullIds[i] === reloadedIds[i]) sameCount++;
+  }
+  ok(sameCount === fullIds.length, "rewind: all ids stable after reload");
+}
+
+// 28. 多个 extension 同时发布（surfaceKey 冲突） ─────────────────────────────
+{
+  // 直接测试 findDuplicateItemIds 对 extension items 的行为
+  // extension items 有 surfaceKey、pluginId、generation 等字段
+  const extItemsA = [
+    { kind: "extension" as const, id: "x1", surfaceKey: "ext-1", pluginId: "p1", generation: 1 },
+    { kind: "extension" as const, id: "x2", surfaceKey: "ext-1", pluginId: "p1", generation: 2 },
+    { kind: "extension" as const, id: "x3", surfaceKey: "ext-2", pluginId: "p2", generation: 1 },
+  ];
+  const extItemsB = [
+    { kind: "extension" as const, id: "y1", surfaceKey: "ext-1", pluginId: "p1", generation: 2 },
+    { kind: "extension" as const, id: "y2", surfaceKey: "ext-3", pluginId: "p3", generation: 1 },
+  ];
+
+  const dupes = findDuplicateItemIds(extItemsA, extItemsB);
+  eq(dupes.length, 1, "extensions: 1 duplicate extension found");
+  eq(dupes[0], "y1", "extensions: duplicate is the matching surfaceKey+generation");
+
+  // 验证：不同 generation 的同一 surfaceKey 不是重复
+  const extItemsC = [
+    { kind: "extension" as const, id: "z1", surfaceKey: "ext-1", pluginId: "p1", generation: 3 },
+  ];
+  const dupes2 = findDuplicateItemIds(extItemsA, extItemsC);
+  eq(dupes2.length, 0, "extensions: different generation is not duplicate");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
