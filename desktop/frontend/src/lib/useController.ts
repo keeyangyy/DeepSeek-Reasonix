@@ -2627,31 +2627,46 @@ export function useController() {
     if (prev !== next) {
       states.set(tabId, next);
       // Row-level diagnostics (durable, active-only): after page actions and
-      // turn ends, snapshot the tail rows and scan for duplicate content. The
-      // tail shows switch-in order/status anomalies; the duplicate scan is the
-      // long-term net for the low-frequency double-render reports.
-      if (
-        frontendDiagnosticsActive() &&
-        (action.type === "history_prepend" || action.type === "history_replace" ||
-          action.type === "history_rebase" || (action.type === "event" && action.e.kind === "turn_done"))
-      ) {
-        const describe = (it: SignatureItem) => {
-          const status = "status" in it && typeof it.status === "string" ? `:${it.status}` : "";
-          const label = "text" in it && typeof it.text === "string" ? it.text.slice(0, 12)
-            : ("name" in it && typeof it.name === "string" ? it.name : "");
-          return `${it.kind}:${it.id}${status}:${label}`;
-        };
-        recordFrontendDiagnostic("history", "items.tail", {
-          reason: action.type,
-          state: `cur=${next.currentAssistant ?? "-"} >> ${next.items.slice(-6).map(describe).join(" | ")}`,
-        });
-        const dupes = duplicateItemRows(next.items);
-        if (dupes.length > 0) {
-          recordFrontendDiagnostic("history", "items.dupes", {
+      // turn edges, snapshot the tail rows, record the rows an action removed
+      // (an anomaly that "disappears on refresh" leaves its copies here), and
+      // scan for duplicate content — the long-term net for double-render
+      // reports. Values must stay whitespace-free: the recorder drops fields
+      // whose value contains whitespace (first probe round recorded all-empty
+      // tails for exactly that reason).
+      if (frontendDiagnosticsActive()) {
+        const pageAction = action.type === "history_prepend" || action.type === "history_replace" ||
+          action.type === "history_rebase";
+        const turnEdge = action.type === "event" && (action.e.kind === "turn_done" || action.e.kind === "turn_started");
+        if (pageAction || turnEdge) {
+          const describe = (it: SignatureItem) => {
+            const status = "status" in it && typeof it.status === "string" ? `:${it.status}` : "";
+            const raw = "text" in it && typeof it.text === "string" ? it.text
+              : ("name" in it && typeof it.name === "string" ? it.name : "");
+            return `${it.kind}:${it.id}${status}:${raw.slice(0, 10).replace(/\s+/g, "_")}`;
+          };
+          recordFrontendDiagnostic("history", "items.tail", {
             reason: action.type,
-            total: dupes.length,
-            state: dupes.slice(0, 6).map(describe).join(" | "),
+            state: `cur=${next.currentAssistant ?? "-"}>${next.items.slice(-6).map(describe).join("|")}`,
           });
+          if (pageAction) {
+            const nextIds = new Set(next.items.map((item) => item.id));
+            const removed = prev.items.filter((item) => !nextIds.has(item.id));
+            if (removed.length > 0) {
+              recordFrontendDiagnostic("history", "items.removed", {
+                reason: action.type,
+                total: removed.length,
+                state: removed.slice(0, 6).map(describe).join("|"),
+              });
+            }
+          }
+          const dupes = duplicateItemRows(next.items);
+          if (dupes.length > 0) {
+            recordFrontendDiagnostic("history", "items.dupes", {
+              reason: action.type,
+              total: dupes.length,
+              state: dupes.slice(0, 6).map(describe).join("|"),
+            });
+          }
         }
       }
       // A tab with a live or in-flight turn is pinned out of transcript-store
