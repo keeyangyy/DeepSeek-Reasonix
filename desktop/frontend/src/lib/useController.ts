@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, findDuplicateItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2318,7 +2318,7 @@ export function reducer(s: State, a: Action): State {
     case "history_rebase": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       const liveTail = s.items.slice(Math.min(s.historyPrefixCount, s.items.length));
-      const duplicates = new Set(duplicateLiveItemIds(a.items, liveTail));
+      const duplicates = new Set(findDuplicateItemIds(a.items, liveTail));
       const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
       return {
         ...s,
@@ -2360,13 +2360,21 @@ export function reducer(s: State, a: Action): State {
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
+      // Defensive dedup: the page's removeIds cover tool merges, but a live
+      // tail can still carry arbitrary duplicates (e.g. replay races). Drop
+      // any live items whose signature already appears in the prepended page.
+      const liveTail = rest.slice(retainedPrefix.length);
+      const extraDuplicates = new Set(findDuplicateItemIds(a.items, liveTail));
+      const dedupedRest = extraDuplicates.size > 0
+        ? rest.filter((item) => !extraDuplicates.has(item.id))
+        : rest;
       // Dropped rows may include the row the live buffer is streaming into
       // (page-owns-the-turn handoff); a dangling pointer would make the next
       // delta recreate a same-id row.
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       return {
         ...s,
-        items: compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...rest]),
+        items: compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...dedupedRest]),
         historyPrefixCount: a.items.length + retainedPrefix.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,

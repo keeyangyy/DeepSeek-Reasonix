@@ -14,6 +14,7 @@ import { TurnEventProjector } from "../lib/turnEventProjection";
 import {
   duplicateLiveItemIds,
   duplicateItemRows,
+  findDuplicateItemIds,
   itemSignature,
 } from "../lib/hydrateHistoryApply";
 import { historyMessagesToItems, type Item } from "../lib/useController";
@@ -405,6 +406,66 @@ console.log("\ntranscript dedup regression");
 
   eq(JSON.stringify(firstIds), JSON.stringify(secondIds), "reload with same fingerprint preserves item ids");
   ok(uniqueItemIds(second?.items ?? []), "reload does not introduce duplicate ids");
+}
+
+// 11. 任意位置 multiset 去重 ─────────────────────────────────────────────────
+{
+  // page 和 live 的内容乱序，findDuplicateItemIds 应识别所有重复
+  const pageItems = [
+    { kind: "user" as const, id: "p1", text: "a" },
+    { kind: "assistant" as const, id: "p2", text: "b", reasoning: "" },
+    { kind: "user" as const, id: "p3", text: "c" },
+  ];
+  const liveItems = [
+    { kind: "user" as const, id: "l1", text: "c" },      // duplicate of p3
+    { kind: "assistant" as const, id: "l2", text: "x", reasoning: "" },
+    { kind: "user" as const, id: "l3", text: "a" },      // duplicate of p1
+    { kind: "assistant" as const, id: "l4", text: "b", reasoning: "" }, // duplicate of p2
+  ];
+
+  const dupes = findDuplicateItemIds(pageItems, liveItems);
+  eq(dupes.length, 3, "findDuplicateItemIds detects all 3 duplicates regardless of order");
+  eq(dupes.includes("l1"), true, "duplicate l1 detected");
+  eq(dupes.includes("l3"), true, "duplicate l3 detected");
+  eq(dupes.includes("l4"), true, "duplicate l4 detected");
+}
+
+// 12. history_rebase defensive dedup ─────────────────────────────────────────
+{
+  // 模拟 useController history_rebase：page 和 live tail 有乱序重复
+  const pageItems = [
+    { kind: "user" as const, id: "h1", text: "question" },
+    { kind: "assistant" as const, id: "h2", text: "answer", reasoning: "" },
+  ];
+  const liveTail = [
+    { kind: "assistant" as const, id: "l1", text: "answer", reasoning: "" }, // duplicate of h2
+    { kind: "user" as const, id: "l2", text: "new question" },
+  ];
+
+  const duplicates = new Set(findDuplicateItemIds(pageItems, liveTail));
+  const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
+  eq(retainedTail.length, 1, "history_rebase drops only the duplicate live item");
+  eq(retainedTail[0]?.id, "l2", "history_rebase keeps the non-duplicate live item");
+}
+
+// 13. history_prepend defensive dedup ────────────────────────────────────────
+{
+  // 模拟 useController history_prepend：page 的 removeIds 没覆盖的 live duplicate
+  const pageItems = [
+    { kind: "user" as const, id: "p1", text: "old" },
+    { kind: "assistant" as const, id: "p2", text: "mid", reasoning: "" },
+  ];
+  const liveTail = [
+    { kind: "user" as const, id: "l1", text: "dup" },
+    { kind: "assistant" as const, id: "l2", text: "mid", reasoning: "" }, // duplicate of p2 (not in removeIds)
+    { kind: "user" as const, id: "l3", text: "new" },
+  ];
+
+  const extraDuplicates = new Set(findDuplicateItemIds(pageItems, liveTail));
+  const dedupedRest = liveTail.filter((item) => !extraDuplicates.has(item.id));
+  eq(dedupedRest.length, 2, "history_prepend defensive dedup removes the missed duplicate");
+  eq(dedupedRest.find((i) => i.id === "l1")?.text, "dup", "history_prepend keeps non-duplicate items");
+  eq(dedupedRest.find((i) => i.id === "l3")?.text, "new", "history_prepend keeps the tail");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
