@@ -271,7 +271,7 @@ const assistantRow = (id: string, text: string) =>
     historyRevision: 5,
     items: [assistantRow("a:t1:0", "streamed so far"), toolRow("call-1", "running")],
     currentAssistant: "a:t1:0",
-    live: { id: "a:t1:0", text: "streamed so far", reasoning: "" },
+    live: { id: "a:t1:0", text: "streamed so far", reasoning: "", reasoningComplete: false },
   };
   const next = reducer(base, {
     type: "history_prepend",
