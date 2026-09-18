@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102194,
+    "file-size": 102256,
     "function-size": 8267,
     "layering": 1,
     "marker": 0,
@@ -139,6 +139,9 @@
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213
+    },
+    "desktop/frontend/src/lib/transcriptRows.ts": {
+      "file-size": 14
     },
     "desktop/frontend/src/lib/transcriptStore.ts": {
       "file-size": 264
@@ -656,7 +659,7 @@
     },
     "internal/checkpoint/checkpoint.go": {
       "essay": 5,
-      "file-size": 174
+      "file-size": 222
     },
     "internal/checkpoint/transaction.go": {
       "complexity": 32,
