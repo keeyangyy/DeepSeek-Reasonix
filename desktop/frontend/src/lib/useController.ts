@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, pageCoveredLiveItemIds, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -1850,8 +1850,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     }
     case "steer":
       if (isHostRecoveryGuidance(e.text ?? "")) return s;
-      // Notice rows have no id-based merge: a re-projected steer must not append
-      // a second copy at the transcript bottom (stale re-fire of the gap replay).
+      // Notice rows have no id merge: a re-projected steer must not append a second copy.
       if (e.itemId !== undefined && s.items.some((item) => item.kind === "notice" && item.inboxItemId === e.itemId)) return s;
       return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: `s${s.seq}`, level: "info", text: `${STEER_NOTICE_PREFIX}${e.text ?? ""}`, inboxItemId: e.itemId }] };
     case "approval_request": {
@@ -2958,6 +2957,8 @@ export function useController() {
                 for (const item of liveItems) {
                   if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
                 }
+                // Frontend-local rows (uN/sN) never match page ids — drop page-covered ones.
+                removeIds.push(...pageCoveredLiveItemIds(projection.items, liveItems));
               }
               return { type: "history_prepend", ...page, removeIds };
             })()
@@ -3204,9 +3205,8 @@ export function useController() {
         return false;
       }
       if (result.kind === "reload") {
-        // Stale cursor: the store reloaded the latest page — replace, and let
-        // the page supersede an in-flight full-turn replay (as 2965/3137 do),
-        // else the rebuild co-mounts next to the page's copy of the turn.
+        // Stale cursor: the store reloaded the latest page — replace, and let the
+        // page supersede an in-flight full-turn replay (as 2965/3137 do).
         recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-enter" });
         dispatchTo(targetTabId, {
           type: "history_replace",

@@ -6,6 +6,7 @@ import {
   duplicateLiveItemIds,
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
+  pageCoveredLiveItemIds,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
   revisionNotOlder,
@@ -193,6 +194,45 @@ ok(revisionNotOlder(1501, 1502) === true, "forward revision drift is accepted (a
 ok(revisionNotOlder(1501, 1501) === true, "equal revisions are accepted");
 ok(revisionNotOlder(1502, 1501) === false, "a revision regression is rejected (rebind/rewind)");
 ok(revisionNotOlder(1501, undefined) === true, "an unknown actual revision cannot prove a regression");
+
+// Page-covered terminal rows: frontend-local ids (uN/sN) never match page ids,
+// so the id-based removal leaves the optimistic submit / steer notice mounted
+// next to the page's own copy of the same message.
+const pageUser = (id: string, text: string) => ({ kind: "user", id, text });
+const liveUser = (id: string, text: string) => ({ kind: "user", id, text });
+const pageNotice = (id: string, text: string) => ({ kind: "notice", id, text });
+const liveNotice = (id: string, text: string) => ({ kind: "notice", id, text });
+
+ok(
+  pageCoveredLiveItemIds([pageUser("h:7", "inserted mid-turn")], [liveUser("u4", "inserted mid-turn")]).join() === "u4",
+  "a page-owned optimistic submit is dropped with its frontend-local id",
+);
+ok(
+  pageCoveredLiveItemIds([pageNotice("h:9", "↪ steer text")], [liveNotice("s3", "↪ steer text")]).join() === "s3",
+  "a page-owned steer notice is dropped with its frontend-local id",
+);
+ok(
+  pageCoveredLiveItemIds(
+    [pageUser("h:7", "same text")],
+    [liveUser("u4", "same text"), liveUser("u5", "same text")],
+  ).join() === "u4",
+  "count based: a second identical submit keeps its not-yet-persisted row",
+);
+ok(
+  pageCoveredLiveItemIds(
+    [pageUser("h:7", "same text"), pageUser("h:9", "same text")],
+    [liveUser("u4", "same text"), liveUser("u5", "same text")],
+  ).join() === "u4,u5",
+  "two page rows cover both live copies",
+);
+ok(
+  pageCoveredLiveItemIds([pageUser("h:7", "persisted")], [liveUser("u4", "not persisted yet")]).length === 0,
+  "content the page does not carry keeps its frontend row",
+);
+ok(
+  pageCoveredLiveItemIds([{ kind: "assistant", id: "h:3", text: "half" }], [{ kind: "assistant", id: "a:t1:0", text: "half" }]).length === 0,
+  "assistant rows are owned by the turn-level rules, not this cleanup",
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

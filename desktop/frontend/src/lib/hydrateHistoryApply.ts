@@ -308,6 +308,34 @@ export function pageOverlapsLiveContent(
   return false;
 }
 
+// Terminal frontend rows (optimistic submits, steer notices) whose content the
+// page already carries. These have frontend-local ids (uN/sN) that never match
+// the page's ids, so the id-based removal leaves them behind and the page row
+// plus the frontend row render the same message twice (observed: a mid-turn
+// insert duplicated at the bottom until a tab switch rebuilt the state). Count
+// based: repeated identical texts only consume as many live rows as the page
+// actually carries, so a second, not-yet-persisted submit keeps its row.
+export function pageCoveredLiveItemIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): string[] {
+  const covered = new Map<string, number>();
+  for (const item of pageItems) {
+    const signature = itemSignature(item);
+    covered.set(signature, (covered.get(signature) ?? 0) + 1);
+  }
+  const out: string[] = [];
+  for (const item of liveItems) {
+    if (item.kind !== "user" && item.kind !== "notice") continue;
+    const signature = itemSignature(item);
+    const remaining = covered.get(signature) ?? 0;
+    if (remaining <= 0) continue;
+    covered.set(signature, remaining - 1);
+    out.push(item.id);
+  }
+  return out;
+}
+
 export function sameSessionPlaceholderItems<T>(
   target: SessionHydrateIdentity | undefined,
   prev: { meta?: SessionHydrateIdentity; items?: T[] } | undefined,
