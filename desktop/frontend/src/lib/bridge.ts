@@ -427,6 +427,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   ToolResultForTab(tabID: string, toolID: string): Promise<{ args: string; output: string; execution?: import("./types").WireShellExecution; mcpApp?: import("./types").MCPAppPresentation } | null>;
   Meta(): Promise<Meta>;
   MetaForTab(tabID: string): Promise<Meta>; DismissTodoBatchForTab(tabID: string, batchKey: string): Promise<void>;
+  LatestCompactionForTab(tabID: string): Promise<{ inProgress?: boolean; trigger?: string; messages?: number; summary?: string } | null>;
   Commands(): Promise<CommandInfo[]>;
   Capabilities(): Promise<CapabilitiesView>;
   MCPServers(): Promise<ServerView[]>;
@@ -2113,6 +2114,11 @@ function makeMockApp(): AppBindings {
   // generators build ~1MiB of mock content and must stay out of the eager
   // bundle (initial-chunk gzip budget). See bridgeBenchFixtures.ts.
   const benchFixturesPromise = benchMock ? import("./bridgeBenchFixtures") : null;
+  // TEMP: compact-repro 复现平台注入点（测后还原）。仅 bench mock。
+  if (benchMock && typeof window !== "undefined") {
+    (window as unknown as { __emitMockEvent?: (e: WireEvent) => void; __compactTrace?: string[] }).__emitMockEvent = (e: WireEvent) => emit(e);
+    (window as unknown as { __compactTrace?: string[] }).__compactTrace = [];
+  }
 	  const mockTopicHistory = (topicId: string): HistoryMessage[] => {
 	    switch (topicId) {
       case "topic_product":
@@ -3618,6 +3624,7 @@ function makeMockApp(): AppBindings {
             goalStatus: active?.goalStatus ?? (active?.goal ? "running" : "stopped"),
           };
         }, async DismissTodoBatchForTab() {},
+        async LatestCompactionForTab() { return null; },
         async MetaForTab(tabID) {
           const tab = mockTabs.find((item) => item.id === tabID) ?? mockTabs.find((item) => item.active) ?? mockTabs[0];
           const toolApprovalMode = normalizeToolApprovalMode(tab?.toolApprovalMode, tab ? normalizeMode(tab.mode) : "normal", settings.autoApproveTools);

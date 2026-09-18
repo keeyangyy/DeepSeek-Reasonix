@@ -48,7 +48,7 @@ export const NO_LIVE: TranscriptLiveFlags = { hasAnswerText: false, hasReasoning
 
 export type TurnDisplayParts = {
   processItems: Item[];
-  outsideItems: Array<NoticeItem | AssistantItem | ExtensionItem>;
+  outsideItems: Array<NoticeItem | AssistantItem | ExtensionItem | CompactionItem>;
 };
 
 function assistantHasVisibleAnswer(item: AssistantItem, live: TranscriptLiveFlags): boolean {
@@ -103,6 +103,15 @@ export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveF
       // Extension cards carry their own actions and progress — keep them
       // visible like warnings instead of folding them into the process
       // collapse, but never treat them as a conversational boundary.
+      current.outsideItems.push(item);
+      continue;
+    }
+    if (item.kind === "compaction") {
+      // Compaction is a lifecycle notification, not turn-bound process
+      // detail: render it like a warning so a manual /compact that lands
+      // between turns is visible instead of hiding inside a collapsed
+      // fold (idle turns fold closed and its rows are never mounted).
+      // Never treat it as a conversational boundary either.
       current.outsideItems.push(item);
       continue;
     }
@@ -716,6 +725,11 @@ export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: 
       for (const item of segment.outsideItems) {
         if (item.kind === "extension") {
           modelRows.push({ kind: "extension", key: `x:${item.id}`, item, layoutVariant: "text-flow" });
+        } else if (item.kind === "compaction") {
+          // Compaction rows live outside the process fold so a compaction that
+          // lands between turns stays visible (the fold would otherwise be
+          // collapsed and its body rows never mounted).
+          modelRows.push({ kind: "compaction", key: `c:${item.id}`, item, layoutVariant: "static" });
         } else if (item.kind === "notice") {
           modelRows.push({ kind: "notice", key: `n:${item.id}`, item, layoutVariant: "text-flow" });
         } else {

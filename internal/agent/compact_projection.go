@@ -2,15 +2,72 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
+	"reasonix/internal/store"
 	"reasonix/internal/tool"
 )
+
+// writeCompactionSidecar manages the session compaction sidecar
+// (<session>.ckpt/): a "compacting.json" in-progress marker and the finished
+// "latest-compaction.json" record. It lives in the agent so a compaction that
+// finishes after its tab was released (switch-away mid-run) still persists —
+// the controller's own sessionPath and executor can be cleared by then.
+func writeCompactionSidecar(sessionPath, kind string, rec *CompactionRecord) {
+	if sessionPath == "" {
+		return
+	}
+	dir := store.SessionCheckpointDir(sessionPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	switch kind {
+	case "marker":
+		b, _ := json.Marshal(map[string]string{"startedAt": strconv.FormatInt(time.Now().UnixMilli(), 10)})
+		_ = os.WriteFile(filepath.Join(dir, "compacting.json"), b, 0o644)
+	case "record":
+		if rec == nil {
+			return
+		}
+		b, err := json.Marshal(rec)
+		if err != nil {
+			return
+		}
+		_ = os.WriteFile(filepath.Join(dir, "latest-compaction.json"), b, 0o644)
+		_ = os.Remove(filepath.Join(dir, "compacting.json"))
+	case "clear":
+		_ = os.Remove(filepath.Join(dir, "compacting.json"))
+	}
+}
+
+// CompactionRecord is the persisted summary of the most recent compaction.
+// It lives in the sidecar so a session re-opened after its tab was released
+// (switch-away mid-compact) can still render the compression result.
+type CompactionRecord struct {
+	Trigger  string `json:"trigger,omitempty"`
+	Messages int    `json:"messages"`
+	Summary  string `json:"summary"`
+}
+
+// setLastCompaction records the receipt (atomic store) for sidecar persistence.
+func (a *Agent) setLastCompaction(rec *CompactionRecord) {
+	a.lastCompaction.Store(rec)
+}
+
+// LastCompaction returns the most recent compaction record, if any.
+func (a *Agent) LastCompaction() *CompactionRecord {
+	return a.lastCompaction.Load()
+}
 
 const (
 	maxCompressAnchorBytes = 512
@@ -188,6 +245,17 @@ func (a *Agent) compressVisibleRange(
 		inputMode = SummaryInputCachePrefix
 	}
 
+	// Sidecar in-progress marker (same contract as /compact): capture the
+	// session path up front so a tab released mid-run still lands the record.
+	sidecarPath := a.SessionPath()
+	writeCompactionSidecar(sidecarPath, "marker", nil)
+	sidecarSettled := false
+	defer func() {
+		if !sidecarSettled {
+			writeCompactionSidecar(sidecarPath, "clear", nil)
+		}
+	}()
+
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
 	prepared, reason, err := a.prepareVisibleCompression(ctx, trigger, plan.fold, instructions, inputMode)
 	if err != nil {
@@ -262,6 +330,12 @@ func (a *Agent) compressVisibleRange(
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(plan.fold), Summary: summary, Archive: state.LastReceipt.Archive,
 	}})
+	// Same sidecar contract as /compact so the button path also survives a
+	// mid-run switch-away and re-opens with the result.
+	sidecarRec := &CompactionRecord{Trigger: trigger, Messages: len(plan.fold), Summary: summary}
+	a.setLastCompaction(sidecarRec)
+	writeCompactionSidecar(sidecarPath, "record", sidecarRec)
+	sidecarSettled = true
 	result.Status = "ok"
 	result.Reason = ""
 	return result, nil
@@ -495,6 +569,18 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, fmt.Errorf("%w: fixed prefix (%d tokens) already exceeds trigger (%d)", errCheckpointRejected, fixedPrefixTokens, a.compactTrigger())
 	}
 
+	// Sidecar in-progress marker: capture the session path before anything can
+	// clear it (the tab may be released while the summarizer runs) and record
+	// compaction activity so a re-opened tab can poll for the finished record.
+	sidecarPath := a.SessionPath()
+	writeCompactionSidecar(sidecarPath, "marker", nil)
+	sidecarSettled := false
+	defer func() {
+		if !sidecarSettled {
+			writeCompactionSidecar(sidecarPath, "clear", nil)
+		}
+	}()
+
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
 	if a.svc.hooks != nil {
 		if hookInstr := a.svc.hooks.PreCompact(ctx, trigger); hookInstr != "" {
@@ -585,6 +671,12 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(fold), Summary: summary,
 	}})
+	// Persist to memory and the session sidecar (up-front path) so a mid-run
+	// switch-away still re-opens with the result.
+	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary}
+	a.setLastCompaction(rec)
+	writeCompactionSidecar(sidecarPath, "record", rec)
+	sidecarSettled = true
 	return CompactionInstalled, nil
 }
 

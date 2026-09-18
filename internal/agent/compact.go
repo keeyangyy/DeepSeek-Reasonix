@@ -197,11 +197,11 @@ func (a *Agent) SummarizeUpTo(ctx context.Context, toIdx int) error {
 func (a *Agent) summarizeAtProjectionBoundary(ctx context.Context, canonicalIndex int, direction string) error {
 	snap := a.snapshotExplicitCompression()
 	if canonicalIndex < 0 || canonicalIndex >= len(snap.canonical) {
-		return nil
+		return fmt.Errorf("context compression unavailable: selected turn is outside the conversation")
 	}
 	anchor := snap.canonical[canonicalIndex]
 	if !compressAnchorCandidate(anchor) {
-		return nil
+		return fmt.Errorf("context compression unavailable: selected position is not a compressible user turn")
 	}
 	visibleIndex := -1
 	for i, msg := range snap.visible {

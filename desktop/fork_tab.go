@@ -8,9 +8,31 @@ import (
 	"sync/atomic"
 
 	"reasonix/internal/agent"
+	"reasonix/internal/checkpoint"
 	"reasonix/internal/config"
+	"reasonix/internal/store"
 	"reasonix/internal/worktree"
 )
+
+// inheritForkCheckpointBoundaries copies conversation-only checkpoint
+// boundaries (turns <= forkTurn) from the source session into the fork's
+// session checkpoint dir, before the new tab's controller rebinds. A fork
+// always lands on a fresh session file whose checkpoint dir is empty, so
+// without this every turn action in the fork shows "这条消息没有可恢复点" and
+// "压缩此处之前/之后" is disabled. File snapshots are intentionally NOT
+// copied: the fork's workspace state differs from the source's.
+func inheritForkCheckpointBoundaries(sourcePath, targetPath string, forkTurn int) error {
+	if strings.TrimSpace(sourcePath) == "" || strings.TrimSpace(targetPath) == "" {
+		return nil
+	}
+	src := checkpoint.New(store.SessionCheckpointDir(sourcePath), "")
+	dst := checkpoint.New(store.SessionCheckpointDir(targetPath), "")
+	boundaries := src.ExportForkBoundaries(forkTurn)
+	if len(boundaries) == 0 {
+		return nil
+	}
+	return dst.ImportForkBoundaries(boundaries)
+}
 
 const rewindForkAttachError = "conversation fork was created but could not be opened; open the recovery branch from session history"
 
@@ -102,6 +124,12 @@ func (a *App) forkForTabWithOptions(tabID string, turn int, isolateWorkspace boo
 	newPath, err := ctrl.ForkSession(turn, "")
 	if err != nil {
 		return ForkWorktreeResultView{}, a.rollbackUnusedForkWorktree(created, err)
+	}
+	// Carry the conversation boundaries up to the fork point into the fork's
+	// session dir, otherwise every turn action in the new tab is disabled
+	// ("没有可恢复点") because the fresh checkpoint dir has no entries.
+	if err := inheritForkCheckpointBoundaries(ctrl.SessionPath(), newPath, turn); err != nil {
+		slog.Warn("desktop: fork did not inherit checkpoint boundaries", "session", newPath, "err", err)
 	}
 	if err := copyPinnedContextState(ctrl.SessionPath(), newPath); err != nil {
 		cleanupErr := removeDesktopSessionArtifacts(newPath)

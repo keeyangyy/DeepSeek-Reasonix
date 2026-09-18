@@ -3355,6 +3355,7 @@ export const zh: Record<DictKey, string> = {
   "rewind.forkWorktreeDirtySource": "创建隔离分叉前，请先提交或暂存当前工作区的改动；也可以选择共享工作区分叉，继续使用这些改动。",
   "rewind.forkFailed": "会话分叉失败；任何无法安全清理的工作树都已保留。",
   "rewind.summFrom": "压缩此处之后的模型上下文",
+  "rewind.summarizeFailed": "上下文压缩失败，请重试。",
   "rewind.summUpto": "压缩此处之前的模型上下文",
   "rewind.confirmFork": "确认分叉会话",
   "rewind.confirmSummFrom": "确认压缩此处之后的模型上下文（保留可见历史）",

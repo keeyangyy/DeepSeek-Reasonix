@@ -4,12 +4,12 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102257,
-    "function-size": 8267,
+    "file-size": 102459,
+    "function-size": 8280,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
-    "struct-state": 115,
+    "struct-state": 116,
     "test-file-size": 68861
   },
   "files": {
@@ -135,10 +135,13 @@
       "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 4989
+      "file-size": 4996
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213
+    },
+    "desktop/frontend/src/lib/transcriptRows.ts": {
+      "file-size": 14
     },
     "desktop/frontend/src/lib/transcriptStore.ts": {
       "file-size": 264
@@ -147,7 +150,7 @@
       "file-size": 1614
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4360
+      "file-size": 4470
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -386,9 +389,9 @@
     "internal/agent/agent.go": {
       "complexity": 27,
       "essay": 25,
-      "file-size": 2030,
+      "file-size": 2034,
       "function-size": 88,
-      "struct-state": 2
+      "struct-state": 3
     },
     "internal/agent/cache_shape_test.go": {
       "essay": 1
@@ -398,6 +401,10 @@
     },
     "internal/agent/capability_gate_test.go": {
       "essay": 1
+    },
+    "internal/agent/compact_projection.go": {
+      "file-size": 19,
+      "function-size": 13
     },
     "internal/agent/context_manager.go": {
       "essay": 1
@@ -656,7 +663,7 @@
     },
     "internal/checkpoint/checkpoint.go": {
       "essay": 5,
-      "file-size": 174
+      "file-size": 222
     },
     "internal/checkpoint/transaction.go": {
       "complexity": 32,
