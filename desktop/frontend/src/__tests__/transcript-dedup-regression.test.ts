@@ -940,5 +940,41 @@ if (failed > 0) process.exit(1);
   eq(dupes2.length, 0, "extensions: different generation is not duplicate");
 }
 
+// 29. Turn-actions pairing protection ────────────────────────────────────────
+// 兜底去重（findDuplicateItemIds）按签名删除时只允许 tool（同 id 安全）：
+// 按签名删 user/assistant 会破坏 user-assistant 配对（assistant 变 orphan →
+// turn-actions 按钮消失）或误删未落盘的 live 消息。user/notice/assistant
+// 的页覆盖清理由 replaceRemoveIds（计数 + 页轮语义）负责，不走兜底。
+{
+  const pageWithAssistant = [
+    { kind: "assistant" as const, id: "he:a1", text: "完成", reasoning: "" },
+    { kind: "tool" as const, id: "call-t1", name: "wait", status: "done" },
+  ];
+  const liveWithAssistant = [
+    { kind: "user" as const, id: "u1", text: "继续" },
+    { kind: "assistant" as const, id: "a:turn-x:0", text: "完成", reasoning: "" },
+  ];
+  const dupesAssistant = findDuplicateItemIds(pageWithAssistant, liveWithAssistant, ["tool"]);
+  eq(dupesAssistant.length, 0, "pairing: assistant row is not removed by signature dedup (turn-actions preserved)");
+
+  const pageWithUser = [
+    { kind: "user" as const, id: "he:u1", text: "你好" },
+  ];
+  const liveWithUser = [
+    { kind: "user" as const, id: "u9", text: "你好" },
+  ];
+  const dupesUser = findDuplicateItemIds(pageWithUser, liveWithUser, ["tool"]);
+  eq(dupesUser.length, 0, "pairing: a live (possibly not-yet-persisted) user row is not removed by signature dedup");
+
+  const pageWithTool = [
+    { kind: "tool" as const, id: "call-t1", name: "wait", status: "done" },
+  ];
+  const liveWithTool = [
+    { kind: "tool" as const, id: "call-t1", name: "wait", status: "running" },
+  ];
+  const dupesTool = findDuplicateItemIds(pageWithTool, liveWithTool, ["tool"]);
+  eq(dupesTool.length, 1, "pairing: same-id tool rows are still deduped by the white-listed kind");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -1,8 +1,9 @@
-# reasonix-transcript-dedup 分支报告
+# reasonix-transcript-dedup 分支报告 v2
 
 > 分支：`reasonix-transcript-dedup`（基于 `main-v2`，已合并最新 main-v2）  
 > 评审对象：前端 transcript/session 系统的重复渲染修复与防御体系  
-> 生成日期：2026-09-19
+> 生成日期：2026-09-19  
+> 版本：v2（新增 turn-actions 配对破坏分析）
 
 ---
 
@@ -16,11 +17,7 @@
 - Hydration 切换会话时新旧内容重叠
 - Extension surface 同一 key 重复发布
 - LoadOlder 翻页 prepend 时页行与已挂载行重叠（main-v2 已修复）
-
-根因分析：
-1. **ID 生成混乱**：live item 使用 `${s.seq}` 作为 ID 后缀，不同 kind 共用同一个 seq 计数器，存在潜在冲突。
-2. **去重逻辑不完整**：`duplicateLiveItemIds` 仅匹配连续后缀/前缀，无法处理任意位置乱序重复。
-3. **缺少断言守护**：关键路径无重复 ID 检测，重复渲染只能通过用户反馈发现。
+- **Turn-actions 按钮在部分 assistant 消息后消失（本次新增发现）**
 
 ---
 
@@ -47,9 +44,6 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 - Live item 统一使用 `ephemeralItemId(kind)` 生成，消除前缀冲突隐患。
 - 保留 `stableHistoryItemId` / `stableToolItemId` 用于历史条目（基于 entryId 稳定生成）。
 
-**为什么不统一 `historyMessagesToItems` 的 `idPrefix+seq`**：
-该函数仅在 history page 加载时一次性转换，输出 Item[] 后 ID 不跨页面持久化。真正的稳定性保障已在 `transcriptStore.ts` 通过 `entryId` 实现。剩余的 `idPrefix+seq` 是局部作用域，不造成实际重复渲染 bug。彻底改造需要修改 227 处 `HistoryMessage` 构造点，投入产出比不高。
-
 ### 2.3 合并时 defensive dedup
 
 **问题**：`duplicateLiveItemIds` 仅匹配 page 后缀与 live 前缀的**连续**重复，无法处理乱序或跨位置重复。
@@ -59,56 +53,145 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 - 在 `history_rebase` 和 `history_prepend` 中 defensive dedup：即使 `removeIds` 有遗漏，也能过滤 live tail 中的重复项。
 - 保留原有 `duplicateLiveItemIds` 以兼容现有测试。
 
-**与 main-v2 的 `replaceRemoveIds` 关系**：
-- `replaceRemoveIds`（main-v2）：处理 loadOlder prepend 场景，基于 store 接缝 + 页同 id 行 + 活跃轮 a: 前缀 + 页已覆盖终态前端行。
-- `findDuplicateItemIds`（本分支）：通用 multiset 去重，支持任意位置、任意 kind 的重复检测。
-- 两者互补：`replaceRemoveIds` 是场景化优化，`findDuplicateItemIds` 是通用防御。
-
 ### 2.4 返回前断言守护
 
 **问题**：重复渲染通常只能通过用户反馈发现，缺乏早期检测机制。
 
 **方案**：
-- 新增 `assertNoDuplicateItems(items, label)`：检测列表中是否存在重复 ID，测试环境直接 throw，开发环境 console.error。
+- 新增 `assertNoDuplicateItems(items, label)`：检测列表中是否存在重复 ID；**DEV/测试直接 throw，生产 bundle 短路不运行**（`import.meta.env.PROD` 编译期常量）——生产可观测性由 items.dupes 诊断负责。
 - 在关键路径加入断言：
   - `useController.ts`：`history_rebase`, `history_prepend`, `latest_compaction`
   - `transcriptStore.ts`：`loadLatest`, `loadOlder`, `appendEntries`
 
 ---
 
-## 3. 优化思路
+## 3. 新增问题分析：Turn-actions 按钮消失
 
-### 3.1 测试驱动
+### 3.1 现象
+
+部分 assistant 消息下方的四个按钮（复制、分叉、压缩、回溯）不显示。
+
+### 3.2 根因分析
+
+经过深入代码审查和日志分析，发现**合并 main-v2 后，两层去重逻辑同时生效但互不理解，破坏了 user-assistant 配对**：
+
+| 层 | 函数 | 逻辑 | 问题 |
+|----|------|------|------|
+| 1 | `replaceRemoveIds`（main-v2） | 按 id / activeTurnId 前缀 / `pageCoveredLiveItemIds` 去重 | `pageCoveredLiveItemIds` **只处理 user/notice**，不处理 assistant |
+| 2 | `findDuplicateItemIds`（本分支） | 按 `itemSignature` 做 multiset 去重 | **处理所有 kind**，但**不理解 turn 配对** |
+
+**关键代码路径**：
+
+```ts
+// useController.ts history_prepend
+const remove = a.removeIds.length > 0 ? new Set(a.removeIds) : undefined;
+const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
+const liveTail = rest.slice(retainedPrefix.length);
+const extraDuplicates = new Set(findDuplicateItemIds(a.items, liveTail));
+const dedupedRest = extraDuplicates.size > 0
+  ? rest.filter((item) => !extraDuplicates.has(item.id))
+  : rest;
+```
+
+```ts
+// transcriptRows.ts buildTurnModels
+// turn-actions 渲染条件
+if (
+  !model.isActive &&
+  turn != null &&
+  (model.actionText.trim() || options.hasCheckpointForTurn?.(turn)) &&
+  user  // ← 需要 preceding user 行
+) {
+  modelRows.push({ kind: "turn-actions", ... });
+}
+```
+
+### 3.3 为什么会出现 orphan assistant
+
+`SignatureItem` 和 `Item` 类型中**没有 `turn` 字段**，turn 结构是隐式的（通过 user 行的位置推断）。这导致：
+
+1. `replaceRemoveIds` 和 `findDuplicateItemIds` 都是**无状态匹配**，不知道哪些 item 属于同一个 turn
+2. 它们独立移除 user 和 assistant，破坏了 `buildTurnModels` 依赖的配对关系
+3. 当 user 行被移除，但同 turn 的 assistant 行保留时，assistant 变成 orphan → turn-actions 不渲染 → 按钮消失
+
+### 3.4 为什么之前没有发现
+
+- 原有 `duplicateLiveItemIds` 只处理**连续**的 page suffix 和 live prefix，不会出现"只移除 user 不移除 assistant"的情况
+- `replaceRemoveIds` 虽然处理了 user/notice，但 assistant 不在其处理范围内
+- 两层去重同时作用时，才会产生**部分移除**的异常情况
+
+### 3.5 修复方案
+
+#### 短期修复（已实施）：兜底去重白名单限定 tool（低风险，根除配对破坏）
+
+不再"按签名删除 user/assistant"。给 `findDuplicateItemIds` 增加 `allowedKinds` 参数，
+`history_rebase` / `history_prepend` 的兜底去重只传 `["tool"]`（tool 签名含 id，页含同 id
+即页拥有该轮，删除安全）：
+
+```ts
+// hydrateHistoryApply.ts
+export function findDuplicateItemIds(a, b, allowedKinds?: readonly string[]) { ... }
+// useController.ts（rebase / prepend 两处兜底）
+findDuplicateItemIds(a.items, liveTail, ["tool"])
+```
+
+**理由**（对比初稿的"成对删除"方案）：
+- 初稿（user 被删时连带删紧随的 assistant）会**过度移除**：assistant 与页**不重复**时也被删，
+  整轮消失——比 orphan 更糟；
+- 本方案**从根上不按签名删 user/assistant**：user/notice/assistant 的页覆盖清理由
+  `replaceRemoveIds` 负责（计数保护 + 页轮语义：页确实含同内容才删，且页行接管配对，
+  不会产生 orphan 或丢未落盘消息）；
+- 由此同时解决两个隐患：turn-actions 按钮消失（assistant 不再被签名删）+ 未落盘 live
+  user 消息误删（与历史同文本但尚未落盘）。
+
+**回归测试**：`transcript-dedup-regression` 新增 §29（3 断言：assistant 配对保留 /
+live user 保留 / 同 id tool 仍去重），先红后绿（107 passed）。
+
+#### 长期修复：Turn-aware dedup（中风险，暂缓）
+
+给 `SignatureItem` 增加可选的 `turnId` 字段，让 `findDuplicateItemIds` 支持 turn-aware 模式：同一 turn 内的 user/assistant 要么都保留，要么都移除。待诊断层（items.dupes）观测到真实残留后再评估。
+
+### 3.6 验证方法
+
+1. 添加回归测试：`history_prepend` 后 user-assistant 配对不破损
+2. 在诊断面板中增加 orphan assistant 检测
+3. 用户测试：确认 assistant 消息下方的按钮始终显示
+
+---
+
+## 4. 优化思路
+
+### 4.1 测试驱动
 
 - 先写回归测试（41 个断言），锚定预期行为。
 - 再实现修复，确保测试通过。
 - 最后加大测试力度（扩展至 104 个断言），覆盖边界场景。
 
-### 3.2 低风险优先
+### 4.2 低风险优先
 
 - Phase 1（ID 统一）和 Phase 4（断言化）均为低风险改动，不改变运行时行为。
 - `findDuplicateItemIds` 替代 `duplicateLiveItemIds` 是算法增强，向后兼容。
 - Bundle budget 调整基于实际测量值，论证充分。
 
-### 3.3 与 main-v2 的协同
+### 4.3 与 main-v2 的协同
 
-- main-v2 已有 `replaceRemoveIds` 处理 loadOlder prepend 去重。
+- main-v2 已有 `replaceRemoveIds` 处理 loadOlder prepend 场景去重。
 - 本分支在此基础上增加：
   - `findDuplicateItemIds`：通用 multiset 去重
   - `assertNoDuplicateItems`：CI-time 断言守护
   - `transcriptItemIds`：live item ID 生成统一
-- 合并后无冲突，功能互补。
+- **合并后无冲突，功能互补，但需注意两层去重的交互**
 
-### 3.4 性能考量
+### 4.4 性能考量
 
-- `findDuplicateItemIds` 当前为 O(n×m) 字符串匹配，在 10k+ turn 大会话中可能成为瓶颈。
-- 优化方向：改为 O(n+m) Map 计数，但需先确认签名碰撞边界（当前测试已覆盖 reasoning 不同不误判的场景）。
+- `findDuplicateItemIds` 实为 **O(n+m) Map 计数**（n=页签名计数、m=live 扫描），10k turn 实测 3051ms 可接受；无 O(n×m) 瓶颈。
+- 签名碰撞边界已有测试覆盖（reasoning 不同不误判）；后续如需进一步优化可 1 次遍历合并计数（当前已足够）。
 
 ---
 
-## 4. 测试策略
+## 5. 测试策略
 
-### 4.1 回归测试覆盖（104 个断言）
+### 5.1 回归测试覆盖（104 个断言）
 
 | 分组 | 场景 | 数量 |
 |------|------|------|
@@ -124,12 +207,12 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 | 22-24 | 状态流转（tool status / compaction / turn_done） | 11 |
 | 25-28 | 签名边界 / 嵌套工具 / rewind / extension | 16 |
 
-### 4.2 完整套件验证
+### 5.2 完整套件验证
 
 - `pnpm test:transcript`：**68 passed, 0 failed**
 - `wails build`：**成功**，输出 `desktop/build/bin/reasonix-desktop.exe`
 
-### 4.3 合并 main-v2 后的验证
+### 5.3 合并 main-v2 后的验证
 
 - 解决 1 个冲突（useController.ts 导入区域）
 - 回归测试：**104 passed, 0 failed**
@@ -137,7 +220,7 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 
 ---
 
-## 5. 提交记录
+## 6. 提交记录
 
 ### 本分支提交（从 main-v2 分叉后）
 
@@ -161,21 +244,24 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 
 ---
 
-## 6. 风险与缓解
+## 7. 风险与缓解
 
 | 风险 | 等级 | 缓解措施 |
 |------|------|----------|
-| `assertNoDuplicateItems` 在生产环境 throw | 中 | 当前仅在 6 个关键路径启用，测试环境必 throw，生产环境 console.error |
-| `findDuplicateItemIds` 大列表性能 | 低 | 当前 10k turn 测试通过（3051ms），如需优化可改为 O(n+m) Map |
+| `assertNoDuplicateItems` 的启用范围 | 低 | **已门控**：DEV/测试 throw，生产 bundle 不运行（import.meta.env.PROD 短路） |
+| `findDuplicateItemIds` 大列表性能 | 低 | O(n+m) Map 计数已实现；10k turn 3051ms |
 | `itemSignature` 签名碰撞 | 低 | 已测试 reasoning 不同不误判；若业务允许相同 reasoning，需调整签名逻辑 |
 | Bundle budget 超限 | 低 | 基于实际测量调整，已通过 2407.0 KiB 预算 |
-| 与 main-v2 `replaceRemoveIds` 功能重叠 | 低 | 两者互补：replaceRemoveIds 是场景化优化，findDuplicateItemIds 是通用防御 |
+| 与 main-v2 `replaceRemoveIds` 功能重叠 | 中 | 两者互补，但需注意交互：已识别 pairing 破坏风险，建议修复 |
+| Turn-actions 配对破坏 | 中 | 建议添加配对保护逻辑 + 回归测试 |
 
 ---
 
-## 7. 合并建议
+## 8. 合并建议
 
-**建议合并**，理由：
+**建议合并**（评审版 blocking 均已修复：assert 门控 + 配对保护白名单 tool-only；107 断言 + 套件全绿）。
+
+理由：
 1. 问题明确：用户可见的重复渲染 bug
 2. 方案清晰：三层防御体系，从生成到合并到返回
 3. 与 main-v2 互补：main-v2 提供场景化去重，本分支提供通用防御和断言守护
@@ -183,7 +269,11 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 5. 冲突已解决：仅 1 个导入冲突，已合并处理
 6. 构建成功：桌面应用可正常编译运行
 
+**但存在一个待修复项（blocking）**：
+- Turn-actions 配对保护：两层去重同时作用时可能破坏 user-assistant 配对，导致按钮消失。需在 `history_prepend` 中增加配对保护逻辑。
+
 **后续可选优化**（不影响合并决策）：
-- `findDuplicateItemIds` O(n+m) 性能优化
-- `assertNoDuplicateItems` 生产环境降级策略
+- （已实现 O(n+m)）后续优化仅在真实压力下按需
+- （已实现）生产短路；如需"生产亦观测"，走 items.dupes 诊断
 - `historyMessagesToItems` ID 生成彻底统一（需评估投入产出比）
+- Turn-aware dedup：给 `SignatureItem` 增加 `turnId` 字段，让 dedup 函数理解 pairing

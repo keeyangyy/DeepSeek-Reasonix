@@ -2319,7 +2319,7 @@ export function reducer(s: State, a: Action): State {
     case "history_rebase": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       const liveTail = s.items.slice(Math.min(s.historyPrefixCount, s.items.length));
-      const duplicates = new Set(findDuplicateItemIds(a.items, liveTail));
+      const duplicates = new Set(findDuplicateItemIds(a.items, liveTail, ["tool"]));
       const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
       const merged = compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail]));
       assertNoDuplicateItems(merged, "history_rebase");
@@ -2374,7 +2374,7 @@ export function reducer(s: State, a: Action): State {
       // tail can still carry arbitrary duplicates (e.g. replay races). Drop
       // any live items whose signature already appears in the prepended page.
       const liveTail = rest.slice(retainedPrefix.length);
-      const extraDuplicates = new Set(findDuplicateItemIds(a.items, liveTail));
+      const extraDuplicates = new Set(findDuplicateItemIds(a.items, liveTail, ["tool"]));
       const dedupedRest = extraDuplicates.size > 0
         ? rest.filter((item) => !extraDuplicates.has(item.id))
         : rest;

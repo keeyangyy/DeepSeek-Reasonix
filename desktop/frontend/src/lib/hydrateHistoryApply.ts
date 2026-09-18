@@ -365,7 +365,18 @@ export function duplicateItemRows(items: readonly SignatureItem[]): SignatureIte
 // match). Unlike duplicateLiveItemIds, which only matches a page suffix
 // against a live prefix, this detects duplicates regardless of position.
 // The returned ids belong to the second list (b).
-export function findDuplicateItemIds(a: readonly SignatureItem[], b: readonly SignatureItem[]): string[] {
+// allowedKinds restricts which b-kinds may be reported: the reducer's fallback
+// dedup uses ["tool"] only — same-id tool rows are safe to drop, while
+// signature-based removal of user/assistant rows would tear a live turn's
+// user-assistant pairing (orphaned assistant loses its turn-actions) or delete
+// a not-yet-persisted live user message whose text merely matches an earlier
+// page row. user/notice/assistant page-coverage cleanup lives in
+// replaceRemoveIds (count-guarded, page-turn-aware).
+export function findDuplicateItemIds(
+  a: readonly SignatureItem[],
+  b: readonly SignatureItem[],
+  allowedKinds?: readonly string[],
+): string[] {
   const counts = new Map<string, number>();
   for (const item of a) {
     const signature = itemSignature(item);
@@ -373,6 +384,7 @@ export function findDuplicateItemIds(a: readonly SignatureItem[], b: readonly Si
   }
   const dupes: string[] = [];
   for (const item of b) {
+    if (allowedKinds !== undefined && !allowedKinds.includes(item.kind)) continue;
     const signature = itemSignature(item);
     const remaining = counts.get(signature) ?? 0;
     if (remaining > 0) {
@@ -385,8 +397,12 @@ export function findDuplicateItemIds(a: readonly SignatureItem[], b: readonly Si
 
 // Assert that an item list contains no duplicate IDs. Throws so duplicate-
 // render regressions are caught during development and CI instead of
-// surfacing as user-visible double rows.
+// surfacing as user-visible double rows. Production bundles short-circuit
+// (import.meta.env.PROD is a compile-time constant here): a live session must
+// never crash on a legal id-reuse window — production observability lives in
+// the items.dupes diagnostics.
 export function assertNoDuplicateItems(items: readonly SignatureItem[], label: string): void {
+  if ((import.meta as { env?: { PROD?: boolean } }).env?.PROD === true) return;
   const seen = new Set<string>();
   for (const item of items) {
     if (seen.has(item.id)) {
