@@ -325,6 +325,29 @@ export function pageOverlapsLiveContent(
   return false;
 }
 
+// Complete removal set for a history prepend: the store's seam-based ids,
+// plus every live row the page supersedes (same id or the page already
+// carries its content). loadOlderHistory used to pass only the seam ids, so a
+// page overlapping the mounted rows left same-toolCallId duplicates (and
+// notice rows) co-mounted — observed as 21 duplicates under an older page and
+// "earlier messages following the newest tool".
+export function replaceRemoveIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+  activeTurnId: string | undefined,
+  storeRemoveIds: readonly string[] | undefined,
+): string[] {
+  const remove = new Set(storeRemoveIds ?? []);
+  const prefix = activeTurnId ? `a:${activeTurnId}:` : undefined;
+  for (const item of liveItems) {
+    if ((prefix && item.id.startsWith(prefix)) || pageItems.some((pageItem) => pageItem.id === item.id)) {
+      remove.add(item.id);
+    }
+  }
+  for (const id of pageCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
+  return [...remove];
+}
+
 // Rows whose content duplicates an earlier row (same kind + content) — the
 // long-term net for low-frequency double-render reports.
 export function duplicateItemRows(items: readonly SignatureItem[]): SignatureItem[] {

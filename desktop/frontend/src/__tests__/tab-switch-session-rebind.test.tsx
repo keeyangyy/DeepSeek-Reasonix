@@ -145,6 +145,7 @@ window.runtime = {
 window.go = {
   main: {
     App: {
+      LatestCompactionForTab: async () => null,
       RegisterNavigationIntent: async () => {},
       ListTabs: async () => {
         if (heldListTabs) {

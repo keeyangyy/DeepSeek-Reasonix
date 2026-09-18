@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, findDuplicateItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, findDuplicateItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2721,13 +2721,9 @@ export function useController() {
     const next = reducer(prev, action);
     if (prev !== next) {
       states.set(tabId, next);
-      // Row-level diagnostics (durable, active-only): after page actions and
-      // turn edges, snapshot the tail rows, record the rows an action removed
-      // (an anomaly that "disappears on refresh" leaves its copies here), and
-      // scan for duplicate content — the long-term net for double-render
-      // reports. Values must stay whitespace-free: the recorder drops fields
-      // whose value contains whitespace (first probe round recorded all-empty
-      // tails for exactly that reason).
+      // Row-level diagnostics (durable, active-only): tail rows, removed rows,
+      // and duplicate scan at page actions / turn edges. Values must stay
+      // whitespace-free (recorder drops whitespace-containing fields).
       if (frontendDiagnosticsActive()) {
         const pageAction = action.type === "history_prepend" || action.type === "history_replace" ||
           action.type === "history_rebase";
@@ -2749,6 +2745,7 @@ export function useController() {
           recordFrontendDiagnostic("history", "items.tail", {
             reason: action.type,
             state: `cur:${(next.currentAssistant ?? "-").slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}`,
+            total: next.items.length,
             ...slots(next.items.slice(-6).reverse()),
           });
           if (pageAction) {
@@ -3387,10 +3384,11 @@ export function useController() {
         turnEventProjector.adoptPage(targetTabId);
         recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-adopted" });
       } else {
+        const liveState = statesRef.current.get(targetTabId);
         dispatchTo(targetTabId, {
           type: "history_prepend",
           items: result.prependItems,
-          removeIds: result.removeIds,
+          removeIds: replaceRemoveIds(result.prependItems, liveState?.items ?? [], liveState?.activeTurnId, result.removeIds),
           startTurn: result.startTurn,
           totalTurns: result.totalTurns,
           hasOlder: result.hasOlder,
