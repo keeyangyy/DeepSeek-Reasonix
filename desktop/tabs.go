@@ -4812,10 +4812,11 @@ func autoTitleTopicFromSession(workspaceRoot, topicID, sessionPath string) (stri
 	nextTitle := proposal.Title
 	sameTitle := nextTitle == strings.TrimSpace(loadTopicTitle(workspaceRoot, topicID))
 	applied, err := applyAutoTopicTitle(workspaceRoot, topicID, nextTitle, proposal)
-	if err != nil || !applied {
+	if err != nil {
+		autoTitleGateLog("apply-state-write", topicStateErrorType(err))
 		return "", false
 	}
-	if sameTitle {
+	if !applied || sameTitle {
 		return "", false
 	}
 	return nextTitle, true
@@ -4930,11 +4931,11 @@ func topicTitleFromSession(path string) string {
 }
 
 func topicTitleUserTurnsFromSession(path string) []string {
-	// Event-log aware: decoding the .jsonl checkpoint directly would stop
-	// seeing user turns after the first save, silently disabling the ≥3-turn
-	// title upgrade.
+	// Event-log aware: direct .jsonl decoding would stop seeing user turns
+	// after the first save, silently disabling the >=3-turn title upgrade.
 	msgs, err := agent.LoadSessionUserMessages(path)
 	if err != nil {
+		autoTitleGateLog("load-user-turns", errorKindForAutoTitleLog(err))
 		return nil
 	}
 	var users []string

@@ -3552,9 +3552,8 @@ func (a *App) renameSessionInDirIfTitleUnchanged(dir, path, expectedTitle, title
 }
 
 // onSessionTitleChanged projects the canonical BranchMeta custom title into
-// the legacy desktop map and live catalog/UI indexes. The session directory is
-// supplied by the owning boot so background tabs never route through whichever
-// tab happens to be active when the tool finishes.
+// the legacy desktop map, topic layer, and live catalog/UI indexes. The
+// session directory comes from the owning boot.
 func (a *App) onSessionTitleChanged(dir, sessionPath, _ string) error {
 	validated, _, err := validateSessionPath(dir, sessionPath)
 	if err != nil {
@@ -3563,6 +3562,7 @@ func (a *App) onSessionTitleChanged(dir, sessionPath, _ string) error {
 	if err := syncSessionTitleFromBranchMeta(dir, validated); err != nil {
 		return err
 	}
+	a.propagateSessionCustomTitleToTopic(validated, "")
 	a.requestSessionCatalogPath("", "", validated)
 	a.invalidatePromptHistoryCache()
 	a.emitProjectTreeChangedForSessionDirs(dir)

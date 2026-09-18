@@ -4,13 +4,13 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102226,
-    "function-size": 8265,
+    "file-size": 102229,
+    "function-size": 8267,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 115,
-    "test-file-size": 68754
+    "test-file-size": 68861
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -275,7 +275,7 @@
     "desktop/tabs.go": {
       "complexity": 42,
       "essay": 68,
-      "file-size": 7615,
+      "file-size": 7616,
       "function-size": 359,
       "struct-state": 23
     },
@@ -868,11 +868,11 @@
     "internal/config/render.go": {
       "complexity": 229,
       "essay": 2,
-      "file-size": 961,
-      "function-size": 912
+      "file-size": 963,
+      "function-size": 914
     },
     "internal/config/render_test.go": {
-      "test-file-size": 759
+      "test-file-size": 866
     },
     "internal/control/approval.go": {
       "essay": 5,

@@ -242,7 +242,10 @@ func (a *App) runtimeProjectTopicNodes(scope, workspaceRoot string, snapshots []
 				continue
 			}
 			path := strings.TrimSpace(session.sessionPath)
-			sessionLabel := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			sessionLabel := sessionCustomTitleForLabel(path)
+			if sessionLabel == "" {
+				sessionLabel = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			}
 			if sessionLabel == "" || sessionLabel == "." {
 				sessionLabel = label
 			}
