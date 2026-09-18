@@ -3207,6 +3207,7 @@ export function useController() {
         // Stale cursor: the store reloaded the latest page — replace, and let
         // the page supersede an in-flight full-turn replay (as 2965/3137 do),
         // else the rebuild co-mounts next to the page's copy of the turn.
+        recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-enter" });
         dispatchTo(targetTabId, {
           type: "history_replace",
           items: result.items,
@@ -3217,6 +3218,7 @@ export function useController() {
           digest: result.digest || undefined,
         });
         turnEventProjector.adoptPage(targetTabId);
+        recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-adopted" });
       } else {
         dispatchTo(targetTabId, {
           type: "history_prepend",

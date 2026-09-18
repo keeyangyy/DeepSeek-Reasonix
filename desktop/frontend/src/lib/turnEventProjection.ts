@@ -221,6 +221,12 @@ export class TurnEventProjector {
     // rows (observed as mid-turn steer notices doubled at the transcript
     // bottom, with the cursor regressing afterwards).
     let cursor = Math.max(afterSeq, this.sequenceByTab.get(tabId) ?? 0);
+    if (cursor > afterSeq) {
+      recordFrontendDiagnostic("runtime", "turn-events-replay-clamped", {
+        afterSeq: afterSeq,
+        resumedAtSeq: cursor,
+      });
+    }
     for (let page = 0; page < MAX_REPLAY_PAGES; page += 1) {
       if ((this.generationByTab.get(tabId) ?? 0) !== generation) return;
       const replay = await app.TurnEventsForTab!(tabId, cursor);
