@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -3273,10 +3273,11 @@ export function useController() {
         turnEventProjector.adoptPage(targetTabId);
         recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-adopted" });
       } else {
+        const liveState = statesRef.current.get(targetTabId);
         dispatchTo(targetTabId, {
           type: "history_prepend",
           items: result.prependItems,
-          removeIds: result.removeIds,
+          removeIds: replaceRemoveIds(result.prependItems, liveState?.items ?? [], liveState?.activeTurnId, result.removeIds),
           startTurn: result.startTurn,
           totalTurns: result.totalTurns,
           hasOlder: result.hasOlder,
