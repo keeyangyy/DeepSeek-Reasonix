@@ -39,10 +39,11 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, findDuplicateItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
+import { ephemeralItemId } from "./transcriptItemIds";
 import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
@@ -1289,7 +1290,7 @@ function applyExtensionCard(s: State, surface: WireExtensionSurface): State {
     seq: s.seq + 1,
     items: [
       ...s.items,
-      { kind: "extension", id: `x${s.seq}`, surfaceKey: key, pluginId: surface.pluginId, surfaceId: surface.surfaceId, generation: surface.generation, card },
+      { kind: "extension", id: ephemeralItemId("extension"), surfaceKey: key, pluginId: surface.pluginId, surfaceId: surface.surfaceId, generation: surface.generation, card },
     ],
   };
 }
@@ -1584,7 +1585,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       return {
         ...s, completionSummary, seq: s.seq + 1,
         items: [...s.items, {
-          kind: "notice", id: `q${s.seq}`, level: presentation.level, variant: "completion",
+          kind: "notice", id: ephemeralItemId("notice"), level: presentation.level, variant: "completion",
           title: presentation.title, text: presentation.body, action: "open_changes", completionSummary,
         }],
       };
@@ -1842,14 +1843,14 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       return { ...next, seenMaintenanceOps: rememberMaintenanceOperation(s.seenMaintenanceOps, m.operationId) };
     }
     case "phase":
-      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "phase", id: `p${s.seq}`, text: e.text ?? "" }] };
+      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "phase", id: ephemeralItemId("phase"), text: e.text ?? "" }] };
     case "compaction_started":
       // Compression starting means the backend accepted the submission:
       // clear the optimistic pending indicator (slash path has no turn events).
       const pendingClear = s.pendingSubmissionId && s.pendingUser !== undefined && !s.turnActive
         ? { pendingUser: undefined, pendingSubmissionId: undefined }
         : {};
-      return { ...s, ...pendingClear, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `c${s.seq}`, pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }] };
+      return { ...s, ...pendingClear, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }] };
     case "compaction_done": {
       const c = e.compaction;
       const idx = [...s.items].reverse().findIndex((it) => it.kind === "compaction" && it.pending);
@@ -1858,7 +1859,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
         const items = at < 0 ? s.items : s.items.filter((_, i) => i !== at);
         return { ...s, running: s.turnActive ? s.running : false, items };
       }
-      const filled: Item = { kind: "compaction", id: at < 0 ? `c${s.seq}` : (s.items[at] as Extract<Item, { kind: "compaction" }>).id, pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "" };
+      const filled: Item = { kind: "compaction", id: at < 0 ? ephemeralItemId("compaction") : (s.items[at] as Extract<Item, { kind: "compaction" }>).id, pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "" };
       const items = at < 0 ? [...s.items, filled] : s.items.map((it, i) => (i === at ? filled : it));
       // Record the finished compaction in the module-level cache so the row
       // survives a tab switch (controller state may be rebuilt entirely).
@@ -1875,7 +1876,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       if (isHostRecoveryGuidance(e.text ?? "")) return s;
       // Notice rows have no id merge: a re-projected steer must not append a second copy.
       if (e.itemId !== undefined && s.items.some((item) => item.kind === "notice" && item.inboxItemId === e.itemId)) return s;
-      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: `s${s.seq}`, level: "info", text: `${STEER_NOTICE_PREFIX}${e.text ?? ""}`, inboxItemId: e.itemId }] };
+      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: ephemeralItemId("notice"), level: "info", text: `${STEER_NOTICE_PREFIX}${e.text ?? ""}`, inboxItemId: e.itemId }] };
     case "approval_request": {
       if (s.cancelRequested) return s;
       // A delayed re-delivery of a prompt the user already answered locally
@@ -1930,7 +1931,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     case "guardian_assessment": {
       if (!e.guardian) return s;
       const level = e.guardian.outcome === "deny" ? "warn" : "info";
-      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: `g${s.seq}`, level, text: formatGuardianAssessmentNotice(e.guardian) }] };
+      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: ephemeralItemId("notice"), level, text: formatGuardianAssessmentNotice(e.guardian) }] };
     }
     case "turn_done": {
       if (e.turnId && s.activeTurnId && e.turnId !== s.activeTurnId) return s;
@@ -1977,7 +1978,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
           : item);
         items = [...previous, {
           kind: "notice",
-          id: `e${s.seq}`,
+          id: ephemeralItemId("notice"),
           level: "info",
           variant: "delivery",
           title: t("notice.deliveryIncompleteTitle"),
@@ -1990,17 +1991,17 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
         // Informational pause — not a send failure. Composer is immediately free.
         items = [...finalized, {
           kind: "notice",
-          id: `e${s.seq}`,
+          id: ephemeralItemId("notice"),
           level: "info",
           title: t("notice.recoveryPausedTitle"),
           text: t("notice.recoveryPausedBody"),
         }];
       } else if (e.outcome === "completion_uncertain") {
-        items = [...finalized, { kind: "notice", id: `e${s.seq}`, level: "info", title: t("notice.completionUncertainTitle"), text: t("notice.completionUncertainBody") }];
+        items = [...finalized, { kind: "notice", id: ephemeralItemId("notice"), level: "info", title: t("notice.completionUncertainTitle"), text: t("notice.completionUncertainBody") }];
       } else if (e.status === "interrupted") {
         const interruptItems: Item[] = [{
           kind: "notice",
-          id: `e${s.seq}`,
+          id: ephemeralItemId("notice"),
           level: "info",
           text: t("notice.cancelledTurnDisplay"),
         }];
@@ -2009,18 +2010,18 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
         if (s.lastStreamInterrupt?.reason) {
           interruptItems.push({
             kind: "notice",
-            id: `e${s.seq + 1}`,
+            id: ephemeralItemId("notice"),
             level: "warn",
             text: t("notice.streamInterruptReason", { reason: streamInterruptReasonText(s.lastStreamInterrupt.reason) }),
           });
         }
         items = [...finalized, ...interruptItems];
       } else if (e.err && !s.streamInterruptNoticeShown) {
-        items = [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err, detail: e.detail }];
+        items = [...finalized, { kind: "notice", id: ephemeralItemId("notice"), level: "warn", text: e.err, detail: e.detail }];
       }
       if (e.protocolRecovery?.id && e.status !== "interrupted" && !s.cancelRequested) {
         items = items.map(item => item.kind==="notice" && item.action==="recover_context" ? {...item,action:undefined} : item);
-        items.push({kind:"notice",id:`e${s.seq}-protocol`,level:"info",code:"protocol_recovery",text:t("notice.protocolRecoveryBody"),action:"recover_context",recoveryId:e.protocolRecovery.id});
+        items.push({kind:"notice",id: ephemeralItemId("notice"),level:"info",code:"protocol_recovery",text:t("notice.protocolRecoveryBody"),action:"recover_context",recoveryId:e.protocolRecovery.id});
       }
       // Plan approval can arrive before turn_done on some Wails event paths.
       // Keep that gate visible instead of clearing the only UI that can answer it.
@@ -2318,11 +2319,13 @@ export function reducer(s: State, a: Action): State {
     case "history_rebase": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       const liveTail = s.items.slice(Math.min(s.historyPrefixCount, s.items.length));
-      const duplicates = new Set(duplicateLiveItemIds(a.items, liveTail));
+      const duplicates = new Set(findDuplicateItemIds(a.items, liveTail, ["tool"]));
       const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
+      const merged = compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail]));
+      assertNoDuplicateItems(merged, "history_rebase");
       return {
         ...s,
-        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail])),
+        items: merged,
         historyPrefixCount: a.items.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2344,15 +2347,22 @@ export function reducer(s: State, a: Action): State {
       // appends (dedup by summary so repeated hydrates do not stack cards).
       if (a.record?.inProgress) {
         if (s.items.some((it) => it.kind === "compaction" && it.pending)) return s;
-        return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `lc${s.seq}`, pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }] };
+        const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }];
+        assertNoDuplicateItems(items, "latest_compaction");
+        return { ...s, seq: s.seq + 1, items };
       }
       if (!a.record?.summary || s.items.some((it) => it.kind === "compaction" && !it.pending && it.summary === a.record.summary)) return s;
       const pendingIdx = s.items.findIndex((it) => it.kind === "compaction" && it.pending);
       const filled: Item[] | undefined = pendingIdx >= 0
         ? s.items.map((it, i) => (i === pendingIdx ? { ...it, pending: false, trigger: a.record!.trigger ?? "", messages: a.record!.messages ?? 0, summary: a.record!.summary ?? "", archive: "" } : it))
         : undefined;
-      if (filled) return { ...s, items: filled };
-      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `lc${s.seq}`, pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }] };
+      if (filled) {
+        assertNoDuplicateItems(filled, "latest_compaction");
+        return { ...s, items: filled };
+      }
+      const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }];
+      assertNoDuplicateItems(items, "latest_compaction");
+      return { ...s, seq: s.seq + 1, items };
     }
     case "history_prepend": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
@@ -2360,13 +2370,23 @@ export function reducer(s: State, a: Action): State {
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
+      // Defensive dedup: the page's removeIds cover tool merges, but a live
+      // tail can still carry arbitrary duplicates (e.g. replay races). Drop
+      // any live items whose signature already appears in the prepended page.
+      const liveTail = rest.slice(retainedPrefix.length);
+      const extraDuplicates = new Set(findDuplicateItemIds(a.items, liveTail, ["tool"]));
+      const dedupedRest = extraDuplicates.size > 0
+        ? rest.filter((item) => !extraDuplicates.has(item.id))
+        : rest;
       // Dropped rows may include the row the live buffer is streaming into
       // (page-owns-the-turn handoff); a dangling pointer would make the next
       // delta recreate a same-id row.
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
+      const merged = compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...dedupedRest]);
+      assertNoDuplicateItems(merged, "history_prepend");
       return {
         ...s,
-        items: compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...rest]),
+        items: merged,
         historyPrefixCount: a.items.length + retainedPrefix.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2397,7 +2417,7 @@ export function reducer(s: State, a: Action): State {
       });
       return changed ? { ...s, items: next, historyLayoutRevision: s.historyLayoutRevision + 1, historyMutation: { seq: s.historyMutation.seq + 1, kind: "patch" } } : s;
     }
-    case "local_notice": return { ...s, running: a.preserveRuntime ? s.running : false, turnActive: a.preserveRuntime ? s.turnActive : false, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: `n${s.seq}`, level: a.level, text: a.text }] };
+    case "local_notice": return { ...s, running: a.preserveRuntime ? s.running : false, turnActive: a.preserveRuntime ? s.turnActive : false, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: ephemeralItemId("notice"), level: a.level, text: a.text }] };
     case "clearApproval": {
       const next = { ...s, approval: undefined, pendingPrompt: Boolean(s.ask), resolvedPromptId: s.approval?.id ?? s.resolvedPromptId };
       return endPromptWaitIfIdle(next);
@@ -2544,7 +2564,7 @@ function appendNoticeItem(items: Item[], seq: number, id: string, level: "info" 
 }
 
 function appendNoticeToState(s: State, level: "info" | "warn", text: string, detail?: string, code?: string, decisionReceipt?: WireDecisionReceipt): State {
-  const next = appendNoticeItem(s.items, s.seq, `n${s.seq}`, level, text, detail, code, decisionReceipt);
+  const next = appendNoticeItem(s.items, s.seq, ephemeralItemId("notice"), level, text, detail, code, decisionReceipt);
   return { ...s, running: s.turnActive ? s.running : false, seq: next.seq, items: next.items };
 }
 

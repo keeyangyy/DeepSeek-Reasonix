@@ -34,7 +34,12 @@ Invoke-Step "前端 typecheck" { pnpm typecheck } "desktop/frontend"
 Invoke-Step "前端 test:typecheck" { pnpm test:typecheck } "desktop/frontend"
 if (-not $Fast) {
   Invoke-Step "eslint（改动前端）" {
-    if ($changedFe.Count -gt 0) { pnpm exec eslint $changedFe } else { $global:LASTEXITCODE = 0; Write-Host "  无前端改动" }
+    if ($changedFe.Count -gt 0) {
+      foreach ($f in $changedFe) {
+        pnpm exec eslint $f
+        if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 1; break }
+      }
+    } else { $global:LASTEXITCODE = 0; Write-Host "  无前端改动" }
   } "desktop/frontend"
   Invoke-Step "bundle 预算" { node scripts/check-bundle-budget.mjs } "desktop/frontend"
 }
