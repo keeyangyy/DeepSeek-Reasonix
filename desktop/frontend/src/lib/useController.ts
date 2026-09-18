@@ -2631,13 +2631,9 @@ export function useController() {
     const next = reducer(prev, action);
     if (prev !== next) {
       states.set(tabId, next);
-      // Row-level diagnostics (durable, active-only): after page actions and
-      // turn edges, snapshot the tail rows, record the rows an action removed
-      // (an anomaly that "disappears on refresh" leaves its copies here), and
-      // scan for duplicate content — the long-term net for double-render
-      // reports. Values must stay whitespace-free: the recorder drops fields
-      // whose value contains whitespace (first probe round recorded all-empty
-      // tails for exactly that reason).
+      // Row-level diagnostics (durable, active-only): tail rows, removed rows,
+      // and duplicate scan at page actions / turn edges. Values must stay
+      // whitespace-free (recorder drops whitespace-containing fields).
       if (frontendDiagnosticsActive()) {
         const pageAction = action.type === "history_prepend" || action.type === "history_replace" ||
           action.type === "history_rebase";
@@ -2659,6 +2655,7 @@ export function useController() {
           recordFrontendDiagnostic("history", "items.tail", {
             reason: action.type,
             state: `cur:${(next.currentAssistant ?? "-").slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}`,
+            total: next.items.length,
             ...slots(next.items.slice(-6).reverse()),
           });
           if (pageAction) {
