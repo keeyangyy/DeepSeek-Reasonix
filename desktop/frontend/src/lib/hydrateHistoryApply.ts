@@ -263,6 +263,7 @@ export type SignatureItem = {
   messages?: number;
   surfaceKey?: string;
   generation?: number;
+  status?: string;
 };
 
 export function itemSignature(item: SignatureItem): string {
@@ -305,14 +306,27 @@ export function pageOverlapsLiveContent(
   for (const item of pageItems) {
     if (liveSignatures.has(itemSignature(item))) return true;
   }
+  // Streaming rows keep growing after the page snapshot, so an exact signature
+  // never matches while the turn is live: the page's copy is an earlier prefix
+  // of the live text. Count the prefix relationship as overlap too — otherwise
+  // the page-owns-the-turn cleanup is skipped entirely and the rebuilt rows
+  // co-mount beside the page copies (the low-frequency duplicate).
+  const liveTexts = liveItems.filter((item) => typeof item.text === "string" && item.text.length > 0);
+  if (liveTexts.length === 0) return false;
+  for (const item of pageItems) {
+    if (item.kind === "tool" || item.kind === "extension") continue;
+    const text = typeof item.text === "string" ? item.text : "";
+    if (text.length === 0) continue;
+    for (const live of liveTexts) {
+      if (live.kind !== item.kind || typeof live.text !== "string") continue;
+      if (text.startsWith(live.text) || live.text.startsWith(text)) return true;
+    }
+  }
   return false;
 }
 
-// Rows whose content duplicates an earlier row — the long-term net for
-// low-frequency double-render reports. Signature-based (same kind + content),
-// so two rows carrying the same message from different id namespaces are
-// caught; deliberately identical user messages also match, which the reader of
-// the diagnostics is expected to allow for.
+// Rows whose content duplicates an earlier row (same kind + content) — the
+// long-term net for low-frequency double-render reports.
 export function duplicateItemRows(items: readonly SignatureItem[]): SignatureItem[] {
   const seen = new Set<string>();
   const dupes: SignatureItem[] = [];
@@ -322,6 +336,43 @@ export function duplicateItemRows(items: readonly SignatureItem[]): SignatureIte
     else seen.add(signature);
   }
   return dupes;
+}
+
+// The assistant row owning the page's in-flight turn: walk the tail for the
+// newest unfinished tool row and take the nearest assistant row before it. A
+// tail that already starts a newer turn (user/assistant) has no owner.
+export function pageInFlightAssistantId(items: readonly SignatureItem[]): string | undefined {
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    if (item.kind === "tool" && item.status !== "done" && item.status !== "error") {
+      for (let j = i - 1; j >= 0; j -= 1) {
+        if (items[j].kind === "assistant") return items[j].id;
+      }
+      return undefined;
+    }
+    if (item.kind === "assistant" || item.kind === "user") return undefined;
+  }
+  return undefined;
+}
+
+// Keeps a still-present pointer, otherwise re-points at the page's in-flight
+// assistant row — a dangling pointer would rebuild a tail row on next delta.
+export function pageAssistantPointer(current: string | undefined, pageItems: readonly SignatureItem[]): string | undefined {
+  return current && pageItems.some((item) => item.id === current) ? current : pageInFlightAssistantId(pageItems);
+}
+
+// Page tool rows are written when the call starts; an in-flight tool the live
+// stream still reports as running is the stronger evidence, so the page's
+// "stopped" placeholder must not downgrade it.
+export function liftLiveToolStatus<T extends SignatureItem>(pageItems: readonly T[], liveItems: readonly SignatureItem[]): T[] {
+  const liveById = new Map(liveItems.map((it) => [it.id, it]));
+  return pageItems.map((pageItem) => {
+    if (pageItem.kind !== "tool" || pageItem.status !== "stopped") return pageItem;
+    const live = liveById.get(pageItem.id);
+    return live?.kind === "tool" && live.status === "running"
+      ? { ...pageItem, status: "running" as const }
+      : pageItem;
+  });
 }
 
 // Terminal frontend rows (optimistic submits, steer notices) whose content the

@@ -39,7 +39,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, pageCoveredLiveItemIds, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2275,7 +2275,7 @@ export function reducer(s: State, a: Action): State {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       return {
         ...s,
-        items: compactArchivedToolItems(a.items),
+        items: compactArchivedToolItems(liftLiveToolStatus(a.items, s.items)),
         historyPrefixCount: a.items.length,
         pendingSubmissionId: undefined,
         hydrateHistoryLoaded: true,
@@ -2288,6 +2288,9 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
+        // The previous streaming row is gone with the replaced items; re-point the
+        // delta stream at the page's in-flight assistant row (see page-owner).
+        currentAssistant: pageAssistantPointer(s.currentAssistant, a.items),
       };
     case "history_rebase": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
@@ -2323,7 +2326,7 @@ export function reducer(s: State, a: Action): State {
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       return {
         ...s,
-        items: compactArchivedToolItems([...a.items, ...rest]),
+        items: compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...rest]),
         historyPrefixCount: a.items.length + retainedPrefix.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2335,7 +2338,9 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "prepend" },
-        currentAssistant: liveDropped ? undefined : s.currentAssistant,
+        // The page owns the in-flight turn now: hand the delta stream to the page's
+        // own assistant row (a cleared pointer would rebuild a tail duplicate).
+        currentAssistant: liveDropped ? pageInFlightAssistantId(a.items) : s.currentAssistant,
         live: liveDropped ? undefined : s.live,
       };
     }

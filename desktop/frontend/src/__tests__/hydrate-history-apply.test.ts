@@ -1,5 +1,7 @@
 // Run: tsx src/__tests__/hydrate-history-apply.test.ts
 
+import { initialState, reducer } from "../lib/useController";
+
 import {
   activeTabHydrationPlan,
   canAdoptUnboundLiveSurface,
@@ -7,6 +9,7 @@ import {
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
   pageCoveredLiveItemIds,
+  pageOverlapsLiveContent,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
   revisionNotOlder,
@@ -233,6 +236,59 @@ ok(
   pageCoveredLiveItemIds([{ kind: "assistant", id: "h:3", text: "half" }], [{ kind: "assistant", id: "a:t1:0", text: "half" }]).length === 0,
   "assistant rows are owned by the turn-level rules, not this cleanup",
 );
+
+// Streaming rows grow after the page snapshot, so exact signatures never match:
+// the page's copy is an earlier prefix of the live text and must still count as
+// overlap (otherwise the whole page-owns-the-turn cleanup is skipped and the
+// rebuilt rows co-mount = the low-frequency duplicate).
+ok(
+  pageOverlapsLiveContent(
+    [{ kind: "assistant", id: "h:9", text: "part" }],
+    [{ kind: "assistant", id: "a:t1:0", text: "part with more streamed text" }],
+  ) === true,
+  "a page snapshot that prefixes the live text still overlaps",
+);
+ok(
+  pageOverlapsLiveContent(
+    [{ kind: "assistant", id: "h:9", text: "unrelated" }],
+    [{ kind: "assistant", id: "a:t1:0", text: "something else" }],
+  ) === false,
+  "unrelated text rows are not overlap",
+);
+
+// Page handoff: the page's in-flight turn must not co-mount with the rebuilt
+// live rows, the streaming pointer must follow the page row, and a live
+// "running" tool status must survive a page copy that only knows "stopped".
+type ReducerState = ReturnType<typeof reducer>;
+const toolRow = (id: string, status: "running" | "stopped" | "done") =>
+  ({ kind: "tool" as const, id, name: "wait", args: "", readOnly: true, status, output: "" });
+const assistantRow = (id: string, text: string) =>
+  ({ kind: "assistant" as const, id, text, reasoning: "", streaming: true });
+
+{
+  const base: ReducerState = {
+    ...initialState,
+    historyRevision: 5,
+    items: [assistantRow("a:t1:0", "streamed so far"), toolRow("call-1", "running")],
+    currentAssistant: "a:t1:0",
+    live: { id: "a:t1:0", text: "streamed so far", reasoning: "" },
+  };
+  const next = reducer(base, {
+    type: "history_prepend",
+    items: [assistantRow("h:9", "streamed"), toolRow("call-1", "stopped")],
+    removeIds: ["a:t1:0", "call-1"],
+    startTurn: 1,
+    totalTurns: 3,
+    hasOlder: false,
+    revision: 6,
+    digest: "d6",
+  });
+  ok(next.items.filter((it) => it.id === "call-1").length === 1, "page tool row does not co-mount with the live copy");
+  const tool = next.items.find((it) => it.id === "call-1");
+  ok(tool?.kind === "tool" && tool.status === "running", "a live running tool keeps its status when the page copy says stopped");
+  ok(next.items.filter((it) => it.kind === "assistant").length === 1, "the superseded live assistant row does not remain beside the page copy");
+  ok(next.currentAssistant === "h:9", "the streaming pointer re-points at the page's in-flight assistant row");
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
