@@ -829,6 +829,7 @@ type Action =
   | { type: "history_items_patch"; patches: Record<string, Item> }
   | { type: "history_older_start" }
   | { type: "history_older_error"; error?: string }
+  | { type: "latest_compaction"; tabId: string; record: { inProgress?: boolean; trigger?: string; messages?: number; summary?: string } }
   | { type: "local_notice"; level: "info" | "warn"; text: string; preserveRuntime?: boolean }
   | { type: "clearApproval" }
   | { type: "clearAsk" }
@@ -1822,7 +1823,15 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       return { ...settled, usage, context: { ...settled.context, used, sessionTokens }, turnTokens, turnOutputTokens, turnOutputCharsAtUsage, turnOutputEstimated, turnTotalTokens, turnCost, turnRateBand, turnArgChars: updateContextGauge ? 0 : settled.turnArgChars, sessionTokens, sessionCost, sessionCurrency, usageSeq: settled.usageSeq + 1, lastRequestTps, pendingRequestModelMs: updateContextGauge ? undefined : settled.pendingRequestModelMs };
     }
     case "notice": {
-      const next = appendNoticeToState(s, e.level ?? "info", e.text ?? "", e.detail, e.code, e.decisionReceipt);
+      // Slash commands (/compact, /context, /tree…) answer with a notice and
+      // never emit turn events, so the optimistic pending indicator ("sending…")
+      // would otherwise stick forever. An out-of-turn notice means the backend
+      // has settled the submission — clear the pending state (in-turn notices
+      // are guarded by turnActive).
+      let next = appendNoticeToState(s, e.level ?? "info", e.text ?? "", e.detail, e.code, e.decisionReceipt);
+      if (s.pendingSubmissionId && s.pendingUser !== undefined && !s.turnActive) {
+        next = { ...next, pendingUser: undefined, pendingSubmissionId: undefined };
+      }
       return e.code?.startsWith("stream_interrupted_") ? { ...next, streamInterruptNoticeShown: true } : next;
     }
     case "context_maintenance": {
@@ -1835,7 +1844,12 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     case "phase":
       return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "phase", id: `p${s.seq}`, text: e.text ?? "" }] };
     case "compaction_started":
-      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `c${s.seq}`, pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }] };
+      // Compression starting means the backend accepted the submission:
+      // clear the optimistic pending indicator (slash path has no turn events).
+      const pendingClear = s.pendingSubmissionId && s.pendingUser !== undefined && !s.turnActive
+        ? { pendingUser: undefined, pendingSubmissionId: undefined }
+        : {};
+      return { ...s, ...pendingClear, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `c${s.seq}`, pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }] };
     case "compaction_done": {
       const c = e.compaction;
       const idx = [...s.items].reverse().findIndex((it) => it.kind === "compaction" && it.pending);
@@ -1846,6 +1860,15 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       }
       const filled: Item = { kind: "compaction", id: at < 0 ? `c${s.seq}` : (s.items[at] as Extract<Item, { kind: "compaction" }>).id, pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "" };
       const items = at < 0 ? [...s.items, filled] : s.items.map((it, i) => (i === at ? filled : it));
+      // Record the finished compaction in the module-level cache so the row
+      // survives a tab switch (controller state may be rebuilt entirely).
+      const doneCard = items[at < 0 ? items.length - 1 : at];
+      if (doneCard && s.meta?.sessionPath) {
+        const sessionPath = s.meta.sessionPath;
+        const existing = liveCompactionsCache.get(sessionPath) ?? [];
+        const nextCache = existing.some((it) => it.id === doneCard.id) ? existing.map((it) => (it.id === doneCard.id ? doneCard : it)) : [...existing, doneCard];
+        liveCompactionsCache.set(sessionPath, nextCache);
+      }
       return { ...s, running: s.turnActive ? s.running : false, seq: s.seq + 1, items };
     }
     case "steer":
@@ -2243,7 +2266,7 @@ export function reducer(s: State, a: Action): State {
     case "history": {
       const { items, seq } = historyMessagesToItems(a.messages, "h", s.seq);
       // Remote cards have no local ToolResultForTab fallback; retain expansion data.
-      return { ...s, items: a.remote ? items : compactArchivedToolItems(items), historyPrefixCount: items.length, pendingSubmissionId: undefined, seq, hydrateHistoryLoaded: true, hydratePlaceholderItems: undefined, historyStartTurn: 0, historyTotalTurns: 0, historyHasOlder: false, historyOlderLoading: false, historyOlderError: undefined, historyRevision: undefined, historyDigest: undefined, historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" } };
+      return { ...s, items: a.remote ? items : compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, items)), historyPrefixCount: items.length, pendingSubmissionId: undefined, seq, hydrateHistoryLoaded: true, hydratePlaceholderItems: undefined, historyStartTurn: 0, historyTotalTurns: 0, historyHasOlder: false, historyOlderLoading: false, historyOlderError: undefined, historyRevision: undefined, historyDigest: undefined, historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" } };
     }
     case "history_page": {
       if (historyRevisionIsOlder(s.historyRevision, a.page.revision)) return s;
@@ -2273,7 +2296,7 @@ export function reducer(s: State, a: Action): State {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       return {
         ...s,
-        items: compactArchivedToolItems(a.items),
+        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, a.items)),
         historyPrefixCount: a.items.length,
         pendingSubmissionId: undefined,
         hydrateHistoryLoaded: true,
@@ -2294,7 +2317,7 @@ export function reducer(s: State, a: Action): State {
       const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
       return {
         ...s,
-        items: compactArchivedToolItems([...a.items, ...retainedTail]),
+        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail])),
         historyPrefixCount: a.items.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2308,6 +2331,23 @@ export function reducer(s: State, a: Action): State {
         historyLayoutRevision: s.historyLayoutRevision + 1,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
       };
+    }
+    case "latest_compaction": {
+      // Hydrate-time restoration of a compaction that finished (or is still
+      // running) while the tab was released (switch-away mid-run). InProgress
+      // mounts a pending card; a finished record fills the pending card or
+      // appends (dedup by summary so repeated hydrates do not stack cards).
+      if (a.record?.inProgress) {
+        if (s.items.some((it) => it.kind === "compaction" && it.pending)) return s;
+        return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `lc${s.seq}`, pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }] };
+      }
+      if (!a.record?.summary || s.items.some((it) => it.kind === "compaction" && !it.pending && it.summary === a.record.summary)) return s;
+      const pendingIdx = s.items.findIndex((it) => it.kind === "compaction" && it.pending);
+      const filled: Item[] | undefined = pendingIdx >= 0
+        ? s.items.map((it, i) => (i === pendingIdx ? { ...it, pending: false, trigger: a.record!.trigger ?? "", messages: a.record!.messages ?? 0, summary: a.record!.summary ?? "", archive: "" } : it))
+        : undefined;
+      if (filled) return { ...s, items: filled };
+      return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: `lc${s.seq}`, pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }] };
     }
     case "history_prepend": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
@@ -2434,7 +2474,13 @@ export function reducer(s: State, a: Action): State {
         extensionNotifications: [],
         extensionGenerations: {},
       };
-    case "reset": return { ...initialState, meta: metaWithoutCanonicalTodos(s.meta), context: { used: 0, window: s.context.window, sessionTokens: 0, compactRatio: s.context.compactRatio }, balance: s.balance, effort: s.effort, jobs: s.jobs, hydrating: s.hydrating, hydrateReason: s.hydrateReason, hydrateError: s.hydrateError, hydrateHistoryLoaded: s.hydrateHistoryLoaded, hydratePlaceholderItems: s.hydratePlaceholderItems, backendActivationPending: s.backendActivationPending, sessionGen: s.sessionGen + 1, promptEpoch: s.promptEpoch + 1 };
+    case "reset": {
+      // 重置 items 时保留压缩记录（live 事件产物）：切回会话触发的 hydrate
+      // 先 reset 再 history 重建，若这里清空则后续 preserve 无从保留，
+      // 切回后压缩摘要会丢失（compact.trace 实证：replace 时 c0）。
+      const base = { ...initialState, meta: metaWithoutCanonicalTodos(s.meta), context: { used: 0, window: s.context.window, sessionTokens: 0, compactRatio: s.context.compactRatio }, balance: s.balance, effort: s.effort, jobs: s.jobs, hydrating: s.hydrating, hydrateReason: s.hydrateReason, hydrateError: s.hydrateError, hydrateHistoryLoaded: s.hydrateHistoryLoaded, hydratePlaceholderItems: s.hydratePlaceholderItems, backendActivationPending: s.backendActivationPending, sessionGen: s.sessionGen + 1, promptEpoch: s.promptEpoch + 1 };
+      return { ...base, items: preserveLiveCompactions(s.meta?.sessionPath, s.items, base.items) };
+    }
     case "context_panel_refresh": return { ...s, contextPanelSeq: s.contextPanelSeq + 1 };
     case "event": {
       const next = applyEvent(s, a.e, a.remote);
@@ -2493,6 +2539,30 @@ function appendNoticeItem(items: Item[], seq: number, id: string, level: "info" 
 function appendNoticeToState(s: State, level: "info" | "warn", text: string, detail?: string, code?: string, decisionReceipt?: WireDecisionReceipt): State {
   const next = appendNoticeItem(s.items, s.seq, `n${s.seq}`, level, text, detail, code, decisionReceipt);
   return { ...s, running: s.turnActive ? s.running : false, seq: next.seq, items: next.items };
+}
+
+// preserveLiveCompactions carries the session's compaction cards (live event
+// products, not part of persisted history) across any hydrate-driven items
+// rebuild, so switching away and back keeps the compression summary visible.
+// Source of truth is a module-level cache keyed by session path: switching
+// tabs can rebuild the per-tab controller state entirely (verified via
+// compact.trace: on switch-back the reset input already has zero compaction
+// rows), so row-level preservation alone cannot survive. The cache outlives
+// any single state instance and is re-applied on every items rebuild.
+const liveCompactionsCache = new Map<string, Item[]>();
+
+function cachedCompactions(sessionPath: string | undefined, prevItems: Item[]): Item[] {
+  const cached = sessionPath ? liveCompactionsCache.get(sessionPath) : undefined;
+  if (cached && cached.length > 0) return cached;
+  return prevItems.filter((it) => it.kind === "compaction");
+}
+
+function preserveLiveCompactions(sessionPath: string | undefined, prevItems: Item[], nextItems: Item[]): Item[] {
+  const compactions = cachedCompactions(sessionPath, prevItems);
+  if (compactions.length === 0 || nextItems.some((it) => it.kind === "compaction")) return nextItems;
+  const merged = [...nextItems, ...compactions];
+  if (sessionPath) liveCompactionsCache.set(sessionPath, compactions);
+  return merged;
 }
 
 export { replayPendingPromptsForActiveTab } from "./promptReplay";
@@ -2982,6 +3052,27 @@ export function useController() {
       }
 
       if (!stillCurrent()) return;
+      // Compaction records are not part of the persisted transcript; a
+      // compaction finished (or still running) while the tab was released
+      // (switch-away mid-run) only survives in the session sidecar. Query it
+      // on EVERY hydrate path (including cache-skip) so a switched-back tab
+      // shows the pending card immediately and polls until the finished
+      // record lands.
+      if (sessionPath) {
+        const pollForCompaction = (attempt: number) => {
+          void app.LatestCompactionForTab(tabId).then((rec) => {
+            if (!stillCurrent() || activeTabIdRef.current !== tabId) return;
+            if (rec?.summary) {
+              dispatchTo(tabId, { type: "latest_compaction", tabId, record: { trigger: rec.trigger ?? "", messages: rec.messages ?? 0, summary: rec.summary } });
+              return;
+            }
+            if (rec?.inProgress && attempt < 30) {
+              setTimeout(() => pollForCompaction(attempt + 1), 3000);
+            }
+          }).catch(() => {});
+        };
+        pollForCompaction(0);
+      }
       dispatchTo(tabId, { type: "hydrate_done" });
       addBreadcrumb("tab.hydrate", `done ${reason} ${tabId} ms=${Date.now() - hydrateStartedAt}`);
 
@@ -3558,6 +3649,12 @@ export function useController() {
       for (const b of coalesceStreamDeltas(batch)) dispatchTo(b.tabId, { type: "stream_batch", segments: b.segments });
     });
     const handleWireEvent = (e: WireEvent) => {
+      // TEMP probe: confirm whether compaction events reach the wire handler at
+      // all, and where they get dropped (epoch fence / acceptLive). Removed
+      // after the switch-away compaction diagnosis is closed.
+      if (e.kind === "compaction_started" || e.kind === "compaction_done") {
+
+      }
       // Untagged compatibility events belong to the tab that the backend has
       // actually activated, not the frontend's optimistic selection. During a
       // slow SetActiveTab these can differ, and routing to the optimistic tab
@@ -3566,7 +3663,12 @@ export function useController() {
       if (!targetTabId) return;
       const acceptedEpoch = runtimeEpochByTabRef.current.get(targetTabId);
       if (e.runtimeEpoch) {
-        if (!acceptsRuntimeEventEpoch(acceptedEpoch, e.runtimeEpoch)) return;
+        if (!acceptsRuntimeEventEpoch(acceptedEpoch, e.runtimeEpoch)) {
+          if (e.kind === "compaction_started" || e.kind === "compaction_done") {
+
+          }
+          return;
+        }
         if (!acceptedEpoch) runtimeEpochByTabRef.current.set(targetTabId, e.runtimeEpoch);
       }
       const currentMeta = statesRef.current.get(targetTabId)?.meta;
@@ -3574,6 +3676,9 @@ export function useController() {
       // generation (edited-prompt rotation) must not drop the live stream.
       if (e.sessionGeneration !== undefined && currentMeta && currentMeta.sessionGeneration !== undefined && e.sessionGeneration !== currentMeta.sessionGeneration) return;
       if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
+      if (e.kind === "compaction_started" || e.kind === "compaction_done") {
+
+      }
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
       if (e.kind === "text" || e.kind === "reasoning") {
@@ -4609,9 +4714,14 @@ export function useController() {
       if (partialNotice) await import("./rewindCommit").then(({ dispatchPartialRewindNotice }) =>
         dispatchPartialRewindNotice(partialNotice, sourceTabId, outcome.tabId, (tabId, text) => dispatchTo(tabId, { type: "local_notice", level: "warn", text })));
       return outcome;
-    } catch {
+    } catch (error) {
       if (actionScope === "fork" || actionScope === "fork-worktree") {
         dispatchTo(sourceTabId, { type: "local_notice", level: "warn", text: t("rewind.forkFailed") });
+      } else {
+        // Summarize (按钮压缩) / rewind failures must be visible: surface the
+        // backend reason, falling back to a generic message.
+        const detail = error instanceof Error && error.message ? error.message : "";
+        dispatchTo(sourceTabId, { type: "local_notice", level: "warn", text: detail || t("rewind.summarizeFailed") });
       }
       return { ok: false };
     } finally {

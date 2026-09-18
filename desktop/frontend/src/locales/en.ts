@@ -3352,6 +3352,7 @@ export const en = {
   "rewind.forkWorktreeDirtySource": "Commit or stash workspace changes before an isolated fork, or use a shared fork to keep them.",
   "rewind.forkFailed": "Fork failed. Any worktree that could not be cleaned up safely was preserved.",
   "rewind.summFrom": "Compress model context after this",
+  "rewind.summarizeFailed": "Context compression failed, please retry.",
   "rewind.summUpto": "Compress model context before this",
   "rewind.confirmFork": "Confirm fork conversation",
   "rewind.confirmSummFrom": "Confirm context compression after this (visible history is kept)",
