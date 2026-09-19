@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102491,
+    "file-size": 102479,
     "function-size": 8281,
     "layering": 1,
     "marker": 0,
@@ -143,9 +143,6 @@
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213
     },
-    "desktop/frontend/src/lib/transcriptRows.ts": {
-      "file-size": 14
-    },
     "desktop/frontend/src/lib/transcriptStore.ts": {
       "file-size": 270
     },
@@ -153,7 +150,7 @@
       "file-size": 1614
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4494
+      "file-size": 4496
     },
     "desktop/heartbeat.go": {
       "essay": 7
