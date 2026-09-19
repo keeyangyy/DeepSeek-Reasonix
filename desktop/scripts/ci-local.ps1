@@ -23,7 +23,7 @@ function Invoke-Step($name, [scriptblock]$body, [string]$dir) {
 $changed = @(git diff --name-only origin/main-v2...HEAD 2>$null)
 if ($changed.Count -eq 0) { $changed = @(git diff --name-only HEAD~1 2>$null) }
 $changedGo = @($changed | Where-Object { $_ -like "*.go" })
-$changedFe = @($changed | Where-Object { $_ -like "desktop/frontend/*" } | ForEach-Object { $_ -replace "^desktop/frontend/", "" })
+$changedFe = @($changed | Where-Object { $_ -like "desktop/frontend/*" -and (Test-Path $_) } | ForEach-Object { $_ -replace "^desktop/frontend/", "" })
 
 Invoke-Step "gofmt（改动 Go）" {
   if ($changedGo.Count -gt 0) { gofmt -l $changedGo } else { $global:LASTEXITCODE = 0; Write-Host "  无 Go 改动" }
