@@ -123,6 +123,46 @@ func errorKindForAutoTitleLog(err error) string {
 	}
 }
 
+// errSessionTopicTitleUnchanged lets writeSessionTopicTitle skip a sidecar
+// rewrite when the session already carries the committed title.
+var errSessionTopicTitleUnchanged = errors.New("session topic title unchanged")
+
+// writeSessionTopicTitle mirrors a topic-layer title onto one session sidecar.
+//
+// The session list, tab strip, and history panel render the per-session copy of
+// the title, and the session-catalog projection indexes it. Auto-naming used to
+// write only the topic layer, so an auto-named conversation kept showing the
+// localized placeholder ("新的会话") in those views until the user renamed it by
+// hand — the topic layer had the real name while the sidecar kept the default.
+// updateTopicSessionTitles cannot close that gap reliably: it finds its targets
+// by scanning known session directories for a topic match, so a session whose
+// directory is not in that set (or whose sidecar lock is held) is skipped
+// silently. Callers that already know the exact session path pass it here.
+func writeSessionTopicTitle(sessionPath, title string) error {
+	sessionPath = strings.TrimSpace(sessionPath)
+	title = strings.TrimSpace(title)
+	if sessionPath == "" || title == "" {
+		return nil
+	}
+	return agent.UpdateBranchMeta(sessionPath, false, func(meta *agent.BranchMeta) error {
+		if strings.TrimSpace(meta.TopicTitle) == title {
+			return errSessionTopicTitleUnchanged
+		}
+		meta.TopicTitle = title
+		return nil
+	})
+}
+
+// commitAutoTopicTitle publishes a committed auto title to the open tab and to
+// the session sidecar. The topic layer alone leaves the session list, tab strip
+// and history panel on the placeholder label: those views read the sidecar.
+func (a *App) commitAutoTopicTitle(sessionPath, topicID, title string) {
+	a.updateOpenTopicTitle(topicID, title, topicTitleSourceAuto)
+	if err := writeSessionTopicTitle(sessionPath, title); err != nil && !errors.Is(err, errSessionTopicTitleUnchanged) {
+		slog.Warn("desktop: auto-title session sidecar sync failed", "topic", topicID, "error_type", topicStateErrorType(err))
+	}
+}
+
 // sessionCustomTitleForLabel returns the session's canonical custom title for
 // sidebar labels: BranchMeta.CustomTitle first, then the legacy titles map.
 // Empty when the session has no explicit name, so callers can fall back to

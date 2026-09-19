@@ -338,8 +338,11 @@ func (a *App) syncSessionCatalogMetadata(ctx context.Context, catalog *sessionca
 				continue
 			}
 			title := strings.TrimSpace(titles[topicID])
-			if title == "" {
-				title = defaultTopicTitle
+			if isDefaultTopicTitle(title) {
+				// A placeholder label is not a name: publish it as unknown so the
+				// projection keeps its published title or the session-side fallback
+				// instead of storing the localized placeholder as metadata.
+				title = ""
 			}
 			sortOrder := -1
 			if manualOrder {

@@ -4785,7 +4785,7 @@ func (a *App) maybeAutoTitleTopic(tab *WorkspaceTab) bool {
 	if topicAutoTitleCommittedHookForTest != nil {
 		topicAutoTitleCommittedHookForTest()
 	}
-	a.updateOpenTopicTitle(topicID, nextTitle, topicTitleSourceAuto)
+	a.commitAutoTopicTitle(sessionPath, topicID, nextTitle)
 	changedDirs := a.updateTopicSessionTitles(topicID, nextTitle)
 	if len(changedDirs) > 0 {
 		a.emitProjectTreeChangedForSessionDirs(changedDirs...)
