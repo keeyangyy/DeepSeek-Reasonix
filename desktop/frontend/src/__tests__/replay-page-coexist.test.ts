@@ -100,7 +100,9 @@ console.log("\nlive deltas reattach after the page owns the turn");
 
 {
   let state = replayedState();
-  const removeIds = state.items.filter((item) => item.id.startsWith("a:turn-x:")).map((item) => item.id);
+  const removeIds = state.items
+    .filter((item) => item.id.startsWith("a:turn-x:") || pageItems.some((pageItem) => pageItem.id === item.id))
+    .map((item) => item.id);
   state = reducer(state, { type: "history_prepend", items: pageItems, removeIds, startTurn: 58, totalTurns: 60, hasOlder: false } as never);
   // 页 apply 后 live 流继续：新 delta 应新建行并正常衔接（不复活被剔行、不撞 id）
   state = event(state, { kind: "text", turnId: "turn-x", text: "seg3" });

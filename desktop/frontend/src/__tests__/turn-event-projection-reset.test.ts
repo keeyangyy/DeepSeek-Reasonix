@@ -92,6 +92,7 @@ const rebased = reducer(state, {
     { kind: "user", id: "persisted-user-durable", text: "persisted question" },
     persistedAssistant,
   ],
+  removeIds: ["assistant-live"], // 调用方 replaceRemoveIds 的同 id 分支：页含同 id 行 → 剔 live 副本
   startTurn: 5,
   totalTurns: 7,
   hasOlder: true,
