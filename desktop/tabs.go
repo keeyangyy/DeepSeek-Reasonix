@@ -4807,7 +4807,13 @@ func autoTitleTopicFromSession(workspaceRoot, topicID, sessionPath string) (stri
 		return "", false
 	}
 	if !shouldApplyAutoTopicTitle(workspaceRoot, topicID, proposal) {
-		return "", false
+		// 命名已提交过（AutoMeta 在案）。若当年 sidecar 写失败（仅 Warn 一次、
+		// updateTopicSessionTitles 静默 continue），会话列表标题永久停留占位名。
+		// 补写幂等：sidecar 已有真名时 unchanged 静默，下一次 autosave 自愈。
+		if sidecarAutoTitleSynced(sessionPath) {
+			return "", false
+		}
+		return proposal.Title, true
 	}
 	nextTitle := proposal.Title
 	sameTitle := nextTitle == strings.TrimSpace(loadTopicTitle(workspaceRoot, topicID))
@@ -4816,8 +4822,15 @@ func autoTitleTopicFromSession(workspaceRoot, topicID, sessionPath string) (stri
 		autoTitleGateLog("apply-state-write", topicStateErrorType(err))
 		return "", false
 	}
-	if !applied || sameTitle {
+	if !applied {
 		return "", false
+	}
+	if sameTitle {
+		// topic 层已是该名（legacy 迁移或重复 apply）：sidecar 可能因早前写
+		// 失败停留占位名 → 补写一次。
+		if sidecarAutoTitleSynced(sessionPath) {
+			return "", false
+		}
 	}
 	return nextTitle, true
 }
@@ -4867,6 +4880,21 @@ func shouldApplyAutoTopicTitle(workspaceRoot, topicID string, proposal autoTopic
 		return false
 	}
 	return true
+}
+
+// sidecarAutoTitleSynced reports whether the session sidecar already carries a
+// non-placeholder topic title. 缺失视为未同步（补写会创建 sidecar，安全）；读
+// 失败视为已同步（避免空转，常规写路径自有日志）。
+func sidecarAutoTitleSynced(sessionPath string) bool {
+	meta, ok, err := agent.LoadBranchMeta(sessionPath)
+	if err != nil {
+		return true
+	}
+	if !ok {
+		return false
+	}
+	title := strings.TrimSpace(meta.TopicTitle)
+	return title != "" && !isDefaultTopicTitle(title)
 }
 
 func sessionHasManualDisplayTitle(sessionPath string) bool {
