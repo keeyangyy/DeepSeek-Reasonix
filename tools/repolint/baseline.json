@@ -4,8 +4,8 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102483,
-    "function-size": 8280,
+    "file-size": 102491,
+    "function-size": 8281,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
@@ -108,7 +108,7 @@
       "file-size": 1089
     },
     "desktop/frontend/src/components/Message.tsx": {
-      "file-size": 27
+      "file-size": 26
     },
     "desktop/frontend/src/components/ProjectTree.tsx": {
       "file-size": 1467
@@ -153,7 +153,7 @@
       "file-size": 1614
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4488
+      "file-size": 4494
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -976,13 +976,13 @@
     },
     "internal/event/event.go": {
       "essay": 6,
-      "file-size": 102,
+      "file-size": 103,
       "narrative": 1
     },
     "internal/eventwire/wire.go": {
       "complexity": 4,
-      "file-size": 31,
-      "function-size": 9
+      "file-size": 33,
+      "function-size": 10
     },
     "internal/evidence/evidence.go": {
       "complexity": 6,
