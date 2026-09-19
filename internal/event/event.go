@@ -444,6 +444,7 @@ type Compaction struct {
 	Messages int    // Done: how many messages were folded into the summary
 	Summary  string // Done: the briefing the agent keeps relying on
 	Archive  string // Done: path the dropped originals were archived to ("" if none)
+	Reason   string // Aborted: why the pass did not complete ("" on success)
 }
 
 // ContextMaintenance is the typed wire-safe receipt for snip/prune/noop/
