@@ -378,12 +378,21 @@ export function findDuplicateItemIds(
   allowedKinds?: readonly string[],
 ): string[] {
   const counts = new Map<string, number>();
+  const aIds = new Set<string>();
   for (const item of a) {
+    aIds.add(item.id);
     const signature = itemSignature(item);
     counts.set(signature, (counts.get(signature) ?? 0) + 1);
   }
   const dupes: string[] = [];
   for (const item of b) {
+    // Same id is unconditionally a duplicate (the page owns that row); the
+    // kind whitelist only guards signature matches, so a live row of a paired
+    // turn is never dropped on text equality alone (turn-actions protection).
+    if (aIds.has(item.id)) {
+      dupes.push(item.id);
+      continue;
+    }
     if (allowedKinds !== undefined && !allowedKinds.includes(item.kind)) continue;
     const signature = itemSignature(item);
     const remaining = counts.get(signature) ?? 0;
