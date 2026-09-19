@@ -2369,7 +2369,11 @@ export function reducer(s: State, a: Action): State {
         assertNoDuplicateItems(filled, "latest_compaction");
         return { ...s, items: filled };
       }
-      const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" }];
+      // 重启后从 sidecar 恢复：hydrate 的历史行全部是压缩之后的内容，卡片
+      // 的逻辑位置在它们之前（顶部）——append 会把它甩到消息流最底部
+      // （462 条 manual 压缩实测）。
+      const card: Item = { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" };
+      const items: Item[] = [card, ...s.items];
       assertNoDuplicateItems(items, "latest_compaction");
       return { ...s, seq: s.seq + 1, items };
     }

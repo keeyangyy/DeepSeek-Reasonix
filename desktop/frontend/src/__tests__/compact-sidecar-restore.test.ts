@@ -30,7 +30,7 @@ console.log("\ncompact sidecar restore");
   ok(cards.length === 1, "latest_compaction 恢复一张压缩卡片");
   ok(cards[0]?.summary === "切走期间完成的压缩摘要", "摘要内容正确");
   ok(cards[0]?.messages === 14, "消息数正确");
-  ok(restored.items[0]?.kind === "user", "历史内容保留在卡片之前");
+  ok(restored.items[0]?.kind === "compaction", "切走期间完成的压缩卡片在保留历史之前（顶部）");
 }
 
 // 去重：同 summary 的重复恢复不叠加
