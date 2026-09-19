@@ -296,7 +296,10 @@ for (const path of localeChunks) {
   // ceiling for cross-platform CI.
   // Search assignment copy adds 239 / 231 B over main-v2 (63147 / 63920 B).
   // Measured result: 63386 / 64151 B; retain bounded cross-platform headroom.
-  const budget = name.startsWith("zh-TW-") ? 62.9 * 1024 : 62.1 * 1024;
+  // The process-fold policy adds six short labels per dialect (the folding-mode
+  // switch and its hints); the measured chunks move to 62.2 KiB zh and
+  // 62.9 KiB zh-TW, so retain the next one-decimal ceiling for each dialect.
+  const budget = name.startsWith("zh-TW-") ? 63.0 * 1024 : 62.3 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -414,6 +417,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // The main-v2 merge of the default-collapsed preference and the fork-session
 // flow adds ~0.7 KiB to the initial path (measured 2401.2 KiB on CI). Keep
 // the raise explicit and bounded, with headroom for toolchain/hash drift.
-const rawInitialBudgetKiB = 2_407.1;
+// The process-fold policy (three-mode fold switch, its own fold-state module,
+// and the localized labels) adds 3.1 KiB over the 2405.2 KiB baseline; the
+// merged payload measures 2408.3 KiB. Retain 0.2 KiB build headroom.
+const rawInitialBudgetKiB = 2_408.5;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

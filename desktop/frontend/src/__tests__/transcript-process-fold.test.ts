@@ -435,5 +435,83 @@ const warningTurn: Item[] = [
   }
 }
 
+// ── Phase 6: process fold policy ─────────────────────────────────────────────
+// The three-mode policy only changes the DEFAULT state of the "N tools ·
+// M thoughts" headers: follow-turn (long-standing behavior), collapsed, and
+// active-only. A manual toggle always wins, and Deep stays inert.
+{
+  const harness = await createTranscriptHarness();
+  const container = harness.container;
+  const { setProcessFoldPolicy } = await harness.loadModule<{
+    setProcessFoldPolicy: (policy: "follow-turn" | "collapsed" | "active-only") => void;
+  }>("/src/lib/processFoldPolicy.ts");
+  // One running turn split into two segments: the first settled (its answer
+  // text closed it), the second still producing output.
+  const policyTurn: Item[] = [
+    { kind: "user", id: "u-policy", text: "inspect" },
+    { kind: "assistant", id: "a-policy-1", text: "", reasoning: "first thought", streaming: false },
+    { kind: "tool", id: "t-policy-1", name: "read_file", args: "{}", readOnly: true, status: "done" },
+    { kind: "assistant", id: "a-policy-2", text: "interim answer", reasoning: "", streaming: false },
+    { kind: "assistant", id: "a-policy-3", text: "", reasoning: "second thought", streaming: false },
+    { kind: "tool", id: "t-policy-2", name: "bash", args: "{}", readOnly: false, status: "running" },
+  ];
+  const folds = () => Array.from(container.querySelectorAll(".turn-collapse"));
+  const openFolds = () => Array.from(container.querySelectorAll(".turn-collapse--open"));
+  const switchPolicy = async (policy: "follow-turn" | "collapsed" | "active-only") => {
+    await act(async () => { setProcessFoldPolicy(policy); });
+    await harness.flush();
+    await harness.flush();
+  };
+  try {
+    await render(harness, policyTurn, { running: true, turnStartAt: 1_000 });
+    ok(folds().length === 2, "the running turn renders both work folds");
+    ok(openFolds().length === 2, "follow-turn keeps every fold of the running turn open");
+
+    await switchPolicy("collapsed");
+    ok(openFolds().length === 0, "collapsed folds the running turn's folds");
+    ok(!container.textContent?.includes("first thought"), "collapsed keeps the settled segment body unmounted");
+    ok(!container.textContent?.includes("second thought"), "collapsed keeps the active segment body unmounted");
+    ok((container.querySelector(".turn-collapse__label")?.textContent ?? "").includes("tools"), "a folded running group still shows its counts");
+
+    await switchPolicy("active-only");
+    ok(openFolds().length === 1, "active-only opens exactly the segment producing output");
+    ok(folds().indexOf(openFolds()[0]) === 1, "the settled segment folds while the active one stays open");
+    ok(!container.textContent?.includes("first thought"), "the settled segment body stays unmounted");
+    ok(Boolean(container.querySelector(".turn-collapse__body")), "the active segment keeps its body mounted");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".turn-collapse > .reasoning__head")?.click();
+    });
+    await harness.flush();
+    ok(openFolds().length === 2, "a manual expansion still wins under active-only");
+
+    await switchPolicy("follow-turn");
+    ok(openFolds().length === 2, "switching back to follow-turn re-opens the running turn");
+    await harness.settle();
+  } finally {
+    await harness.unmount();
+    await harness.close();
+  }
+}
+
+// Deep keeps its meaning ("work stays expanded"), so the policy is inert there.
+{
+  const harness = await createTranscriptHarness({
+    reasoningDisplayMode: "expanded",
+    storage: { "reasonix-process-fold-policy": "collapsed" },
+  });
+  try {
+    await render(harness, [
+      { kind: "user", id: "u-deep-policy", text: "inspect" },
+      { kind: "assistant", id: "a-deep-policy", text: "done", reasoning: "deep thought", streaming: false, workDurationMs: 2_000 },
+    ], { running: true, turnStartAt: 1_000 });
+    ok(Boolean(harness.container.querySelector(".turn-collapse--open")), "Deep ignores a collapsed fold policy");
+    await harness.settle();
+  } finally {
+    await harness.unmount();
+    await harness.close();
+  }
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

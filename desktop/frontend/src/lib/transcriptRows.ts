@@ -1,10 +1,10 @@
 // Pure presentation rows grouped into stable semantic-turn blocks for
 // windowing and logical anchoring.
 //
-// Fold semantics are hoisted out of the old per-instance TurnCollapse state
-// into an explicit FoldMap keyed by segment: auto-open while running,
-// auto-close on completion (unless the user toggled or the preference is
-// "expanded"), and preference switches applying to folds already on screen.
+// Fold semantics (the work-process groups) live in transcriptFoldPolicy.ts:
+// auto-open while running, auto-close on completion unless the user toggled or
+// the preference pins folds open, and preference switches applying to folds
+// already on screen. This module re-exports that API for its callers.
 
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { stableStringHash } from "./stableStringHash";
@@ -12,6 +12,7 @@ import { isBatchedReadOnlyTool, isSteerNoticeText, type ExtensionItem, type Item
 import { appendTurnActionCopyText } from "./turnActionCopy";
 import { isCreationGroupableTool, toolGroupKind, type ToolGroupKind } from "../components/ToolGroup";
 import type { SessionExperience } from "./sessionExperience";
+import type { ProcessFoldPolicy } from "./processFoldPolicy";
 import type { ProcessFoldPreference } from "./processFoldPreference";
 import type { ResolvedReasoningDisplayMode } from "./reasoningDisplayPreference";
 import type { TimelineBlock } from "./transcriptTimeline";
@@ -22,6 +23,19 @@ import {
   type TranscriptGeometryEnvironment,
   type TranscriptRowLayoutVariant,
 } from "./transcriptRowGeometry";
+import { defaultFoldOpen, type FoldMap } from "./transcriptFoldPolicy";
+// Fold state lives in transcriptFoldPolicy.ts; re-exported here so existing
+// row-model callers (and their tests) keep importing the fold API from the
+// module that builds the rows.
+export {
+  EMPTY_FOLDS,
+  defaultFoldOpen,
+  foldMapWithReasoningOpen,
+  foldMapWithToggle,
+  foldSegmentStates,
+  reconcileFoldEntries,
+} from "./transcriptFoldPolicy";
+export type { FoldEntry, FoldMap, FoldSegmentState } from "./transcriptFoldPolicy";
 
 export type UserItem = Extract<Item, { kind: "user" }>;
 export type AssistantItem = Extract<Item, { kind: "assistant" }>;
@@ -302,161 +316,6 @@ export function buildTurnModels(
   return turns;
 }
 
-// ── Fold state ────────────────────────────────────────────────────────────────
-
-export interface FoldEntry {
-  open: boolean;
-  userOverridden: boolean;
-  running: boolean;
-  keepReasoningExpanded?: boolean;
-}
-
-export type FoldMap = ReadonlyMap<string, FoldEntry>;
-
-export const EMPTY_FOLDS: FoldMap = new Map();
-
-type ExperienceInput = SessionExperience | ProcessFoldPreference | ResolvedReasoningDisplayMode;
-
-function normalizeExperience(value: ExperienceInput): SessionExperience {
-  return value === "deep" || value === "expanded" ? "deep" : "standard";
-}
-
-export function defaultFoldOpen(
-  segment: { hasOutsideContent: boolean; hasRunningWork: boolean; foldActive?: boolean; keepReasoningExpanded?: boolean },
-  experience: ExperienceInput,
-): boolean {
-  const normalized = normalizeExperience(experience);
-  return normalized === "deep" || segment.keepReasoningExpanded === true || !segment.hasOutsideContent || segment.foldActive === true || segment.hasRunningWork;
-}
-
-export interface FoldSegmentState {
-  key: string;
-  hasOutsideContent: boolean;
-  hasRunningWork: boolean;
-  keepReasoningExpanded: boolean;
-}
-
-export function foldSegmentStates(models: readonly TurnModel[], keepReasoningExpanded = false): FoldSegmentState[] {
-  const out: FoldSegmentState[] = [];
-  for (const model of models) {
-    for (const segment of model.segments) {
-      if (segment.displayItems.length === 0) continue;
-      out.push({
-        key: segment.key,
-        hasOutsideContent: segment.hasOutsideContent,
-        hasRunningWork: segment.foldActive,
-        keepReasoningExpanded: keepReasoningExpanded && segment.displayItems.some((item) => item.kind === "assistant"),
-      });
-    }
-  }
-  return out;
-}
-
-/**
- * Advance the fold map to match the current segments. Mirrors the old
- * per-TurnCollapse effects: a fold auto-opens while its turn runs and
- * auto-closes on completion unless the user toggled it, it has nothing
- * outside, or the preference pins every fold open. A preference switch clears
- * per-fold overrides so the whole transcript lands in one consistent state.
- * Returns null when nothing changed (so callers can skip a re-render).
- */
-export function reconcileFoldEntries(
-  prev: FoldMap,
-  segments: readonly FoldSegmentState[],
-  experience: ExperienceInput,
-  preferenceChanged: boolean,
-): Map<string, FoldEntry> | null {
-  const normalizedExperience = normalizeExperience(experience);
-  let next: Map<string, FoldEntry> | null = null;
-  const write = (key: string, entry: FoldEntry) => {
-    if (!next) next = new Map(prev);
-    next.set(key, entry);
-  };
-  const seen = new Set<string>();
-  for (const segment of segments) {
-    seen.add(segment.key);
-    const entry = prev.get(segment.key);
-    if (!entry) {
-      write(segment.key, {
-        open: defaultFoldOpen(segment, normalizedExperience),
-        userOverridden: false,
-        running: segment.hasRunningWork,
-        keepReasoningExpanded: segment.keepReasoningExpanded,
-      });
-      continue;
-    }
-    const reasoningPinChanged = Boolean(entry.keepReasoningExpanded) !== segment.keepReasoningExpanded;
-    if (preferenceChanged || reasoningPinChanged) {
-      const open = normalizedExperience === "deep" || segment.keepReasoningExpanded
-        ? true
-        : !segment.hasRunningWork && segment.hasOutsideContent
-          ? false
-          : entry.open;
-      if (open !== entry.open || entry.userOverridden || entry.running !== segment.hasRunningWork || reasoningPinChanged) {
-        write(segment.key, {
-          open,
-          userOverridden: false,
-          running: segment.hasRunningWork,
-          keepReasoningExpanded: segment.keepReasoningExpanded,
-        });
-      }
-      continue;
-    }
-    if (segment.hasRunningWork) {
-      // A fresh run clears the previous manual toggle; while running the fold
-      // stays open unless the user closed it during THIS run.
-      const userOverridden = entry.running ? entry.userOverridden : false;
-      const open = userOverridden ? entry.open : true;
-      if (open !== entry.open || userOverridden !== entry.userOverridden || !entry.running) {
-        write(segment.key, { open, userOverridden, running: true, keepReasoningExpanded: segment.keepReasoningExpanded });
-      }
-      continue;
-    }
-    if (entry.running) {
-      const open = !entry.userOverridden && segment.hasOutsideContent && normalizedExperience !== "deep" && !segment.keepReasoningExpanded ? false : entry.open;
-      write(segment.key, {
-        open,
-        userOverridden: entry.userOverridden,
-        running: false,
-        keepReasoningExpanded: segment.keepReasoningExpanded,
-      });
-    }
-  }
-  for (const key of prev.keys()) {
-    if (!seen.has(key)) {
-      if (!next) next = new Map(prev);
-      next.delete(key);
-    }
-  }
-  return next;
-}
-
-/** User clicked a fold header: flip it and mark the choice as deliberate. */
-export function foldMapWithToggle(prev: FoldMap, key: string, currentlyOpen: boolean): Map<string, FoldEntry> {
-  const next = new Map(prev);
-  const entry = prev.get(key);
-  next.set(key, {
-    open: !currentlyOpen,
-    userOverridden: true,
-    running: entry?.running ?? false,
-    keepReasoningExpanded: entry?.keepReasoningExpanded,
-  });
-  return next;
-}
-
-/** Preserve an inner reasoning expansion when the enclosing process fold settles. */
-export function foldMapWithReasoningOpen(prev: FoldMap, key: string, running: boolean): Map<string, FoldEntry> {
-  const next = new Map(prev);
-  const entry = prev.get(key);
-  next.set(key, {
-    open: true,
-    userOverridden: true,
-    running: entry?.running ?? running,
-    keepReasoningExpanded: entry?.keepReasoningExpanded,
-  });
-  return next;
-}
-
 // ── Virtual rows ──────────────────────────────────────────────────────────────
 
 type TranscriptRowContent =
@@ -683,6 +542,8 @@ export interface BuildRowsOptions {
   sessionExperience?: SessionExperience;
   /** @deprecated Compatibility for non-production row-model callers. */
   foldPreference?: ProcessFoldPreference;
+  /** Default folding policy for segments without a reconciled fold entry. */
+  processFoldPolicy?: ProcessFoldPolicy;
   hasOlderHistory: boolean;
   creationMode: boolean;
   /** Checkpoint-aware turn number for a user item (questionTurnsById). */
@@ -718,7 +579,8 @@ export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: 
     }
     for (const segment of model.segments) {
       if (segment.displayItems.length > 0) {
-        const open = options.folds.get(segment.key)?.open ?? defaultFoldOpen(segment, foldExperience);
+        const defaultOpen = defaultFoldOpen(segment, foldExperience, options.processFoldPolicy ?? "follow-turn");
+        const open = options.folds.get(segment.key)?.open ?? defaultOpen;
         modelRows.push({ kind: "process-header", key: `ph:${segment.key}`, segment, open, layoutVariant: "static" });
         if (open) modelRows.push(...processBodyRows(segment, options.creationMode, renderExperience, subcallsByParent));
       }
