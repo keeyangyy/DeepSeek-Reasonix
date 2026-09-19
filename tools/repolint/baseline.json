@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1915,
-    "file-size": 102480,
+    "file-size": 102440,
     "function-size": 8281,
     "layering": 1,
     "marker": 0,
@@ -147,10 +147,10 @@
       "file-size": 270
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1614
+      "file-size": 1616
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4496
+      "file-size": 4479
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -278,7 +278,7 @@
     "desktop/tabs.go": {
       "complexity": 42,
       "essay": 68,
-      "file-size": 7616,
+      "file-size": 7644,
       "function-size": 359,
       "struct-state": 23
     },
@@ -888,7 +888,7 @@
     "internal/control/controller.go": {
       "complexity": 12,
       "essay": 87,
-      "file-size": 5031,
+      "file-size": 5007,
       "function-size": 83,
       "narrative": 4,
       "struct-state": 17
@@ -973,7 +973,7 @@
     },
     "internal/event/event.go": {
       "essay": 6,
-      "file-size": 103,
+      "file-size": 74,
       "narrative": 1
     },
     "internal/eventwire/wire.go": {

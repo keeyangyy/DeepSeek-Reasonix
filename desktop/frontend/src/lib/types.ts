@@ -387,6 +387,8 @@ export interface WireEvent extends RecoveryEventFields {
   kind: EventKind;
   /** session_changed: the transcript was replaced under the same path (head switch, clear). */
   sessionReset?: boolean;
+  /** replay 投影通道事件：回流 handleWireEvent 时跳过 acceptLive 的 live seq 门。 */
+  replayProjected?: boolean;
   promptId?: string;
   promptKind?: "ask" | "approval" | "plan" | "recovery" | "mcp" | string;
   promptLegacy?: boolean;

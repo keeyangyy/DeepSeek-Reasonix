@@ -3739,7 +3739,9 @@ export function useController() {
       // Reject only events from a known older generation; meta with no recorded
       // generation (edited-prompt rotation) must not drop the live stream.
       if (e.sessionGeneration !== undefined && currentMeta && currentMeta.sessionGeneration !== undefined && e.sessionGeneration !== currentMeta.sessionGeneration) return;
-      if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
+      // replayProjected = 投影通道回流（已过 seq 门，见 projectEnvelope）；
+      // 只有 live 摄取路径需要 acceptLive 判定。
+      if (!e.replayProjected && !turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
       if (e.kind === "compaction_started" || e.kind === "compaction_done") {
 
       }

@@ -318,6 +318,10 @@ export class TurnEventProjector {
         status: (envelope.status || durable.status) as WireEvent["status"],
         tabId,
         runtimeEpoch: envelope.runtimeEpoch ?? runtimeEpoch,
+        // 投影通道的事件回流 handleWireEvent 时必须跳过 acceptLive 的 live
+        // seq 门（b71adf9c2 回归：replay 页的 seq 在窗口内被误判为 live 而
+        // 排队，drain 又按 cursor 丢弃 → replay 行整体丢失）。
+        replayProjected: true,
       });
     } finally {
       this.projectingReplayByTab.delete(tabId);
