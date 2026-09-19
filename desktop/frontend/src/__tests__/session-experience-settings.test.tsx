@@ -6,6 +6,7 @@ import { SessionExperienceSettings } from "../components/SessionExperienceSettin
 import { LocaleProvider } from "../lib/i18n";
 import { getSessionExperience } from "../lib/sessionExperience";
 import { getDefaultCollapsed } from "../lib/defaultCollapsedPreference";
+import { getProcessFoldPolicy } from "../lib/processFoldPolicy";
 import type { SettingsView } from "../lib/types";
 
 const dom = new JSDOM("<div id='root'></div>", { url: "http://localhost" });
@@ -42,7 +43,7 @@ const root = createRoot(document.getElementById("root")!);
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")];
 try {
   await act(async () => root.render(<LocaleProvider><SettingsHost /></LocaleProvider>));
-  assert.equal(buttons().length, 4, "standard/deep plus the start-collapsed switch");
+  assert.equal(buttons().length, 7, "standard/deep, start-collapsed and the three process-fold policies");
   assert.equal(buttons()[0].getAttribute("aria-checked"), "true");
   await act(async () => buttons()[1].click());
   assert.equal(getSessionExperience(), "deep");
@@ -66,11 +67,29 @@ try {
   await act(async () => buttons()[2].click());
   assert.equal(getDefaultCollapsed(), false);
 
+  // Process folding follows the same shape: a local three-mode policy that
+  // never widens the backend contract. While Deep is active it is inert, so
+  // its buttons are disabled and the stored default stays untouched.
+  assert.equal(getProcessFoldPolicy(), "follow-turn");
+  assert.equal(buttons()[4].getAttribute("aria-checked"), "true");
+  assert.ok(buttons().slice(4).every(button => button.disabled), "Deep disables the fold policy choice");
+
   backend = { ...backend, sessionExperience: undefined };
   await act(async () => reload());
   assert.equal(getSessionExperience(), "standard");
   assert.equal(buttons()[0].getAttribute("aria-checked"), "true");
+  await act(async () => buttons()[5].click());
+  assert.equal(getProcessFoldPolicy(), "collapsed");
+  assert.equal(buttons()[5].getAttribute("aria-checked"), "true");
+  await act(async () => buttons()[6].click());
+  assert.equal(getProcessFoldPolicy(), "active-only");
+  assert.equal(buttons()[6].getAttribute("aria-checked"), "true");
+  await act(async () => buttons()[4].click());
+  assert.equal(getProcessFoldPolicy(), "follow-turn");
+  assert.equal(buttons()[4].getAttribute("aria-checked"), "true");
+  assert.deepEqual(writes, ["deep", "standard"], "the fold policy never reaches the backend");
   assert.equal(buttons()[0].tabIndex, 0, "both segment buttons remain keyboard reachable");
   assert.equal(buttons()[1].tabIndex, 0);
-  console.log("session experience controls: success, failure snapshot, busy state, legacy backend and keyboard reachability passed");
+  assert.equal(buttons()[4].disabled, false, "leaving Deep re-enables the fold policy choice");
+  console.log("session experience controls: success, failure snapshot, busy state, legacy backend, fold policy and keyboard reachability passed");
 } finally { await act(async () => root.unmount()); dom.window.close(); }

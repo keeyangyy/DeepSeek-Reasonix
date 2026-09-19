@@ -17,6 +17,7 @@ import type { InvocationMetadataMap } from "../lib/invocationDisplay";
 import { useT } from "../lib/i18n";
 import { acquireMarkdownWorkerClient, releaseMarkdownWorkerClient } from "../lib/markdownWorkerClient";
 import { onSessionExperienceWillChange, useSessionExperience } from "../lib/sessionExperience";
+import { useProcessFoldPolicy } from "../lib/processFoldPolicy";
 import {
   buildTranscriptRowBlocks,
   buildTurnModels,
@@ -137,6 +138,7 @@ export function Transcript(props: TranscriptProps) {
   const viewportRef = useRef<TranscriptViewportHandle>(null);
   const committedSurfaceRef = useRef("");
   const experience = useSessionExperience();
+  const foldPolicy = useProcessFoldPolicy();
   const liveFlags = useMemo<TranscriptLiveFlags>(() => live?.id ? {
     id: live.id,
     hasAnswerText: Boolean(live.text.trim()),
@@ -150,7 +152,7 @@ export function Transcript(props: TranscriptProps) {
     beginGesture, beginStructural, scrollElement, scrollToBottom, safeMode, scrollRef, setScrollMode, writeOffset, jumpToBlock, onScroll, endGesture, commitViewportGeometry, onWheelCapture, isAtBottom, intent, onTouchStartCapture, onTouchEndCapture, onKeyDownCapture, onPointerDownCapture, beginAnchorRestore,
   } = useTranscriptKernel({
     sessionKey: surfaceKey,
-    geometryRevision: `${contentRevision}:${footerHeight}:${experience}:${historyMutation?.seq ?? 0}`,
+    geometryRevision: `${contentRevision}:${footerHeight}:${experience}:${foldPolicy}:${historyMutation?.seq ?? 0}`,
   });
   const [
     questions, loadedByTurn, totalQuestions, activeQuestion, setActiveQuestion,
@@ -160,6 +162,7 @@ export function Transcript(props: TranscriptProps) {
   const segmentStates = useMemo(() => foldSegmentStates(turnModels, experience === "deep"), [experience, turnModels]);
   const [folds, setFolds] = useState<FoldMap>(EMPTY_FOLDS);
   const experienceRef = useRef(experience);
+  const foldPolicyRef = useRef(foldPolicy);
   const foldSurfaceRef = useRef("");
   useLayoutEffect(() => {
     if (foldSurfaceRef.current === resolvedSessionKey) return;
@@ -170,14 +173,18 @@ export function Transcript(props: TranscriptProps) {
     beginStructural("display-change");
   }), [beginStructural]);
   useEffect(() => {
-    const preferenceChanged = experienceRef.current !== experience;
+    const preferenceChanged = experienceRef.current !== experience || foldPolicyRef.current !== foldPolicy;
+    // A policy switch re-folds segments already on screen, so capture the
+    // reader's logical anchor before the row model changes shape.
+    if (foldPolicyRef.current !== foldPolicy) beginStructural("display-change");
     experienceRef.current = experience;
+    foldPolicyRef.current = foldPolicy;
     setFolds((previous) => {
-      const next = reconcileFoldEntries(previous, segmentStates, experience, preferenceChanged);
+      const next = reconcileFoldEntries(previous, segmentStates, experience, preferenceChanged, foldPolicy);
       if (next) replaceTranscriptFoldOverrides(resolvedSessionKey, next);
       return next ?? previous;
     });
-  }, [experience, resolvedSessionKey, segmentStates]);
+  }, [beginStructural, experience, foldPolicy, resolvedSessionKey, segmentStates]);
 
   const subcallsByParent = useMemo(() => {
     const grouped = new Map<string, ToolItem[]>();
@@ -193,12 +200,13 @@ export function Transcript(props: TranscriptProps) {
   const blocks = useMemo(() => buildTranscriptRowBlocks(turnModels, {
     folds,
     sessionExperience: experience,
+    processFoldPolicy: foldPolicy,
     hasOlderHistory: false,
     creationMode,
     turnForUser,
     hasCheckpointForTurn: (turn) => checkpointsByTurn.has(turn),
     subcallsByParent,
-  }), [checkpointsByTurn, creationMode, experience, folds, subcallsByParent, turnForUser, turnModels]);
+  }), [checkpointsByTurn, creationMode, experience, foldPolicy, folds, subcallsByParent, turnForUser, turnModels]);
   const projection = useMemo(() => projectTranscriptTimeline(blocks, hasOlderHistory), [blocks, hasOlderHistory]);
   const renderMode = transcriptRenderMode(projection.completedBlocks.length, safeMode);
   const allRows = useMemo(() => blocks.flatMap((block) => block.rows), [blocks]);
