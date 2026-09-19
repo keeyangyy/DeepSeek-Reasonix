@@ -98,7 +98,9 @@ console.log("\ncompaction anchor restore");
   ok((cards[0] as { summary?: string }).summary === "压一", "摘要内容正确");
 }
 
-// 场景 2：压缩后无新回合（usersAfter=0）→ 切回后仍在末尾（与旧行为一致）。
+// 场景 2：压缩后无新回合（usersAfter=0）→ 切回后卡片在保留历史之前（顶部）。
+// 462 条 manual 压缩实测：压缩完成后未发新消息，重建的历史全部是压缩之后的
+// 内容，卡片逻辑位置在它们之前——append 末尾会把它甩到消息流最底部。
 {
   const SESSION = "t2.jsonl";
   let s = reducer(initialState, {
@@ -134,10 +136,42 @@ console.log("\ncompaction anchor restore");
   } as never);
   const cards = compactionCards(back.items);
   ok(
-    cards.length === 1 &&
-      back.items[back.items.length - 1].kind === "compaction",
-    "无新回合时卡片仍在末尾",
+    cards.length === 1 && back.items[0].kind === "compaction",
+    "无新回合时卡片恢复在保留历史之前（顶部），不是最底部",
   );
+}
+
+// 场景 2b：重启后 sidecar 恢复（latest_compaction）→ 卡片插在历史之前。
+{
+  const SESSION = "t2b.jsonl";
+  let s = reducer(initialState, {
+    type: "meta",
+    meta: { sessionPath: SESSION },
+  } as never);
+  s = reducer(s, {
+    type: "history",
+    messages: [userMsg("一"), assistantMsg("答一"), userMsg("二"), assistantMsg("答二")],
+    seq: 4,
+    remote: false,
+  } as never);
+  s = reducer(s, {
+    type: "latest_compaction",
+    tabId: SESSION,
+    record: { trigger: "manual", messages: 462, summary: "重启恢复" },
+  } as never);
+  ok(
+    s.items[0].kind === "compaction" &&
+      (s.items[0] as { summary?: string }).summary === "重启恢复" &&
+      s.items[1].kind === "user",
+    "重启 sidecar 恢复的卡片插在历史之前（顶部）",
+  );
+  // 重复 hydrate（同 summary）不堆叠。
+  s = reducer(s, {
+    type: "latest_compaction",
+    tabId: SESSION,
+    record: { trigger: "manual", messages: 462, summary: "重启恢复" },
+  } as never);
+  ok(compactionCards(s.items).length === 1, "重复 latest_compaction 不重复插卡");
 }
 
 // 场景 3：锚点越界（rewind 后 user 行变少）→ 回退 append 末尾，不丢失。
@@ -282,7 +316,9 @@ console.log("\ncompaction anchor restore");
   );
 }
 
-// 场景 6：多张卡片 → 各自按锚点归位，互不干扰、不重复。
+// 场景 6：多张卡片 → 各自按语义归位，互不干扰、不重复。
+// 压A 后有新回合（锚点刷新 usersAfter=1）→ 插回四回合前；压B 后无新回合
+// （usersAfter=0）→ 重建历史全是其后内容 → 卡片在顶部。
 {
   const SESSION = "t6.jsonl";
   let s = reducer(initialState, {
@@ -302,7 +338,7 @@ console.log("\ncompaction anchor restore");
     seq: 6,
     remote: false,
   } as never);
-  // 第一张卡片落在"二"回合后，再走一回合，第二张卡片落在"三"回合后
+  // 第一张卡片落在"三"回合后，再走一回合；第二张卡片落在"四"回合后无新内容
   s = reducer(s, {
     type: "event",
     e: { kind: "compaction_started", compaction: { trigger: "pressure" } },
@@ -330,19 +366,16 @@ console.log("\ncompaction anchor restore");
     type: "meta",
     meta: { sessionPath: SESSION },
   } as never);
+  // 重建历史：压A fold 掉了"二/三"回合（不出现），保留"一"与"四"回合
   back = reducer(back, {
     type: "history",
     messages: [
       userMsg("一"),
       assistantMsg("答一"),
-      userMsg("二"),
-      assistantMsg("答二"),
-      userMsg("三"),
-      assistantMsg("答三"),
       userMsg("四"),
       assistantMsg("答四"),
     ],
-    seq: 8,
+    seq: 4,
     remote: false,
   } as never);
   const cards = compactionCards(back.items);
@@ -361,8 +394,8 @@ console.log("\ncompaction anchor restore");
     (it) => it.kind === "user" && it.text === "四",
   );
   ok(
-    idxA === u4Idx - 1 && idxB === back.items.length - 1,
-    "压A 在四回合前、压B 在末尾（各自锚点）",
+    idxB === 0 && idxA === u4Idx - 1,
+    "压B（无新回合）在顶部、压A 在四回合前（各自语义）",
   );
 }
 
