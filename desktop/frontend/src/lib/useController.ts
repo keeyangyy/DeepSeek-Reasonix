@@ -44,6 +44,7 @@ import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
 import { ephemeralItemId } from "./transcriptItemIds";
+import { preserveLiveCompactions, recordCompactionDone, refreshCompactionAnchors } from "./compactionAnchor";
 import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
@@ -1863,12 +1864,10 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       const items = at < 0 ? [...s.items, filled] : s.items.map((it, i) => (i === at ? filled : it));
       // Record the finished compaction in the module-level cache so the row
       // survives a tab switch (controller state may be rebuilt entirely).
-      const doneCard = items[at < 0 ? items.length - 1 : at];
+      const doneAt = at < 0 ? items.length - 1 : at;
+      const doneCard = items[doneAt];
       if (doneCard && s.meta?.sessionPath) {
-        const sessionPath = s.meta.sessionPath;
-        const existing = liveCompactionsCache.get(sessionPath) ?? [];
-        const nextCache = existing.some((it) => it.id === doneCard.id) ? existing.map((it) => (it.id === doneCard.id ? doneCard : it)) : [...existing, doneCard];
-        liveCompactionsCache.set(sessionPath, nextCache);
+        recordCompactionDone(s.meta.sessionPath, items, doneAt, doneCard);
       }
       return { ...s, running: s.turnActive ? s.running : false, seq: s.seq + 1, items };
     }
@@ -2062,10 +2061,16 @@ export function reducer(s: State, a: Action): State {
     case "user": {
       const seq = a.seq !== undefined ? a.seq : s.seq;
       const userItemId = `u${seq}`;
+      const nextUserItems: Item[] = [...s.items.map(item => item.kind==="notice" && item.action==="recover_context" ? {...item,action:undefined} : item), { kind: "user", id: userItemId, submissionId: a.submissionId, text: a.text, submitText: a.submitText, createdAt: Date.now() }];
+      // New user rows are the only variable in the compaction anchor
+      // (usersAfter counts user rows after the card): refresh cached anchors
+      // so a tab-switch rebuild later restores the card at its current spot,
+      // not where it sat when compaction finished.
+      if (s.meta?.sessionPath) refreshCompactionAnchors(s.meta.sessionPath, nextUserItems);
       return {
         ...s,
         seq: seq + 1,
-        items: [...s.items.map(item => item.kind==="notice" && item.action==="recover_context" ? {...item,action:undefined} : item), { kind: "user", id: userItemId, submissionId: a.submissionId, text: a.text, submitText: a.submitText, createdAt: Date.now() }],
+        items: nextUserItems,
         running: true,
         pendingPrompt: false,
         cancelRequested: false,
@@ -2562,30 +2567,6 @@ function appendNoticeItem(items: Item[], seq: number, id: string, level: "info" 
 function appendNoticeToState(s: State, level: "info" | "warn", text: string, detail?: string, code?: string, decisionReceipt?: WireDecisionReceipt): State {
   const next = appendNoticeItem(s.items, s.seq, ephemeralItemId("notice"), level, text, detail, code, decisionReceipt);
   return { ...s, running: s.turnActive ? s.running : false, seq: next.seq, items: next.items };
-}
-
-// preserveLiveCompactions carries the session's compaction cards (live event
-// products, not part of persisted history) across any hydrate-driven items
-// rebuild, so switching away and back keeps the compression summary visible.
-// Source of truth is a module-level cache keyed by session path: switching
-// tabs can rebuild the per-tab controller state entirely (verified via
-// compact.trace: on switch-back the reset input already has zero compaction
-// rows), so row-level preservation alone cannot survive. The cache outlives
-// any single state instance and is re-applied on every items rebuild.
-const liveCompactionsCache = new Map<string, Item[]>();
-
-function cachedCompactions(sessionPath: string | undefined, prevItems: Item[]): Item[] {
-  const cached = sessionPath ? liveCompactionsCache.get(sessionPath) : undefined;
-  if (cached && cached.length > 0) return cached;
-  return prevItems.filter((it) => it.kind === "compaction");
-}
-
-function preserveLiveCompactions(sessionPath: string | undefined, prevItems: Item[], nextItems: Item[]): Item[] {
-  const compactions = cachedCompactions(sessionPath, prevItems);
-  if (compactions.length === 0 || nextItems.some((it) => it.kind === "compaction")) return nextItems;
-  const merged = [...nextItems, ...compactions];
-  if (sessionPath) liveCompactionsCache.set(sessionPath, compactions);
-  return merged;
 }
 
 export { replayPendingPromptsForActiveTab } from "./promptReplay";

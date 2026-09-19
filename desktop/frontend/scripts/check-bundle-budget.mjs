@@ -420,6 +420,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // The process-fold policy (three-mode fold switch, its own fold-state module,
 // and the localized labels) adds 3.1 KiB over the 2405.2 KiB baseline; the
 // merged payload measures 2408.3 KiB. Retain 0.2 KiB build headroom.
-const rawInitialBudgetKiB = 2_409;
+// The compaction-card anchor module (hydrated restore-at-original-spot for
+// compaction rows) measures 2409.2 KiB on the initial path; retain 0.2 KiB
+// build headroom without widening the gzip gate.
+const rawInitialBudgetKiB = 2_410;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

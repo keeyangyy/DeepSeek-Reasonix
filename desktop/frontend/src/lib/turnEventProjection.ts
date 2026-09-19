@@ -126,7 +126,21 @@ export class TurnEventProjector {
   }
 
   acceptLive(tabId: string, event: WireEvent, runtimeEpoch?: string): boolean {
-    if (this.projectingReplayByTab.has(tabId)) return true;
+    if (this.projectingReplayByTab.has(tabId)) {
+      // Replay pages apply ledger rows between awaits. A live event landing in
+      // that window used to bypass sequencing entirely (return true) and was
+      // then applied AGAIN when its own replay page arrived — append-only rows
+      // (notices) doubled and straddled the replayed tool rows. Queue by
+      // sequence instead: the replay's final drain re-checks each queued row
+      // against the settled cursor, so a row the replay carried is dropped.
+      if (typeof event.seq !== "number" || event.seq <= 0) return true;
+      const last = this.sequenceByTab.get(tabId) ?? 0;
+      if (event.seq <= last) return false;
+      const queued = this.gapQueueByTab.get(tabId) ?? [];
+      queued.push(event);
+      this.gapQueueByTab.set(tabId, queued);
+      return false;
+    }
     if (typeof event.seq !== "number" || event.seq <= 0) return true;
     const last = this.sequenceByTab.get(tabId) ?? 0;
     if (event.seq <= last) return false;

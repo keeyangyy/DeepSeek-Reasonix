@@ -552,6 +552,7 @@ type Event struct {
 	Guardian           GuardianResult
 	DecisionReceipt    *provider.DecisionReceipt // Notice: durable user decision receipt
 	WriteIntent        bool                      // local write-ahead checkpoint, not a user notice
+	ReplayOnly         bool                      // prompt replay re-emission: publish to sinks, never re-append to the turn ledger
 	Recovery           *RecoveryStatus           // optional local recovery details
 	RetryAttempt       int                       // Retrying: 1-based attempt about to be made
 	RetryMax           int                       // Retrying: total attempts before giving up
