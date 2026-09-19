@@ -2388,6 +2388,7 @@ export const zhTW: Record<DictKey, string> = {
   "compaction.working": "正在壓縮對話…",
   "compaction.title": "上下文已壓縮",
   "compaction.messages": "{n} 條訊息",
+  "compaction.failed": "壓縮失敗",
   "compaction.showSummary": "展開摘要",
   "compaction.hideSummary": "收起摘要",
   "rewind.label": "訊息操作",

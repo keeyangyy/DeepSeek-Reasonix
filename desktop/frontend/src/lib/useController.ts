@@ -3771,7 +3771,7 @@ export function useController() {
         textBatch.drain();
         dispatchTo(targetTabId, { type: "event", e });
       }
-      if (e.kind === "turn_done" || e.kind === "context_maintenance") {
+      if (e.kind === "turn_done" || e.kind === "context_maintenance" || e.kind === "compaction_done") {
         void app.ContextUsageForTab(targetTabId).then((context) => dispatchTo(targetTabId, { type: "context", context })).catch(() => {});
       }
       if (e.kind === "turn_done") {
@@ -4659,8 +4659,14 @@ export function useController() {
   const compact = useCallback(() => {
     const tabId = activeTabIdRef.current;
     if (!tabId) return;
-    void waitForTabReady(tabId).then(() => app.CompactForTab(tabId).catch(() => {}));
-  }, [waitForTabReady]);
+    void waitForTabReady(tabId).then(() => app.CompactForTab(tabId).catch((error) => {
+      // A pre-start failure (rotation conflict, read-only, workspace not ready)
+      // never emits compaction events — surface the backend reason instead of
+      // swallowing it silently.
+      const detail = error instanceof Error && error.message ? error.message : "";
+      dispatchTo(tabId, { type: "local_notice", level: "warn", text: detail || t("compaction.failed") });
+    }));
+  }, [waitForTabReady, dispatchTo]);
 
   const enqueueModelSwitch = useCallback((tabId: string, name: string, fallbackBalance?: BalanceInfo) => {
     let queue = modelSwitchQueueByTab.current.get(tabId);

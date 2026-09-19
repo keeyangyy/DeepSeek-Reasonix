@@ -3335,6 +3335,7 @@ export const en = {
   "compaction.working": "Compacting conversation…",
   "compaction.title": "Context compacted",
   "compaction.messages": "{n} messages",
+  "compaction.failed": "Compaction failed",
   "compaction.showSummary": "show summary",
   "compaction.hideSummary": "hide summary",
   "rewind.label": "Message actions",
