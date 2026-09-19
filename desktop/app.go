@@ -2801,9 +2801,10 @@ func (a *App) listSessionsFromDir(dir, active string) []SessionMeta {
 	open := a.openSessionPaths(dir)
 	channelRoutes := channelSessionRoutesForDir(dir)
 	out := make([]SessionMeta, 0, len(records))
+	topics := newSessionTopicTitleResolver()
 	for _, record := range records {
 		_, isOpen := open[record.Path]
-		meta := sessionMetaFromCatalog(record, record.Path == active, isOpen)
+		meta := sessionMetaFromCatalogResolved(record, record.Path == active, isOpen, topics)
 		if route, ok := channelRoutes[sessionRuntimeKey(record.Path)]; ok {
 			applyChannelSessionRoute(&meta, route)
 		}
