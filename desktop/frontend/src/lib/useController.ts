@@ -3769,7 +3769,7 @@ export function useController() {
         textBatch.drain();
         dispatchTo(targetTabId, { type: "event", e });
       }
-      if (e.kind === "turn_done" || e.kind === "context_maintenance") {
+      if (e.kind === "turn_done" || e.kind === "context_maintenance" || e.kind === "compaction_done") {
         void app.ContextUsageForTab(targetTabId).then((context) => dispatchTo(targetTabId, { type: "context", context })).catch(() => {});
       }
       if (e.kind === "turn_done") {
