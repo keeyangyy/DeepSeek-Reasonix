@@ -467,7 +467,14 @@ func (c *Catalog) recomputeTopic(ctx context.Context, tx *sql.Tx, key TopicKey) 
              ELSE 'ok' END
 	  FROM catalog_sessions WHERE scope=? AND workspace_root_key=? AND topic_id=?
 	ON CONFLICT(scope,workspace_root_key,topic_id) DO UPDATE SET
-		title=excluded.title, turns=excluded.turns, turns_state=excluded.turns_state,
+		-- Title ownership: SyncMetadata publishes the authoritative title; this
+		-- derived recompute owns aggregates only. A session-side snapshot can be
+		-- a stale placeholder (an auto-named conversation whose sidecar was never
+		-- rewritten), and adopting it here is how a real sidebar title rolled
+		-- back to "新的会话" on every reconcile. Keep the published title.
+		title=CASE WHEN catalog_topics.metadata_present=1 AND NULLIF(TRIM(catalog_topics.title),'') IS NOT NULL
+			THEN catalog_topics.title ELSE excluded.title END,
+		turns=excluded.turns, turns_state=excluded.turns_state,
         created_at=excluded.created_at, last_activity_at=excluded.last_activity_at,
         recovery_state=excluded.recovery_state,
         recovery_branch_count=excluded.recovery_branch_count,

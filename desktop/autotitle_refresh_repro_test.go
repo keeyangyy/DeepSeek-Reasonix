@@ -189,6 +189,16 @@ func TestReattachBackfillsAutoTitle(t *testing.T) {
 	if tab.topicTitleSource != topicTitleSourceAuto {
 		t.Fatalf("tab topic source after reattach = %q, want auto", tab.topicTitleSource)
 	}
+	// The topic layer is not the only copy the UI reads: the session list, tab
+	// strip and history panel render the per-session sidecar title. An auto-name
+	// reaching only the topic layer left those views on the placeholder label.
+	meta, ok, err := agent.LoadBranchMeta(targetPath)
+	if err != nil || !ok {
+		t.Fatalf("load target sidecar: ok=%v err=%v", ok, err)
+	}
+	if meta.TopicTitle != want {
+		t.Fatalf("target sidecar topic_title = %q, want %q", meta.TopicTitle, want)
+	}
 }
 
 // TestAIRenameSessionUpdatesTopicTitle: the topic layer (state store) must
