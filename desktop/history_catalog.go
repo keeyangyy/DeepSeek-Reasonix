@@ -160,6 +160,7 @@ func (a *App) ListHistorySessions(req HistorySessionPageRequest) HistorySessionP
 		out.Partial = true
 		return out
 	}
+	topics := newSessionTopicTitleResolver()
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 50
@@ -195,7 +196,7 @@ func (a *App) ListHistorySessions(req HistorySessionPageRequest) HistorySessionP
 			if statusFilter == "current" && record.Path != active {
 				continue
 			}
-			out.Items = append(out.Items, sessionMetaFromCatalog(record, record.Path == active, overlay.open))
+			out.Items = append(out.Items, sessionMetaFromCatalogResolved(record, record.Path == active, overlay.open, topics))
 			if len(out.Items) == limit {
 				if i+1 < len(page.Items) || page.NextCursor != "" {
 					out.NextCursor = sessioncatalog.CursorAfter(page.Revision, record.LastActivityAt, record.Path)
