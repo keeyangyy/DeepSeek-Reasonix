@@ -2696,32 +2696,6 @@ func (c *Controller) replayPendingPromptsTo(sink event.Sink) bool {
 	return len(approvals) == 0
 }
 
-func (c *Controller) emitPendingPrompts(sink event.Sink, approvals []event.Approval, asks []event.Ask, interactions []event.MCPInteraction) {
-	if sink == nil {
-		return
-	}
-	for _, a := range approvals {
-		if identity, ok := c.promptOwner.Identity(a.ID); ok {
-			a.TurnID = identity.TurnID
-		}
-		replayed := c.approvalRequestEvent(a)
-		replayed.ReplayOnly = true
-		sink.Emit(replayed)
-	}
-	for _, a := range asks {
-		if identity, ok := c.promptOwner.Identity(a.ID); ok {
-			a.TurnID = identity.TurnID
-		}
-		sink.Emit(event.Event{Kind: event.AskRequest, TurnID: a.TurnID, ItemID: a.ID, Ask: a, ReplayOnly: true})
-	}
-	for _, i := range interactions {
-		if identity, ok := c.promptOwner.Identity(i.ID); ok {
-			i.TurnID = identity.TurnID
-		}
-		sink.Emit(event.Event{Kind: event.MCPInteractionRequest, TurnID: i.TurnID, ItemID: i.ID, MCPInteraction: i, ReplayOnly: true})
-	}
-}
-
 // SetPlanMode flips the executor's plan-first workflow flag without touching the
 // cache-stable system/tool prefix, and remembers the state so Compose can prepend
 // the plan-mode marker to outgoing user turns.
