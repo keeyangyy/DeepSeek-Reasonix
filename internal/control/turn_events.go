@@ -156,6 +156,17 @@ func (s *turnEventSink) persistAndPublish(e event.Event) error {
 	if e.RecoveryCheckpoint {
 		return s.c.checkpointToolTranscript()
 	}
+	if e.ReplayOnly {
+		// Prompt replay re-emissions must not re-append to the ledger: every
+		// tab re-attach replays the pending prompts, and each duplicate landed
+		// as a fresh sequence row (observed: one pending ask recorded 5×), so a
+		// later turn replay re-fired the gate once per duplicate and the
+		// replayed rebuild interleaved stale prompt rows between live rows.
+		// The frontend rebuilds the gate from the ReplayPendingPrompts RPC
+		// instead; the ledger keeps exactly the original request.
+		s.publishInner(e)
+		return nil
+	}
 	ledger := s.c.turnEventLedger()
 	if ledger == nil {
 		s.publishInner(e)
