@@ -2436,12 +2436,6 @@ func TestOpenProjectTabRecoversMissingTopicTitleFromSessionTitle(t *testing.T) {
 	}
 }
 
-// aResolveProbe exposes the open-path session resolution for diagnostics.
-func aResolveProbe(app *App, root, sessionPath string) (string, string) {
-	r, p := app.resolveOpenTopicSessionPath("project", root, sessionPath)
-	return p, r
-}
-
 func TestOpenProjectTabAutoTitlesAfterExplicitDefaultReset(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
