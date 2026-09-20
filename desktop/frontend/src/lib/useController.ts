@@ -2381,13 +2381,17 @@ export function reducer(s: State, a: Action): State {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
       const remove = a.removeIds.length > 0 ? new Set(a.removeIds) : undefined;
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
+      // 卡片先到、历史后到（rebuilt 切回时序）：卡片是 live 产物、语义位置在重建历史之前，
+      // 合并时必须重新放回最前，否则会随 rest 落到全部历史之后。
+      const carriedCompactions = rest.filter((item) => item.kind === "compaction");
+      const nonCompactionRest = rest.filter((item) => item.kind !== "compaction");
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
       // Dropped rows may include the row the live buffer is streaming into
       // (page-owns-the-turn handoff); a dangling pointer would make the next
       // delta recreate a same-id row.
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
-      const merged = compactArchivedToolItems([...liftLiveToolStatus(a.items, s.items), ...rest]);
+      const merged = compactArchivedToolItems([...carriedCompactions, ...liftLiveToolStatus(a.items, s.items), ...nonCompactionRest]);
       assertNoDuplicateItems(merged, "history_prepend");
       return {
         ...s,
