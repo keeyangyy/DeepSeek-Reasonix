@@ -172,15 +172,15 @@ func TestCleanSessionTitle(t *testing.T) {
 
 // 推理模型的隐藏推理计入 completion 预算：标题预算必须给足推理余量，
 // 否则推理占满 MaxTokens、最终输出为空，AI 重命名报"空标题"（上游实测
-// 512 token 全推理）。断言请求携带 2048 的预算。
+// 512 token 全推理）。断言请求携带 16k 的预算。
 func TestGenerateSessionTitleLeavesReasoningHeadroom(t *testing.T) {
 	prov := &sessionTitleProviderStub{out: "标题"}
 	ctrl := sessionTitleTestController(prov, event.Discard)
 	if _, err := ctrl.GenerateSessionTitle(context.Background(), "User: 一句话总结"); err != nil {
 		t.Fatalf("GenerateSessionTitle: %v", err)
 	}
-	if got := prov.requests[0].MaxTokens; got != 2048 {
-		t.Fatalf("MaxTokens = %d, want 2048 (reasoning tokens share the completion budget)", got)
+	if got := prov.requests[0].MaxTokens; got != sessionTitleMaxTokens {
+		t.Fatalf("MaxTokens = %d, want %d (reasoning tokens share the completion budget)", got, sessionTitleMaxTokens)
 	}
 }
 
