@@ -2436,7 +2436,13 @@ func TestOpenProjectTabRecoversMissingTopicTitleFromSessionTitle(t *testing.T) {
 	}
 }
 
-func TestOpenProjectTabPreservesManualDefaultTopicTitle(t *testing.T) {
+// aResolveProbe exposes the open-path session resolution for diagnostics.
+func aResolveProbe(app *App, root, sessionPath string) (string, string) {
+	r, p := app.resolveOpenTopicSessionPath("project", root, sessionPath)
+	return p, r
+}
+
+func TestOpenProjectTabAutoTitlesAfterExplicitDefaultReset(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	projectRoot := robustTempDir(t)
@@ -2445,6 +2451,9 @@ func TestOpenProjectTabPreservesManualDefaultTopicTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create topic: %v", err)
 	}
+	// 显式把标题重置回默认：默认标题没有信息量，语义是交还自动命名接管
+	// （default+manual 会永久锁死"新的会话"）。真实手动名的保护只针对
+	// 非默认标题（isDefaultTopicTitle 门）。
 	if err := app.RenameTopic(topic.ID, defaultTopicTitle); err != nil {
 		t.Fatalf("rename topic: %v", err)
 	}
@@ -2452,22 +2461,27 @@ func TestOpenProjectTabPreservesManualDefaultTopicTitle(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir sessions: %v", err)
 	}
-	writeTopicSessionWithPrompt(t, dir, "manual-default.jsonl", topic.ID, defaultTopicTitle, projectRoot, "first prompt should not replace manual default", time.Now())
+	writeTopicSessionWithPrompt(t, dir, "manual-default.jsonl", topic.ID, defaultTopicTitle, projectRoot, "first prompt should be the new title basis", time.Now())
 
-	meta, err := app.OpenProjectTab(projectRoot, topic.ID)
+	meta, err := app.openTopicTabPreferLiveActivation("project", projectRoot, topic.ID, filepath.Join(dir, "manual-default.jsonl"), true)
 	if err != nil {
 		t.Fatalf("open project tab: %v", err)
 	}
 	waitForTabReady(t, app, meta.ID)
-	if got := meta.TopicTitle; got != defaultTopicTitle {
-		t.Fatalf("opened topic title = %q, want %q", got, defaultTopicTitle)
+	t.Logf("debug meta.TopicTitle=%q state=%q source=%q", meta.TopicTitle, loadTopicTitle(projectRoot, topic.ID), loadTopicTitleSource(projectRoot, topic.ID))
+	want := topicTitleFromText("first prompt should be the new title basis")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got := loadTopicTitle(projectRoot, topic.ID)
+		if got != "" && got != defaultTopicTitle {
+			if got != want {
+				t.Fatalf("stored topic title = %q, want %q", got, want)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	if got := loadTopicTitle(projectRoot, topic.ID); got != defaultTopicTitle {
-		t.Fatalf("stored topic title = %q, want %q", got, defaultTopicTitle)
-	}
-	if got := loadTopicTitleSource(projectRoot, topic.ID); got != topicTitleSourceManual {
-		t.Fatalf("title source = %q, want manual", got)
-	}
+	t.Fatalf("topic title still %q after default reset reopened", loadTopicTitle(projectRoot, topic.ID))
 }
 
 func TestEnsureTopicIndexedPreservesGlobalAutoTitleSource(t *testing.T) {
@@ -2646,11 +2660,16 @@ func TestRenameTopicBlankKeepsManualTitleSource(t *testing.T) {
 	if err := app.RenameTopic(topic.ID, "   "); err != nil {
 		t.Fatalf("rename blank topic: %v", err)
 	}
+	// 空输入/默认标题重置 = 交还自动命名接管（auto source + 清 meta）：
+	// default+manual 会把 topic 永久锁死在"新的会话"。
 	if got := loadTopicTitle(projectRoot, topic.ID); got != defaultTopicTitle {
 		t.Fatalf("stored title = %q, want %q", got, defaultTopicTitle)
 	}
-	if got := loadTopicTitleSource(projectRoot, topic.ID); got != topicTitleSourceManual {
-		t.Fatalf("title source = %q, want manual", got)
+	if got := loadTopicTitleSource(projectRoot, topic.ID); got != topicTitleSourceAuto {
+		t.Fatalf("title source = %q, want auto", got)
+	}
+	if _, ok := loadTopicAutoTitleMeta(projectRoot)[topic.ID]; ok {
+		t.Fatalf("auto-title meta should be cleared by default reset")
 	}
 }
 

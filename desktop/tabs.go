@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"cmp"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -2591,9 +2592,9 @@ func (a *App) openTopicTabWithActivation(scope, workspaceRoot, topicID, sessionP
 
 	tabID := a.newUniqueTabIDLocked()
 	topicTitle := topicTitleForTab(scope, workspaceRoot, topicID)
-	if t, source, ok := topicTitleFallbackForOpen(workspaceRoot, topicID, sessionPath); ok {
-		topicTitle = t
-		_ = setTopicTitleWithSource(workspaceRoot, topicID, t, source)
+	fallbackTitle, fallbackSource, fallbackOK := topicTitleFallbackForOpen(workspaceRoot, topicID, sessionPath)
+	if fallbackOK {
+		topicTitle = fallbackTitle
 	}
 
 	if sessionPath == "" {
@@ -2631,6 +2632,17 @@ func (a *App) openTopicTabWithActivation(scope, workspaceRoot, topicID, sessionP
 	meta := a.tabMeta(tab, tab.ID == a.activeTabID)
 	a.mu.Unlock()
 
+	// fallback 命中时把命名落到 topic state：必须在 a.mu 之外写——临界区内
+	// 调 topic state mutate 会静默失败（tab 内存标题已更新而 state 停留默认，
+	// 实测复现），导致切回后的自动命名从未持久化。
+	if fallbackOK {
+		if err := setTopicTitleWithSource(workspaceRoot, topicID, fallbackTitle, fallbackSource); err != nil {
+			slog.Warn("desktop: open-topic fallback title write failed", "error_type", topicStateErrorType(err))
+		}
+		if dbg := loadTopicTitle(workspaceRoot, topicID); dbg != fallbackTitle {
+			slog.Warn("desktop: open-topic fallback title readback mismatch", "written", fallbackTitle, "readback", dbg, "root", workspaceRoot)
+		}
+	}
 	a.startTabControllerBuild(tab)
 	if scope == "project" {
 		a.emitProjectTreeRuntimeChangedWithLegacy()
@@ -4220,7 +4232,9 @@ func (a *App) buildTabControllerWithContextCore(tab *WorkspaceTab, loadedSession
 			indexTopicTitle := tab.TopicTitle
 			a.mu.RUnlock()
 			if indexTopicID != "" {
-				if err := ensureTopicIndexed(indexScope, indexRoot, indexTopicID, indexTopicTitle, loadTopicTitleSource(topicTitleRoot(indexScope, indexRoot), indexTopicID)); err == nil {
+				// 新 topic 首次索引交给 auto-title：旧的空→manual 默认会把新会话锁死在默认标题。
+				indexSource := cmp.Or(loadTopicTitleSource(topicTitleRoot(indexScope, indexRoot), indexTopicID), topicTitleSourceAuto)
+				if err := ensureTopicIndexed(indexScope, indexRoot, indexTopicID, indexTopicTitle, indexSource); err == nil {
 					a.emitProjectTreeChangedForSessionDirs(ctrl.SessionDir())
 				}
 			}
@@ -4407,8 +4421,14 @@ func (a *App) applySessionBindingToTab(tab *WorkspaceTab, binding sessionBinding
 		tab.topicTitleSource = topicSource
 	}
 	if topicTitle != "" {
-		changed = changed || tab.TopicTitle != topicTitle
-		tab.TopicTitle = topicTitle
+		// session sidecar 的 TopicTitle 是投影副本：陈旧的默认标题不得覆盖
+		// 更新的 topic 标题（切回 fallback / 自动命名刚写入的新值），否则
+		// build 的 ensureTopicIndexed 会把 topic state 一并拖回"新的会话"。
+		// 只有非默认的 sidecar 标题（真实手动名投影）才能覆盖。
+		if !isDefaultTopicTitle(topicTitle) || isDefaultTopicTitle(tab.TopicTitle) || tab.TopicTitle == "" {
+			changed = changed || tab.TopicTitle != topicTitle
+			tab.TopicTitle = topicTitle
+		}
 	}
 	if changed && current == tab {
 		a.saveTabsLocked()
@@ -4768,11 +4788,11 @@ func (a *App) maybeAutoTitleTopic(tab *WorkspaceTab) bool {
 	if topicID == "" || ctrl == nil {
 		return false
 	}
-	if source := loadTopicTitleSource(titleRoot, topicID); source != topicTitleSourceAuto {
-		return false
-	}
 	sessionPath := ctrl.SessionPath()
 	if sessionPath == "" {
+		return false
+	}
+	if source := loadTopicTitleSource(titleRoot, topicID); source != topicTitleSourceAuto && !topicTitleAllowsAutoRetitle(titleRoot, topicID, sessionPath) {
 		return false
 	}
 	if sessionHasManualDisplayTitle(sessionPath) {
@@ -4796,7 +4816,7 @@ func (a *App) maybeAutoTitleTopic(tab *WorkspaceTab) bool {
 }
 
 func autoTitleTopicFromSession(workspaceRoot, topicID, sessionPath string) (string, bool) {
-	if source := loadTopicTitleSource(workspaceRoot, topicID); source != topicTitleSourceAuto {
+	if source := loadTopicTitleSource(workspaceRoot, topicID); source != topicTitleSourceAuto && !topicTitleAllowsAutoRetitle(workspaceRoot, topicID, sessionPath) {
 		return "", false
 	}
 	if sessionHasManualDisplayTitle(sessionPath) {
@@ -4914,6 +4934,24 @@ func sessionHasManualDisplayTitle(sessionPath string) bool {
 	return strings.TrimSpace(loadSessionTitles(dir)[filepath.Base(sessionPath)]) != ""
 }
 
+// topicTitleAllowsAutoRetitle reports whether a non-auto topic-title source is
+// a dirty record worth self-healing: a topic can get stuck as title=默认 +
+// source=manual with no real manual name behind it (no CustomTitle, no
+// .titles.json entry — live user data: topic_20260919-093225), which then
+// blocks auto-titling forever. Two guards keep a deliberate user choice safe:
+// a non-default title is a real rename, and an auto-title-meta entry means the
+// topic was auto-titled once before (a blank rename reset it on purpose), so
+// neither may be re-titled here.
+func topicTitleAllowsAutoRetitle(workspaceRoot, topicID, sessionPath string) bool {
+	if !isDefaultTopicTitle(strings.TrimSpace(loadTopicTitle(workspaceRoot, topicID))) {
+		return false
+	}
+	if _, ok := loadTopicAutoTitleMeta(workspaceRoot)[topicID]; ok {
+		return false
+	}
+	return !sessionHasManualDisplayTitle(sessionPath)
+}
+
 func topicTitleFallbackForOpen(workspaceRoot, topicID, sessionPath string) (string, string, bool) {
 	topicID = strings.TrimSpace(topicID)
 	sessionPath = strings.TrimSpace(sessionPath)
@@ -4922,8 +4960,9 @@ func topicTitleFallbackForOpen(workspaceRoot, topicID, sessionPath string) (stri
 	}
 	storedTitle := strings.TrimSpace(loadTopicTitle(workspaceRoot, topicID))
 	storedSource := strings.TrimSpace(loadTopicTitleSource(workspaceRoot, topicID))
+	dirtyManual := storedSource == topicTitleSourceManual && topicTitleAllowsAutoRetitle(workspaceRoot, topicID, sessionPath)
 	if storedTitle != "" {
-		if storedSource == topicTitleSourceManual || !isDefaultTopicTitle(storedTitle) {
+		if (storedSource == topicTitleSourceManual && !dirtyManual) || !isDefaultTopicTitle(storedTitle) {
 			return "", "", false
 		}
 	}
@@ -4939,10 +4978,10 @@ func topicTitleFallbackForOpen(workspaceRoot, topicID, sessionPath string) (stri
 		}
 	}
 
-	if storedSource == topicTitleSourceManual {
+	if storedSource == topicTitleSourceManual && !dirtyManual {
 		return "", "", false
 	}
-	if storedSource == "" || storedSource == topicTitleSourceAuto {
+	if storedSource == "" || storedSource == topicTitleSourceAuto || dirtyManual {
 		if title := topicTitleFromSession(sessionPath); title != "" {
 			return title, topicTitleSourceAuto, true
 		}
@@ -6787,18 +6826,27 @@ func (a *App) RenameTopic(topicID, title string) error {
 	a.topicTitleMutationMu.Lock()
 	defer a.topicTitleMutationMu.Unlock()
 	trimmed := strings.TrimSpace(title)
+	// 空输入/显式重置回默认标题 = 交还自动命名接管（与 resetReusableBlankTabTitle
+	// 语义一致）：写回 auto source 并清除 auto-title-meta。default+manual 会把
+	// topic 永久锁死在"新的会话"（真实用户数据 topic_20260919-093225）。
+	resetToAuto := trimmed == "" || trimmed == defaultTopicTitle
 	if trimmed == "" {
 		trimmed = defaultTopicTitle
 	}
 	// Find which workspace this topic belongs to by scanning all project topic titles.
 	f := loadProjectsFile()
+	source := topicTitleSourceManual
+	if resetToAuto {
+		source = topicTitleSourceAuto
+		_ = deleteTopicAutoTitleMeta(titleRootForRename(f, topicID), topicID)
+	}
 	for _, p := range f.Projects {
 		m := loadTopicTitles(p.Root)
 		if _, ok := m[topicID]; ok {
-			if err := setTopicTitle(p.Root, topicID, trimmed); err != nil {
+			if err := setTopicTitleWithSource(p.Root, topicID, trimmed, source); err != nil {
 				return err
 			}
-			a.updateOpenTopicTitle(topicID, trimmed, topicTitleSourceManual)
+			a.updateOpenTopicTitle(topicID, trimmed, source)
 			changedDirs := a.updateTopicSessionTitles(topicID, trimmed)
 			if len(changedDirs) > 0 {
 				a.emitProjectTreeChangedForSessionDirs(changedDirs...)
@@ -6811,10 +6859,10 @@ func (a *App) RenameTopic(topicID, title string) error {
 	// Check global.
 	m := loadTopicTitles("")
 	if _, ok := m[topicID]; ok {
-		if err := setTopicTitle("", topicID, trimmed); err != nil {
+		if err := setTopicTitleWithSource("", topicID, trimmed, source); err != nil {
 			return err
 		}
-		a.updateOpenTopicTitle(topicID, trimmed, topicTitleSourceManual)
+		a.updateOpenTopicTitle(topicID, trimmed, source)
 		changedDirs := a.updateTopicSessionTitles(topicID, trimmed)
 		if len(changedDirs) > 0 {
 			a.emitProjectTreeChangedForSessionDirs(changedDirs...)
@@ -6824,10 +6872,10 @@ func (a *App) RenameTopic(topicID, title string) error {
 		return nil
 	}
 	if scope, workspaceRoot, ok := a.findTopicLocation(topicID); ok {
-		if err := ensureTopicIndexed(scope, workspaceRoot, topicID, trimmed, topicTitleSourceManual); err != nil {
+		if err := ensureTopicIndexed(scope, workspaceRoot, topicID, trimmed, source); err != nil {
 			return err
 		}
-		a.updateOpenTopicTitle(topicID, trimmed, topicTitleSourceManual)
+		a.updateOpenTopicTitle(topicID, trimmed, source)
 		changedDirs := a.updateTopicSessionTitles(topicID, trimmed)
 		if len(changedDirs) > 0 {
 			a.emitProjectTreeChangedForSessionDirs(changedDirs...)
@@ -6839,6 +6887,18 @@ func (a *App) RenameTopic(topicID, title string) error {
 	// Catalog-only topics (no title map entry, no open tab) persist through
 	// renameCatalogOnlyTopic instead of failing (#9090).
 	return a.renameCatalogOnlyTopic(topicID, trimmed)
+}
+
+// titleRootForRename resolves the workspace root of a topic for meta deletion
+// best-effort; an empty root only misses the meta cleanup on project topics
+// whose root cannot be found, which the next auto-title pass self-heals.
+func titleRootForRename(f desktopProjectFile, topicID string) string {
+	for _, p := range f.Projects {
+		if _, ok := loadTopicTitles(p.Root)[topicID]; ok {
+			return p.Root
+		}
+	}
+	return ""
 }
 
 func (a *App) findTopicLocation(topicID string) (string, string, bool) {
