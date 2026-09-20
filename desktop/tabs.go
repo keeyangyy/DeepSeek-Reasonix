@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
 	"cmp"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
