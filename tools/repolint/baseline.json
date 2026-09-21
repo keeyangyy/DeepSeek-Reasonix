@@ -2,15 +2,15 @@
   "limits": {
     "banner": 13,
     "commented-code": 0,
-    "complexity": 1901,
+    "complexity": 1898,
     "essay": 1916,
-    "file-size": 102508,
-    "function-size": 8283,
+    "file-size": 102502,
+    "function-size": 8264,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 116,
-    "test-file-size": 69009
+    "test-file-size": 69003
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -278,7 +278,7 @@
     "desktop/tabs.go": {
       "complexity": 45,
       "essay": 69,
-      "file-size": 7704,
+      "file-size": 7708,
       "function-size": 361,
       "struct-state": 23
     },
@@ -287,7 +287,7 @@
     },
     "desktop/tabs_topic_test.go": {
       "essay": 1,
-      "test-file-size": 3279
+      "test-file-size": 3273
     },
     "desktop/terminal.go": {
       "file-size": 73
@@ -451,7 +451,7 @@
     },
     "internal/agent/fleet.go": {
       "essay": 3,
-      "function-size": 24
+      "function-size": 15
     },
     "internal/agent/loop_e2e_test.go": {
       "test-file-size": 265
@@ -547,10 +547,9 @@
       "test-file-size": 250
     },
     "internal/agent/task.go": {
-      "complexity": 3,
       "essay": 12,
-      "file-size": 1183,
-      "function-size": 18
+      "file-size": 1173,
+      "function-size": 8
     },
     "internal/agent/task_test.go": {
       "essay": 1,
