@@ -49,7 +49,7 @@ func TestBackgroundTaskWithoutWritePathsRunsConcurrently(t *testing.T) {
 	ctx = jobs.WithManager(ctx, manager)
 	ctx = jobs.WithSession(ctx, "parent-session")
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		args, _ := json.Marshal(map[string]any{
 			"prompt":            "prompt",
 			"run_in_background": true,
@@ -59,11 +59,11 @@ func TestBackgroundTaskWithoutWritePathsRunsConcurrently(t *testing.T) {
 		}
 	}
 	// 修复前：第二个 task 被 whole-workspace 互斥排队，不会启动。
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-prov.started:
 		case <-time.After(3 * time.Second):
-			t.Fatalf("background task %d did not start concurrently (serialized by whole-workspace claim)", i)
+			t.Fatal("background task did not start concurrently (serialized by whole-workspace claim)")
 		}
 	}
 }
@@ -93,11 +93,11 @@ func TestFleetWritersWithoutWritePathsRunConcurrently(t *testing.T) {
 	if _, err := fleet.Execute(ctx, args); err != nil {
 		t.Fatalf("fleet: %v", err)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-prov.started:
 		case <-time.After(3 * time.Second):
-			t.Fatalf("fleet item %d did not start concurrently (serialized by whole-workspace claim)", i)
+			t.Fatal("fleet item did not start concurrently (serialized by whole-workspace claim)")
 		}
 	}
 }
