@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 )
 
 // prepareWriteCoordination resolves the real execution target, then acquires
@@ -18,16 +17,6 @@ func (a *Agent) prepareWriteCoordination(ctx context.Context, plan *toolCallPlan
 		if len(plan.runArgs) == 0 {
 			plan.runArgs = json.RawMessage(`{}`)
 		}
-	}
-	if (plan.effects.WorkspaceMutation || plan.hooksMayMutateWorkspace) && a.svc.workspaceLease != nil {
-		release, err := a.acquireWorkspaceLease(ctx, plan)
-		if err != nil {
-			return toolOutcome{
-				output:  fmt.Sprintf("blocked: the workspace did not become available for writing: %v", err),
-				blocked: true, errMsg: "blocked: workspace write lease unavailable",
-			}, true
-		}
-		plan.releaseLease = release
 	}
 	release, err := a.reserveCoordinatedParentWrite(plan)
 	if err != nil {
@@ -47,29 +36,6 @@ func (a *Agent) reserveCoordinatedParentWrite(plan *toolCallPlan) (func(), error
 		return a.svc.writeScheduler.ReserveParentWrite(claim)
 	}
 	return a.reserveParentWrite(plan.runTool, plan.runArgs, !plan.effects.WorkspaceMutation)
-}
-
-func (a *Agent) acquireWorkspaceLease(ctx context.Context, plan *toolCallPlan) (func(), error) {
-	noop := func() {}
-	if a == nil || a.svc.workspaceLease == nil || plan == nil || plan.runTool == nil {
-		return noop, nil
-	}
-	// Tool hooks are arbitrary user shell code, so their write surface cannot be
-	// narrowed to the concrete tool's path arguments.
-	if plan.hooksMayMutateWorkspace {
-		return a.svc.workspaceLease.HoldWrite(ctx)
-	}
-	name := plan.runTool.Name()
-	if pathBoundWriterNames[name] {
-		paths, err := extractWritePathsFromArgs(name, a.writeWorkspaceRoot, plan.runArgs)
-		if err == nil && len(paths) > 0 {
-			for i := range paths {
-				paths[i] = resolveMaybeRelative(a.writeWorkspaceRoot, paths[i])
-			}
-			return a.svc.workspaceLease.HoldWriteForPaths(ctx, paths)
-		}
-	}
-	return a.svc.workspaceLease.HoldWrite(ctx)
 }
 
 func (a *Agent) applyLiveWriteReservation(ctx context.Context, plan *toolCallPlan) (toolOutcome, bool) {

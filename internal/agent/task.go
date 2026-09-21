@@ -683,7 +683,7 @@ func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profi
 			return ProfileExecSpec{}, err
 		}
 		spec.Grant.WritePaths = claims
-		if requireClaim && claims.Empty() {
+		if len(writePaths) > 0 && claims.Empty() {
 			return ProfileExecSpec{}, fmt.Errorf("writer claim resolved empty")
 		}
 	} else if len(writePaths) > 0 {
@@ -696,10 +696,10 @@ func (t *TaskTool) resolveWriterClaims(writePaths []string, requireClaim bool) (
 	if len(writePaths) > 0 {
 		return NormalizeWritePaths(t.workspaceRoot, writePaths)
 	}
-	if !requireClaim {
-		return WritePathSet{}, nil
-	}
-	return WholeWorkspaceWriteClaim(t.workspaceRoot)
+	// 无 write_paths 的 writer 不再推断 whole-workspace：推断式声明让此类
+	// 子代理全局互斥串行并锁死主 agent 写工具。空声明仅受
+	// max_parallel_writers 上限；显式 whole-workspace 互斥保留。
+	return WritePathSet{}, nil
 }
 
 // RunProfileSpec executes a unified profile/task specification. Shared by task,
@@ -777,16 +777,6 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		WritePaths: spec.Grant.WritePaths,
 		Nested:     spec.Sched.Nested,
 		Label:      firstNonEmpty(spec.Task.Description, spec.Worker.Name, "task"),
-	}
-	// Defensive fallback for callers that manually construct a background spec
-	// instead of going through buildTaskSpec.
-	if isWriter && spec.Grant.WritePaths.Empty() && spec.Sched.RunInBackground {
-		whole, werr := WholeWorkspaceWriteClaim(t.workspaceRoot)
-		if werr != nil {
-			return t.failBeforeSubagentRelease(run, werr)
-		}
-		acquireReq.WritePaths = whole
-		spec.Grant.WritePaths = whole
 	}
 
 	recoveryTaskID := subagentRecoveryTaskID(ctx, run.Ref)

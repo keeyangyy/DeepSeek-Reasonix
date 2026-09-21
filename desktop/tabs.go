@@ -7011,6 +7011,10 @@ func (a *App) emitProjectTreeChangedForSessionDirs(dirs ...string) {
 	for _, dir := range dirs {
 		a.requestSessionCatalogReconcile(dir)
 	}
+	// 目录投影（reconcile）从不更新 catalog_topics.title：标题只由
+	// SyncMetadata 写入，缺它列表标题要等 30s 清扫才修正（幂等指纹
+	// 保证无变化时此同步零开销）。
+	a.requestSessionCatalogMetadataSync()
 	a.emitProjectTreeChangedEvent()
 }
 

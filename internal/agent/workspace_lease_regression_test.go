@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -171,7 +170,7 @@ func TestKillShellDoesNotWaitForBackgroundWriterLease(t *testing.T) {
 	}
 }
 
-func TestWritableHooksUseWorkspaceLease(t *testing.T) {
+func TestWritableHooksRunWithoutWorkspaceLease(t *testing.T) {
 	root, locks := t.TempDir(), t.TempDir()
 	holder, _ := workspacelease.New(root, locks, nil)
 	writerOwner, _ := workspacelease.New(root, locks, nil)
@@ -188,23 +187,24 @@ func TestWritableHooksUseWorkspaceLease(t *testing.T) {
 	a.svc.hooks = hooks
 	call := providerToolCall("write", writer.Name())
 	call.Arguments = `{"path":"probe.go","content":"probe"}`
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
-	out := a.executeOne(ctx, &a.turn, call)
-	cancel()
-	if !out.blocked || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		t.Fatalf("hook-capable writer was not blocked by active workspace write: %+v", out)
+	out := a.executeOne(context.Background(), &a.turn, call)
+	// 新语义：workspace 级写锁已移除（多会话同项目互锁被判定为鸡肋），
+	// hook 写者不再等待其它会话的 workspace 写。
+	if out.blocked {
+		t.Fatalf("hook-capable writer was blocked by active workspace write: %+v", out)
 	}
-	if got := hooks.calls.Load(); got != 0 {
-		t.Fatalf("hook ran %d times before the workspace became exclusive", got)
+	if got := hooks.calls.Load(); got == 0 {
+		t.Fatalf("hook ran %d times, want it to have run (workspace write lock removed)", got)
 	}
 
+	afterFirst := hooks.calls.Load()
 	releaseProtected()
 	out = a.executeOne(context.Background(), &a.turn, call)
 	if out.blocked || out.errMsg != "" {
 		t.Fatalf("writer after release: %+v", out)
 	}
-	if got := hooks.calls.Load(); got != 1 {
-		t.Fatalf("hook calls = %d, want 1", got)
+	if got := hooks.calls.Load(); got <= afterFirst {
+		t.Fatalf("hook calls did not advance after release (got %d <= %d)", got, afterFirst)
 	}
 }
 
