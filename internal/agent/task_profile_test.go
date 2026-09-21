@@ -25,7 +25,7 @@ func TestTaskSchemaIncludesProfileAndWritePaths(t *testing.T) {
 	}
 }
 
-func TestTaskWriterWithoutPathsClaimsWholeWorkspace(t *testing.T) {
+func TestTaskWriterWithoutPathsClaimsNothing(t *testing.T) {
 	root := t.TempDir()
 	task := NewTaskTool(&mockProvider{name: "sub"}, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
 		WithTranscripts(mustSubagentStore(t), root, "base", "high").
@@ -35,8 +35,10 @@ func TestTaskWriterWithoutPathsClaimsWholeWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !spec.Grant.WritePaths.WholeWorkspace || spec.Grant.WritePaths.WorkspaceRoot == "" {
-		t.Fatalf("writer without write_paths must claim the workspace, got %+v", spec.Grant.WritePaths)
+	// 新语义：无 write_paths 的 writer 不再推断 whole-workspace 声明（推断式
+	// whole-workspace 让所有此类子代理全局互斥串行，并锁死主 agent 写工具）。
+	if spec.Grant.WritePaths.WholeWorkspace {
+		t.Fatalf("writer without write_paths must not claim the whole workspace, got %+v", spec.Grant.WritePaths)
 	}
 }
 
