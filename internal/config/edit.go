@@ -268,12 +268,14 @@ func (c *Config) SetDesktopAppearance(theme, style string) error {
 	switch strings.ToLower(strings.TrimSpace(theme)) {
 	case "auto":
 		c.Desktop.Theme = "auto"
+	case "schedule":
+		c.Desktop.Theme = "schedule"
 	case "light":
 		c.Desktop.Theme = "light"
 	case "", "dark":
 		c.Desktop.Theme = "dark"
 	default:
-		return fmt.Errorf("desktop theme %q: must be auto|dark|light", theme)
+		return fmt.Errorf("desktop theme %q: must be auto|dark|light|schedule", theme)
 	}
 	if strings.TrimSpace(style) == "" {
 		c.Desktop.ThemeStyle = ""
@@ -284,6 +286,23 @@ func (c *Config) SetDesktopAppearance(theme, style string) error {
 		return fmt.Errorf("desktop theme style %q: must be graphite|aurora|slate|carbon|nocturne|amber", style)
 	}
 	c.Desktop.ThemeStyle = normalized
+	return nil
+}
+
+// SetDesktopThemeSchedule stores the dark-window bounds for theme=schedule.
+// Either side may be empty to clear the schedule; malformed clocks are rejected
+// so a typo never silently flips the app dark.
+func (c *Config) SetDesktopThemeSchedule(darkStart, darkEnd string) error {
+	start := normalizeThemeClock(darkStart)
+	end := normalizeThemeClock(darkEnd)
+	if darkStart != "" && start == "" {
+		return fmt.Errorf("theme schedule start %q: must be HH:MM", darkStart)
+	}
+	if darkEnd != "" && end == "" {
+		return fmt.Errorf("theme schedule end %q: must be HH:MM", darkEnd)
+	}
+	c.Desktop.ThemeScheduleDarkStart = start
+	c.Desktop.ThemeScheduleDarkEnd = end
 	return nil
 }
 

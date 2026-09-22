@@ -619,6 +619,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   SetDesktopLanguage(lang: string): Promise<void>;
   SetDesktopCurrency(currency: string): Promise<void>;
   SetDesktopAppearance(theme: string, style: string): Promise<void>;
+  SetDesktopThemeSchedule(darkStart: string, darkEnd: string): Promise<void>;
   SetDesktopTerminalTheme(theme: string): Promise<void>;
   ListThemePacks(): Promise<import("./themePack").ThemePackView[]>;
   GetActiveThemePack(): Promise<import("./themePack").ThemeActiveView>;
@@ -4961,6 +4962,10 @@ function makeMockApp(): AppBindings {
           return { id: "dingtalk", label: "DingTalk", status: "ok", message: "Mock dingtalk test sent", messageId: "mock-dingtalk-id", phase: "send", code: "dingtalk_test_send_ok", reportKind: "", reportDetail: "", occurredAt };
         },
         ...createDesktopPreferencesMock(settings),
+        async SetDesktopThemeSchedule(darkStart: string, darkEnd: string) {
+          settings.desktopThemeScheduleDarkStart = darkStart;
+          settings.desktopThemeScheduleDarkEnd = darkEnd;
+        },
         async SetDesktopAppearance(theme: string, style: string) {
           settings.desktopTheme = theme === "auto" || theme === "light" ? theme : "dark";
           settings.desktopThemeStyle = style;

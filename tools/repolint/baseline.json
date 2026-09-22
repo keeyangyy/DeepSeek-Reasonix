@@ -2,10 +2,10 @@
   "limits": {
     "banner": 13,
     "commented-code": 0,
-    "complexity": 1898,
+    "complexity": 1900,
     "essay": 1916,
-    "file-size": 102502,
-    "function-size": 8264,
+    "file-size": 102582,
+    "function-size": 8274,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
@@ -117,7 +117,7 @@
       "file-size": 141
     },
     "desktop/frontend/src/components/SettingsPanel.tsx": {
-      "file-size": 6439
+      "file-size": 6444
     },
     "desktop/frontend/src/components/StatusBar.tsx": {
       "file-size": 43
@@ -138,7 +138,7 @@
       "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 4996
+      "file-size": 5001
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213
@@ -147,7 +147,7 @@
       "file-size": 270
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1616
+      "file-size": 1618
     },
     "desktop/frontend/src/lib/useController.ts": {
       "file-size": 4487
@@ -258,7 +258,7 @@
     "desktop/settings_app.go": {
       "complexity": 29,
       "essay": 6,
-      "file-size": 3051
+      "file-size": 3055
     },
     "desktop/settings_app_test.go": {
       "test-file-size": 1814
@@ -826,7 +826,7 @@
     },
     "internal/config/config.go": {
       "essay": 22,
-      "file-size": 1491,
+      "file-size": 1526,
       "narrative": 2
     },
     "internal/config/credentials.go": {
@@ -837,7 +837,7 @@
     },
     "internal/config/edit.go": {
       "essay": 5,
-      "file-size": 1679
+      "file-size": 1698
     },
     "internal/config/edit_test.go": {
       "test-file-size": 2409
@@ -872,10 +872,10 @@
       "test-file-size": 158
     },
     "internal/config/render.go": {
-      "complexity": 229,
+      "complexity": 231,
       "essay": 2,
-      "file-size": 963,
-      "function-size": 914
+      "file-size": 973,
+      "function-size": 924
     },
     "internal/config/render_test.go": {
       "test-file-size": 866

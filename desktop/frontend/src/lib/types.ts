@@ -2271,8 +2271,10 @@ export interface SettingsView {
   desktopLanguage: string; // "" | "en" | "zh"; empty = auto
   desktopCurrency?: string; // "" | "CNY" | "USD"; absent/empty = follow language
   desktopLayoutStyle: string; // "classic" | "workbench" | "creation"
-  desktopTheme: string; // "auto" | "dark" | "light"
+  desktopTheme: string; // "auto" | "dark" | "light" | "schedule"
   desktopThemeStyle: string;
+  desktopThemeScheduleDarkStart?: string; // "HH:MM" dark-window start for theme=schedule
+  desktopThemeScheduleDarkEnd?: string; // "HH:MM" dark-window end for theme=schedule
   desktopTerminalTheme: string; // "auto" follows app | "dark" | "light"
   closeBehavior: string; // "background" | "quit"
   displayMode: string; sessionExperience?: "standard" | "deep"; reasoningDisplayMode: string; reasoningDisplayModeExplicit?: boolean;

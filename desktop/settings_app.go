@@ -323,40 +323,42 @@ type BotSettingsView struct {
 
 // SettingsView is the whole Settings panel payload.
 type SettingsView struct {
-	DefaultModel                 string               `json:"defaultModel"`
-	PlannerModel                 string               `json:"plannerModel"`
-	VisionModel                  string               `json:"visionModel"`
-	WebSearchModel               string               `json:"webSearchModel"`
-	WebSearchModels              []string             `json:"webSearchModels"`
-	WebSearchModelStatus         string               `json:"webSearchModelStatus"`
-	WebSearchModelReason         string               `json:"webSearchModelReason"`
-	EffectiveWebSearchModel      string               `json:"effectiveWebSearchModel"`
-	WebSearchModelOverridden     bool                 `json:"webSearchModelOverridden"`
-	SubagentModel                string               `json:"subagentModel"`
-	SubagentEffort               string               `json:"subagentEffort"`
-	AutoPlan                     string               `json:"autoPlan"`
-	Providers                    []ProviderView       `json:"providers"`
-	OfficialProviders            []ProviderView       `json:"officialProviders"`
-	ProviderPresets              []ProviderPresetView `json:"providerPresets"`
-	Permissions                  PermissionsView      `json:"permissions"`
-	Sandbox                      SandboxView          `json:"sandbox"`
-	Network                      NetworkView          `json:"network"`
-	Agent                        AgentView            `json:"agent"`
-	Bot                          BotSettingsView      `json:"bot"`
-	DesktopLanguage              string               `json:"desktopLanguage"`
-	DesktopCurrency              string               `json:"desktopCurrency"`
-	DesktopLayoutStyle           string               `json:"desktopLayoutStyle"`
-	DesktopTheme                 string               `json:"desktopTheme"`
-	DesktopThemeStyle            string               `json:"desktopThemeStyle"`
-	DesktopTerminalTheme         string               `json:"desktopTerminalTheme,omitempty"`
-	CloseBehavior                string               `json:"closeBehavior"`
-	SessionExperience            string               `json:"sessionExperience"`
-	DisplayMode                  string               `json:"displayMode"`
-	ReasoningDisplayMode         string               `json:"reasoningDisplayMode"`
-	ReasoningDisplayModeExplicit bool                 `json:"reasoningDisplayModeExplicit"`
-	StatusBarStyle               string               `json:"statusBarStyle"`
-	StatusBarItems               []string             `json:"statusBarItems"`
-	DefaultToolApprovalMode      string               `json:"defaultToolApprovalMode"`
+	DefaultModel                  string               `json:"defaultModel"`
+	PlannerModel                  string               `json:"plannerModel"`
+	VisionModel                   string               `json:"visionModel"`
+	WebSearchModel                string               `json:"webSearchModel"`
+	WebSearchModels               []string             `json:"webSearchModels"`
+	WebSearchModelStatus          string               `json:"webSearchModelStatus"`
+	WebSearchModelReason          string               `json:"webSearchModelReason"`
+	EffectiveWebSearchModel       string               `json:"effectiveWebSearchModel"`
+	WebSearchModelOverridden      bool                 `json:"webSearchModelOverridden"`
+	SubagentModel                 string               `json:"subagentModel"`
+	SubagentEffort                string               `json:"subagentEffort"`
+	AutoPlan                      string               `json:"autoPlan"`
+	Providers                     []ProviderView       `json:"providers"`
+	OfficialProviders             []ProviderView       `json:"officialProviders"`
+	ProviderPresets               []ProviderPresetView `json:"providerPresets"`
+	Permissions                   PermissionsView      `json:"permissions"`
+	Sandbox                       SandboxView          `json:"sandbox"`
+	Network                       NetworkView          `json:"network"`
+	Agent                         AgentView            `json:"agent"`
+	Bot                           BotSettingsView      `json:"bot"`
+	DesktopLanguage               string               `json:"desktopLanguage"`
+	DesktopCurrency               string               `json:"desktopCurrency"`
+	DesktopLayoutStyle            string               `json:"desktopLayoutStyle"`
+	DesktopTheme                  string               `json:"desktopTheme"`
+	DesktopThemeStyle             string               `json:"desktopThemeStyle"`
+	DesktopThemeScheduleDarkStart string               `json:"desktopThemeScheduleDarkStart,omitempty"`
+	DesktopThemeScheduleDarkEnd   string               `json:"desktopThemeScheduleDarkEnd,omitempty"`
+	DesktopTerminalTheme          string               `json:"desktopTerminalTheme,omitempty"`
+	CloseBehavior                 string               `json:"closeBehavior"`
+	SessionExperience             string               `json:"sessionExperience"`
+	DisplayMode                   string               `json:"displayMode"`
+	ReasoningDisplayMode          string               `json:"reasoningDisplayMode"`
+	ReasoningDisplayModeExplicit  bool                 `json:"reasoningDisplayModeExplicit"`
+	StatusBarStyle                string               `json:"statusBarStyle"`
+	StatusBarItems                []string             `json:"statusBarItems"`
+	DefaultToolApprovalMode       string               `json:"defaultToolApprovalMode"`
 
 	CheckUpdates      bool   `json:"checkUpdates"`
 	UpdateChannel     string `json:"updateChannel"`
@@ -1103,32 +1105,34 @@ func (a *App) Settings() SettingsView {
 			CompactRatio:           cfg.Agent.CompactRatio,
 			EffectiveCompactRatio:  cfg.Agent.CompactRatio,
 		},
-		Bot:                          botSettingsView(cfg.Bot),
-		DesktopLanguage:              cfg.DesktopLanguage(),
-		DesktopCurrency:              cfg.DesktopCurrency(),
-		DesktopLayoutStyle:           cfg.DesktopLayoutStyle(),
-		DesktopTheme:                 cfg.DesktopTheme(),
-		DesktopThemeStyle:            cfg.DesktopThemeStyle(),
-		DesktopTerminalTheme:         cfg.DesktopTerminalTheme(),
-		CloseBehavior:                cfg.DesktopCloseBehavior(),
-		DisplayMode:                  cfg.DesktopDisplayMode(),
-		SessionExperience:            cfg.DesktopSessionExperience(),
-		ReasoningDisplayMode:         cfg.DesktopReasoningDisplayMode(),
-		ReasoningDisplayModeExplicit: cfg.DesktopReasoningDisplayModeExplicit(),
-		StatusBarStyle:               cfg.DesktopStatusBarStyle(),
-		StatusBarItems:               cfg.DesktopStatusBarItems(),
-		DefaultToolApprovalMode:      cfg.DesktopDefaultToolApprovalMode(),
-		CheckUpdates:                 cfg.DesktopCheckUpdates(),
-		UpdateChannel:                cfg.DesktopUpdateChannel(),
-		Telemetry:                    cfg.DesktopTelemetry(),
-		Metrics:                      cfg.DesktopMetrics(),
-		ExpandThinking:               cfg.Desktop.ExpandThinking,
-		ConversationWidth:            cfg.DesktopConversationWidth(),
-		ConfigPath:                   cfgPath,
-		ShadowedByPath:               shadowingConfigPath(cfgPath, root),
-		ProviderKinds:                nonNil(provider.Kinds()),
-		AutoApproveTools:             ctrl != nil && ctrl.AutoApproveTools(),
-		Bypass:                       ctrl != nil && ctrl.AutoApproveTools(),
+		Bot:                           botSettingsView(cfg.Bot),
+		DesktopLanguage:               cfg.DesktopLanguage(),
+		DesktopCurrency:               cfg.DesktopCurrency(),
+		DesktopLayoutStyle:            cfg.DesktopLayoutStyle(),
+		DesktopTheme:                  cfg.DesktopTheme(),
+		DesktopThemeStyle:             cfg.DesktopThemeStyle(),
+		DesktopThemeScheduleDarkStart: cfg.DesktopThemeScheduleDarkStart(),
+		DesktopThemeScheduleDarkEnd:   cfg.DesktopThemeScheduleDarkEnd(),
+		DesktopTerminalTheme:          cfg.DesktopTerminalTheme(),
+		CloseBehavior:                 cfg.DesktopCloseBehavior(),
+		DisplayMode:                   cfg.DesktopDisplayMode(),
+		SessionExperience:             cfg.DesktopSessionExperience(),
+		ReasoningDisplayMode:          cfg.DesktopReasoningDisplayMode(),
+		ReasoningDisplayModeExplicit:  cfg.DesktopReasoningDisplayModeExplicit(),
+		StatusBarStyle:                cfg.DesktopStatusBarStyle(),
+		StatusBarItems:                cfg.DesktopStatusBarItems(),
+		DefaultToolApprovalMode:       cfg.DesktopDefaultToolApprovalMode(),
+		CheckUpdates:                  cfg.DesktopCheckUpdates(),
+		UpdateChannel:                 cfg.DesktopUpdateChannel(),
+		Telemetry:                     cfg.DesktopTelemetry(),
+		Metrics:                       cfg.DesktopMetrics(),
+		ExpandThinking:                cfg.Desktop.ExpandThinking,
+		ConversationWidth:             cfg.DesktopConversationWidth(),
+		ConfigPath:                    cfgPath,
+		ShadowedByPath:                shadowingConfigPath(cfgPath, root),
+		ProviderKinds:                 nonNil(provider.Kinds()),
+		AutoApproveTools:              ctrl != nil && ctrl.AutoApproveTools(),
+		Bypass:                        ctrl != nil && ctrl.AutoApproveTools(),
 	}
 	if ctrl != nil {
 		if effective := ctrl.CompactRatio(); effective > 0 {

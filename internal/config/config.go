@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 
 	fileencoding "reasonix/internal/fileutil/encoding"
@@ -355,6 +356,25 @@ func normalizeDesktopLayoutStyle(style string) string {
 	}
 }
 
+// normalizeThemeClock validates a "HH:MM" clock value (00:00–23:59) used by
+// the desktop theme schedule. Empty input is valid (means unconfigured).
+func normalizeThemeClock(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parts := strings.Split(value, ":")
+	if len(parts) != 2 {
+		return ""
+	}
+	hour, errH := strconv.Atoi(parts[0])
+	minute, errM := strconv.Atoi(parts[1])
+	if errH != nil || errM != nil || hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		return ""
+	}
+	return fmt.Sprintf("%02d:%02d", hour, minute)
+}
+
 func normalizeCloseBehavior(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "quit", "exit":
@@ -396,11 +416,14 @@ func (c *Config) DesktopCurrency() string {
 }
 
 // DesktopTheme normalizes desktop.theme. New desktop users default to the OS
-// automatic graphite product look; an explicit auto/light/dark is preserved.
+// automatic graphite product look; an explicit auto/light/dark/schedule is
+// preserved.
 func (c *Config) DesktopTheme() string {
 	switch strings.ToLower(strings.TrimSpace(c.Desktop.Theme)) {
 	case "auto":
 		return "auto"
+	case "schedule":
+		return "schedule"
 	case "light":
 		return "light"
 	case "dark":
@@ -408,6 +431,18 @@ func (c *Config) DesktopTheme() string {
 	default:
 		return "auto"
 	}
+}
+
+// DesktopThemeScheduleDarkStart returns the normalized dark-window start
+// ("HH:MM") for theme=schedule; "" when unset or malformed.
+func (c *Config) DesktopThemeScheduleDarkStart() string {
+	return normalizeThemeClock(c.Desktop.ThemeScheduleDarkStart)
+}
+
+// DesktopThemeScheduleDarkEnd returns the normalized dark-window end ("HH:MM")
+// for theme=schedule; "" when unset or malformed.
+func (c *Config) DesktopThemeScheduleDarkEnd() string {
+	return normalizeThemeClock(c.Desktop.ThemeScheduleDarkEnd)
 }
 
 // DesktopThemeStyle normalizes desktop.theme_style. Empty means the frontend

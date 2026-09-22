@@ -105,7 +105,17 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 			fmt.Fprintf(&b, "currency = %q   # legacy display currency; prefer [billing].display_currency\n", currency)
 		}
 		fmt.Fprintf(&b, "layout_style = %q   # desktop layout: workbench|creation; legacy classic migrates to workbench\n", c.DesktopLayoutStyle())
-		fmt.Fprintf(&b, "theme = %q   # desktop only: auto|dark|light\n", c.DesktopTheme())
+		fmt.Fprintf(&b, "theme = %q   # desktop only: auto|dark|light|schedule\n", c.DesktopTheme())
+		if start := c.DesktopThemeScheduleDarkStart(); start != "" {
+			fmt.Fprintf(&b, "theme_schedule_dark_start = %q   # dark-window start for theme=schedule (HH:MM)\n", start)
+		} else {
+			b.WriteString("# theme_schedule_dark_start = \"19:00\"   # dark-window start for theme=schedule (HH:MM)\n")
+		}
+		if end := c.DesktopThemeScheduleDarkEnd(); end != "" {
+			fmt.Fprintf(&b, "theme_schedule_dark_end = %q   # dark-window end for theme=schedule (HH:MM; may cross midnight)\n", end)
+		} else {
+			b.WriteString("# theme_schedule_dark_end = \"07:00\"   # dark-window end for theme=schedule (HH:MM; may cross midnight)\n")
+		}
 		fmt.Fprintf(&b, "terminal_theme = %q   # integrated terminal: auto|dark|light; auto follows the desktop app\n", c.DesktopTerminalTheme())
 		if style := c.DesktopThemeStyle(); style != "" {
 			fmt.Fprintf(&b, "theme_style = %q   # desktop accent palette\n", style)

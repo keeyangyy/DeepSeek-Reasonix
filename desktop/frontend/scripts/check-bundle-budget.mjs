@@ -423,6 +423,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // The compaction-card anchor module (hydrated restore-at-original-spot for
 // compaction rows) measures 2409.2 KiB on the initial path; retain 0.2 KiB
 // build headroom without widening the gzip gate.
-const rawInitialBudgetKiB = 2_410;
+// 2026-09-22: scheduled dark-theme mode (themeSchedule.ts) + appearance UI +
+// i18n keys add 1.6 KiB on the initial path (2411.6 KiB measured); widen to
+// 2412 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_412;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

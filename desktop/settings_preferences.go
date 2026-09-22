@@ -110,6 +110,11 @@ func (a *App) SetDesktopAppearance(theme, style string) error {
 	return a.applyConfigOnly(func(c *config.Config) error { return c.SetDesktopAppearance(theme, style) })
 }
 
+// SetDesktopThemeSchedule stores the dark-window bounds for theme=schedule.
+func (a *App) SetDesktopThemeSchedule(darkStart, darkEnd string) error {
+	return a.applyConfigOnly(func(c *config.Config) error { return c.SetDesktopThemeSchedule(darkStart, darkEnd) })
+}
+
 // SetDesktopTerminalTheme updates only the integrated terminal colours. It is
 // applied live by the frontend and does not rebuild the active controller.
 func (a *App) SetDesktopTerminalTheme(theme string) error {
