@@ -24,6 +24,7 @@ import { replayPendingPromptsForActiveTab } from "./promptReplay";
 import { createRafBatch } from "./rafBatch";
 import { foregroundRunningFromRuntimeMeta, type RuntimeMetaSnapshot } from "./runtimeMeta";
 import { aliasActivationRequest, noteActivationRequested, noteActivationSettled, noteActivationStarted } from "./sessionDiagnostics";
+import { noteDedupDrop, noteOrderAnomaly, noteSwitchPhase, noteSwitchStart } from "./sessionSwitchDiagnostics";
 import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
 import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
@@ -2332,6 +2333,9 @@ export function reducer(s: State, a: Action): State {
       const retainedTail = filtered.slice(Math.min(s.historyPrefixCount, filtered.length));
       const merged = compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail]));
       assertNoDuplicateItems(merged, "history_rebase");
+      noteDedupDrop(s.meta?.sessionPath ?? "", "rebase", a.removeIds?.length ?? 0);
+      const rebaseResidual = duplicateItemRows(merged).length;
+      if (rebaseResidual > 0) noteOrderAnomaly(s.meta?.sessionPath ?? "", "rebase-residual-duplicates", `residual=${rebaseResidual}`);
       return {
         ...s,
         items: merged,
@@ -2393,6 +2397,9 @@ export function reducer(s: State, a: Action): State {
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       const merged = compactArchivedToolItems([...carriedCompactions, ...liftLiveToolStatus(a.items, s.items), ...nonCompactionRest]);
       assertNoDuplicateItems(merged, "history_prepend");
+      noteDedupDrop(s.meta?.sessionPath ?? "", "prepend", a.removeIds.length);
+      const prependResidual = duplicateItemRows(merged).length;
+      if (prependResidual > 0) noteOrderAnomaly(s.meta?.sessionPath ?? "", "prepend-residual-duplicates", `residual=${prependResidual}`);
       return {
         ...s,
         items: merged,
@@ -3099,6 +3106,7 @@ export function useController() {
           "tab.hydrate",
           `history page ${tabId} items=${projection.items.length} turns=${projection.startTurn}-${projection.endTurn}/${projection.totalTurns} ms=${Date.now() - historyStartedAt}`,
         );
+        noteSwitchPhase(tabId, "history", Date.now() - historyStartedAt, `items=${projection.items.length}`);
         if (reason === "switch-tab") {
           addBreadcrumb(
             "tab.switch",
@@ -3137,6 +3145,7 @@ export function useController() {
       }
       dispatchTo(tabId, { type: "hydrate_done" });
       addBreadcrumb("tab.hydrate", `done ${reason} ${tabId} ms=${Date.now() - hydrateStartedAt}`);
+      noteSwitchPhase(tabId, "hydrate-total", Date.now() - hydrateStartedAt, reason);
 
       // Phase 2: local ancillary data. It stays inside the same in-flight
       // promise so duplicate ready/startup hydrations coalesce, but it runs
@@ -4865,6 +4874,7 @@ export function useController() {
     const placeholderItems = sameSession ? targetState?.items : undefined;
     const preserveCachedHistory = sameSession && hasReusableCachedTranscript(targetState, targetSessionPath, targetSessionRevision, targetSessionDigest);
     addBreadcrumb("tab.switch", `click ${tabId}`);
+    noteSwitchStart();
     setActiveTabId(tabId);
     activeTabIdRef.current = tabId;
     dispatchTo(tabId, { type: "backend_activation_start", backendPendingPrompt: Boolean(optimisticTab?.pendingPrompt) });
@@ -4910,6 +4920,7 @@ export function useController() {
     if (optimisticStatus?.running) dispatchTo(tabId, optimisticStatus);
     dispatchTo(tabId, { type: "hydrate_start", reason: "switch-tab", placeholderItems });
     addBreadcrumb("tab.switch", `active-rendered ${tabId} ms=${Date.now() - startedAt}`);
+    noteSwitchPhase(tabId, "render", Date.now() - startedAt);
     const backendActivation = app.SetActiveTab(tabId)
       .then(async () => {
         const navigationCurrent = isNavigationIntentCurrent(navigationSeq);
@@ -4926,6 +4937,7 @@ export function useController() {
         // is in flight and the first replay still sees no controller on tabId.
         replayPendingPromptsForActiveTab(tabId);
         addBreadcrumb("tab.switch", `set-active-done ${tabId} ms=${Date.now() - startedAt}`);
+        noteSwitchPhase(tabId, "backend-activate", Date.now() - startedAt);
         return true;
       })
       .catch((err) => {
@@ -4947,8 +4959,12 @@ export function useController() {
           if (!activated) noteActivationSettled(switchRequestId, "failed", "backend activation did not complete");
           return undefined;
         }
-        const tabs = await reconcileTabRuntime(tabId, { hydrateSessionData: false, refreshAncillary: false });
-        if (!isNavigationIntentCurrent(navigationSeq)) return tabs;
+        // reconcileTabRuntime (ListTabs) and loadSessionDataForTab
+        // (HistorySliceForTab) are independent reads that both depend only on
+        // backend activation, not on each other. Start them concurrently so the
+        // history round trip overlaps the runtime-status round trip instead of
+        // waiting for it serially.
+        const reconcilePromise = reconcileTabRuntime(tabId, { hydrateSessionData: false, refreshAncillary: false });
         const hydration = loadSessionDataForTab(tabId, false, "switch-tab", {
           skipHistory: sameSession && hasCachedLiveTurn(statesRef.current.get(tabId)),
           placeholderItems,
@@ -4959,6 +4975,8 @@ export function useController() {
           sessionDigest: targetSessionDigest,
           sessionGeneration: targetSessionGeneration,
         });
+        const tabs = await reconcilePromise;
+        if (!isNavigationIntentCurrent(navigationSeq)) return tabs;
         // Release the click queue as soon as activation has yielded its target.
         // Hydration continues independently; the App-level surface transaction
         // retains the source until this target commits data and paint.
