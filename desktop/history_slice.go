@@ -266,13 +266,13 @@ func decodeHistorySliceCursor(s string) (historySliceCursor, error) {
 // historySliceSource is the windowed read view over one session used to cut a
 // page: per-message visible turns and roles plus bounded message fetches.
 type historySliceSource struct {
-	sessionID  string // transcript basename minus .jsonl
-	total      int    // total provider messages
-	turns      []int  // turns[i] = visible turn of message i (1-based; 0 = before first turn)
-	roles      []provider.Role
+	sessionID string // transcript basename minus .jsonl
+	total     int    // total provider messages
+	turns     []int  // turns[i] = visible turn of message i (1-based; 0 = before first turn)
+	roles     []provider.Role
 	// turnIDs maps a durable message id to the turn that produced it (nil for
 	// legacy sessions without a schema-2 turn log).
-	turnIDs map[string]string
+	turnIDs    map[string]string
 	totalTurns int
 	revision   int64
 	revKnown   bool
