@@ -70,28 +70,6 @@ func (s *Session) OpenTurn() (SessionOpenTurn, bool) {
 	return SessionOpenTurn{TurnID: t.turn, HeadID: s.head.ref.HeadID, LeafID: t.leaf, PreserveUser: t.preserveUser, StartedAt: t.at}, true
 }
 
-// MessageTurnIDs maps each durable message id to the turn that produced it
-// (omitted when the message sits outside any turn). Frontends use it to align
-// live turn rows (a:<turnId>:…) with their persisted history rows.
-func (s *Session) MessageTurnIDs() map[string]string {
-	if s == nil {
-		return nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	st := s.head.state
-	if st == nil || !s.head.dag {
-		return nil
-	}
-	out := make(map[string]string, len(st.nodes))
-	for id, n := range st.nodes {
-		if n != nil && n.turn != "" {
-			out[id] = n.turn
-		}
-	}
-	return out
-}
-
 // TurnContinuedOnOtherHead reports whether another head already carries a
 // message that follows leafID: the "interrupted" turn moved there and kept
 // running, so its tail on this head must not be treated as a crash remnant.

@@ -121,10 +121,6 @@ type HistoryEntry struct {
 	// revision derived) it survives rewinds, so the frontend can dedupe rows
 	// that re-keyed across a rewrite.
 	MessageID string `json:"messageId,omitempty"`
-	// TurnID is the runtime turn (ULID) that produced the row, when the
-	// session has a schema-2 turn log. It matches the frontend's live row
-	// prefix (a:<turnId>:…) so live and history rows align exactly.
-	TurnID string `json:"turnId,omitempty"`
 	// Turn is the absolute visible turn the row belongs to (1-based; 0 =
 	// before the first visible turn).
 	Turn int `json:"turn"`
@@ -153,6 +149,9 @@ type HistorySlice struct {
 	// invalidated after another process advances or rewrites the session.
 	RevisionKnown bool   `json:"revisionKnown,omitempty"`
 	Digest        string `json:"digest,omitempty"`
+	// OpenTurnID is the in-flight turn's id (empty when none). The frontend
+	// drops that turn's live rows (a:<turnId>:…) in favour of this page.
+	OpenTurnID string `json:"openTurnId,omitempty"`
 	// Source: index|scan|live-index|live-fallback. Error marks a failed read
 	// (empty Entries alone means a genuinely empty session).
 	Source string `json:"source,omitempty"`
@@ -270,9 +269,9 @@ type historySliceSource struct {
 	total     int    // total provider messages
 	turns     []int  // turns[i] = visible turn of message i (1-based; 0 = before first turn)
 	roles     []provider.Role
-	// turnIDs maps a durable message id to the turn that produced it (nil for
-	// legacy sessions without a schema-2 turn log).
-	turnIDs    map[string]string
+	// openTurnID is the in-flight turn's id (empty when none); the page stamps
+	// it so the frontend can align that turn's live rows exactly.
+	openTurnID string
 	totalTurns int
 	revision   int64
 	revKnown   bool
@@ -402,8 +401,8 @@ type historyWindowController interface {
 	HistoryLen() int
 	HistoryWindow(start, end int) []provider.Message
 	SessionPersistedState() (agent.PersistedState, bool)
-	// MessageTurnIDs maps durable message ids to their producing turn.
-	MessageTurnIDs() map[string]string
+	// OpenTurnID is the in-flight turn's id (empty when none).
+	OpenTurnID() string
 }
 
 // HistorySliceForTab returns one page of the tab's history toward older
@@ -504,7 +503,7 @@ func (a *App) liveHistorySliceSource(ctrl control.SessionAPI, sessionPath string
 				total:      n,
 				turns:      turns,
 				roles:      roles,
-				turnIDs:    wc.MessageTurnIDs(),
+				openTurnID: wc.OpenTurnID(),
 				totalTurns: turn,
 				revision:   ps.Revision,
 				revKnown:   ps.RevisionKnown,
@@ -529,7 +528,7 @@ func (a *App) liveHistorySliceSource(ctrl control.SessionAPI, sessionPath string
 		state = ps
 	}
 	src := newInMemoryHistorySliceSource(sessionID, msgs, resolver, state, psOK)
-	src.turnIDs = wc.MessageTurnIDs()
+	src.openTurnID = wc.OpenTurnID()
 	if psOK && ps.UnchangedSincePersisted {
 		src.cacheKey = historyDerivedSourceKey(sessionPath, src)
 	}
@@ -896,6 +895,7 @@ func (a *App) pageHistorySliceSource(src *historySliceSource, req HistorySliceRe
 		Revision:      src.revision,
 		RevisionKnown: src.revKnown,
 		Digest:        src.digest,
+		OpenTurnID:    src.openTurnID,
 	}
 	if hi <= 0 || src.total == 0 {
 		return page, nil
@@ -1153,7 +1153,6 @@ func newHistoryEntry(src *historySliceSource, entryID string, msgIndex, sub int,
 	entry := HistoryEntry{
 		EntryID:   entryID,
 		MessageID: row.ID,
-		TurnID:    src.turnIDs[row.ID],
 		Turn:      src.turns[msgIndex],
 		Order:     msgIndex,
 		Message:   row,
@@ -1585,7 +1584,7 @@ func pageHistoryEventRows(src *historySliceSource, rows []HistoryMessage, req Hi
 	src.turns = turns
 	src.totalTurns = turn
 	src.total = len(rows)
-	page := HistorySlice{Entries: []HistoryEntry{}, TotalTurns: turn, Digest: src.digest}
+	page := HistorySlice{Entries: []HistoryEntry{}, TotalTurns: turn, Digest: src.digest, OpenTurnID: src.openTurnID}
 	if hi <= 0 {
 		return page
 	}
