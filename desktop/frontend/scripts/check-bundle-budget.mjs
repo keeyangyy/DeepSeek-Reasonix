@@ -426,6 +426,8 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-22: scheduled dark-theme mode (themeSchedule.ts) + appearance UI +
 // i18n keys add 1.6 KiB on the initial path (2411.6 KiB measured); widen to
 // 2412 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_412;
+// 2026-09-23: session-switch diagnostics + switch parallelism add 1.4 KiB
+// (2413.4 KiB measured); widen to 2414 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_414;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
