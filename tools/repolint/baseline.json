@@ -3,8 +3,8 @@
     "banner": 13,
     "commented-code": 0,
     "complexity": 1900,
-    "essay": 1916,
-    "file-size": 102582,
+    "essay": 1917,
+    "file-size": 102655,
     "function-size": 8274,
     "layering": 1,
     "marker": 0,
@@ -25,7 +25,7 @@
     "desktop/app.go": {
       "complexity": 57,
       "essay": 63,
-      "file-size": 11006,
+      "file-size": 11027,
       "function-size": 354,
       "struct-state": 16
     },
@@ -144,13 +144,13 @@
       "file-size": 213
     },
     "desktop/frontend/src/lib/transcriptStore.ts": {
-      "file-size": 270
+      "file-size": 293
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1618
+      "file-size": 1623
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4487
+      "file-size": 4505
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -158,8 +158,8 @@
     "desktop/history_slice.go": {
       "banner": 1,
       "complexity": 8,
-      "essay": 34,
-      "file-size": 931,
+      "essay": 35,
+      "file-size": 937,
       "function-size": 20
     },
     "desktop/history_slice_test.go": {

@@ -116,6 +116,11 @@ type HistoryContentRef struct {
 // HistoryEntry is one display row in a history page.
 type HistoryEntry struct {
 	EntryID string `json:"entryId"`
+	// MessageID is the stable per-message id (ULID) the row was converted
+	// from; empty for legacy event-format sessions. Unlike EntryID (position +
+	// revision derived) it survives rewinds, so the frontend can dedupe rows
+	// that re-keyed across a rewrite.
+	MessageID string `json:"messageId,omitempty"`
 	// Turn is the absolute visible turn the row belongs to (1-based; 0 =
 	// before the first visible turn).
 	Turn int `json:"turn"`
@@ -1135,11 +1140,12 @@ func primeHistoryPlannerState(src *historySliceSource, state *historyMessageConv
 // preview + ref. entryID is the fully-built entry ID (message- or row-form).
 func newHistoryEntry(src *historySliceSource, entryID string, msgIndex, sub int, row HistoryMessage) HistoryEntry {
 	entry := HistoryEntry{
-		EntryID: entryID,
-		Turn:    src.turns[msgIndex],
-		Order:   msgIndex,
-		Message: row,
-		Refs:    []HistoryContentRef{},
+		EntryID:   entryID,
+		MessageID: row.ID,
+		Turn:      src.turns[msgIndex],
+		Order:     msgIndex,
+		Message:   row,
+		Refs:      []HistoryContentRef{},
 	}
 	addRef := func(field, toolCallID string, size, chunks int) {
 		entry.Refs = append(entry.Refs, HistoryContentRef{

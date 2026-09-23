@@ -800,6 +800,8 @@ export interface ChangedFileInfo {
 
 // Bound-method payloads (desktop/app.go).
 export interface HistoryMessage {
+  /** Stable per-message id (ULID); empty for legacy sessions. */
+  id?: string;
   role: string;
   content: string;
   detail?: string;
@@ -881,6 +883,9 @@ export interface HistoryContentRef {
 
 export interface HistoryEntry {
   entryId: string;
+  /** Stable per-message id (ULID); empty for legacy sessions. Survives
+   * rewinds, unlike entryId (position + revision derived). */
+  messageId?: string;
   turn: number; // 1-based visible turn (0 = before the first turn)
   order: number; // absolute provider-message index
   message: HistoryMessage;

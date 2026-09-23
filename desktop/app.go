@@ -5081,6 +5081,10 @@ func (a *App) singleSurfaceLayoutEnabled() bool {
 // HistoryMessage is one prior turn, for the frontend to repopulate its transcript
 // after a reload.
 type HistoryMessage struct {
+	// ID is the stable per-message id (26-char ULID); empty for legacy
+	// event-format sessions that predate ids. Stable across rewinds/reloads,
+	// unlike the position-derived EntryID.
+	ID                 string                    `json:"id,omitempty"`
 	Role               string                    `json:"role"`
 	Content            string                    `json:"content"`
 	Detail             string                    `json:"detail,omitempty"`
@@ -5504,10 +5508,27 @@ func historyMessagesWithPlannerDisplaysAndLookups(
 }
 
 // convertHistoryMessage converts one provider message into its 0..n history
-// rows. index is the message's position in the coordinate system of
-// checkpointTurns (window-relative for the legacy full-pass callers, absolute
-// for the windowed slice API).
+// rows, stamping every row with the source message's stable id (empty for
+// legacy sessions). index is the message's position in the coordinate system
+// of checkpointTurns (window-relative for the legacy full-pass callers,
+// absolute for the windowed slice API).
 func (state *historyMessageConvertState) convertHistoryMessage(
+	index int,
+	m provider.Message,
+	resolveUserContent func(string) string,
+	checkpointTurns map[int]int,
+	replayedTodoArgs map[string]string,
+	toolResults map[string]provider.Message,
+) []HistoryMessage {
+	rows := state.convertHistoryMessageRows(index, m, resolveUserContent, checkpointTurns, replayedTodoArgs, toolResults)
+	for i := range rows {
+		rows[i].ID = m.ID
+	}
+	return rows
+}
+
+// convertHistoryMessageRows is the id-free body of convertHistoryMessage.
+func (state *historyMessageConvertState) convertHistoryMessageRows(
 	index int,
 	m provider.Message,
 	resolveUserContent func(string) string,
