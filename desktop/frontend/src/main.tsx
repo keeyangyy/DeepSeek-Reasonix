@@ -7,6 +7,7 @@ import { installPerformancePressureMonitor } from "./lib/crash";
 import { installGlobalCrashHandlers } from "./lib/globalCrashHandlers";
 import { installWailsNonFileDragErrorSuppression } from "./lib/bridge";
 import { installBreadcrumbConsoleHook } from "./lib/breadcrumbs";
+import { installSessionSwitchDiagnosticsGlobal } from "./lib/sessionSwitchDiagnostics";
 import { installMessageSelectionCopy } from "./lib/messageSelectionCopy";
 import { installPerfDebugHook } from "./lib/perfDebug";
 import { LocaleProvider, preloadDetectedLocale } from "./lib/i18n";
@@ -25,6 +26,7 @@ installGlobalCrashHandlers();
 installBreadcrumbConsoleHook();
 installPerformancePressureMonitor();
 installPerfDebugHook();
+installSessionSwitchDiagnosticsGlobal();
 
 // Apply the saved appearance (auto/light/dark) before the first paint.
 function initTypographyPlatform() {
