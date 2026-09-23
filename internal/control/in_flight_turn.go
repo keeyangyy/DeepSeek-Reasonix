@@ -245,6 +245,16 @@ func (c *Controller) loggedTurnSession() *agent.Session {
 	return s
 }
 
+// MessageTurnIDs maps each durable message id to the turn that produced it, so
+// frontends can align live turn rows (a:<turnId>:…) with persisted history
+// rows. Nil for sessions without a schema-2 turn log.
+func (c *Controller) MessageTurnIDs() map[string]string {
+	if s := c.loggedTurnSession(); s != nil {
+		return s.MessageTurnIDs()
+	}
+	return nil
+}
+
 // finishLoggedTurn queues the end marker before the completed transcript is
 // saved, so the tail and its turn_end land in one appended batch. A failed
 // save leaves the marker queued for the next one.

@@ -98,6 +98,9 @@ interface TranscriptRecord {
   /** Stable message id (empty for legacy sessions). Used to drop a row whose
    * entryId re-keyed across a rewrite but whose message is already resident. */
   messageId: string;
+  /** Runtime turn (ULID) that produced the message; empty for legacy sessions.
+   * Stamped onto projected items for exact live↔history alignment. */
+  turnId: string;
   turn: number;
   order: number;
   message: HistoryMessage;
@@ -208,6 +211,7 @@ function entryToRecord(entry: HistoryEntry): TranscriptRecord {
   return {
     entryId: entry.entryId,
     messageId: entry.messageId ?? entry.message.id ?? "",
+    turnId: entry.turnId ?? "",
     turn: entry.turn,
     order: entry.order,
     message: entry.message,
@@ -228,6 +232,20 @@ function itemIdForToolCall(tcId: string, fallback: string): string {
 // page-local map. priorMatches/priorClaims carry a re-conversion's earlier
 // positional assignments so they reproduce exactly.
 function convertRecord(
+  rec: TranscriptRecord,
+  view: { records: TranscriptRecord[]; indexOf: Map<string, number>; toolResultOwners: Map<string, string> },
+  consumed: Set<string>,
+  priorMatches?: Map<number, string>,
+): RecordConversion {
+  const conversion = convertRecordInner(rec, view, consumed, priorMatches);
+  if (rec.turnId) {
+    for (const item of conversion.items) item.turnId = rec.turnId;
+  }
+  return conversion;
+}
+
+// convertRecordInner is the turnId-free body of convertRecord.
+function convertRecordInner(
   rec: TranscriptRecord,
   view: { records: TranscriptRecord[]; indexOf: Map<string, number>; toolResultOwners: Map<string, string> },
   consumed: Set<string>,

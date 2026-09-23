@@ -886,6 +886,9 @@ export interface HistoryEntry {
   /** Stable per-message id (ULID); empty for legacy sessions. Survives
    * rewinds, unlike entryId (position + revision derived). */
   messageId?: string;
+  /** Runtime turn (ULID) that produced the row; matches the live row's
+   * a:<turnId>: prefix for exact live↔history alignment. */
+  turnId?: string;
   turn: number; // 1-based visible turn (0 = before the first turn)
   order: number; // absolute provider-message index
   message: HistoryMessage;

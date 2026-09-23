@@ -146,6 +146,9 @@ type SessionHistory interface {
 	CommitRewind(planID string) (checkpoint.RewindResult, error)
 	CommitRewindInPlace(planID string) (checkpoint.RewindResult, error)
 	SessionHead() (agent.HeadRef, bool)
+	// MessageTurnIDs maps each durable message id to its producing turn, so
+	// frontends can align live turn rows with persisted history rows.
+	MessageTurnIDs() map[string]string
 	UndoRewind(transactionID string) (checkpoint.RewindResult, error)
 	PrepareFileRevert(path string) (checkpoint.RewindPlan, error)
 	CommitFileRevert(planID string, resolution checkpoint.ConflictResolution) (checkpoint.RewindResult, error)

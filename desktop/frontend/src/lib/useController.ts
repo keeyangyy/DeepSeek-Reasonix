@@ -40,7 +40,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -268,7 +268,7 @@ type ModelSwitchQueueState = {
 const HISTORY_PAGE_TURNS = 60;
 
 export type TurnPhaseName = "working" | "checking" | "verifying" | "reviewing" | string;
-export type Item =
+export type Item = (
   | { kind: "user"; id: string; submissionId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[] }
   | { kind: "phase"; id: string; text: string }
@@ -316,7 +316,13 @@ export type Item =
       surfaceId: string;
       generation?: number;
       card: WireExtensionCard;
-    };
+    }
+) & {
+  /** Runtime turn (ULID) that produced a history row; matches the live row's
+   * a:<turnId>: prefix so live and history rows can be aligned exactly.
+   * Absent on live rows and legacy history rows. */
+  turnId?: string;
+};
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
 export type ExtensionItem = Extract<Item, { kind: "extension" }>;
@@ -3083,6 +3089,17 @@ export function useController() {
               const liveState = statesRef.current.get(tabId);
               const liveItems = liveState?.items ?? [];
               const removeIds = duplicateLiveItemIds(projection.items, liveItems);
+              // A2-a: exact turn alignment. A live row whose turn the fetched
+              // page already carries is superseded by it — no content guessing.
+              const pageTurnIds = new Set(
+                projection.items.map((item) => item.turnId).filter((id): id is string => Boolean(id)),
+              );
+              if (pageTurnIds.size > 0) {
+                for (const item of liveItems) {
+                  const turnId = liveItemTurnId(item.id);
+                  if (turnId && pageTurnIds.has(turnId)) removeIds.push(item.id);
+                }
+              }
               // A page fetched after a full-turn replay carries the turn's
               // persisted rows; the replayed rebuild would co-mount next to
               // them (v2 log: dup=16). Let the page own the turn: drop the

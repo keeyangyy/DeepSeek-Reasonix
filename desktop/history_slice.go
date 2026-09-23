@@ -121,6 +121,10 @@ type HistoryEntry struct {
 	// revision derived) it survives rewinds, so the frontend can dedupe rows
 	// that re-keyed across a rewrite.
 	MessageID string `json:"messageId,omitempty"`
+	// TurnID is the runtime turn (ULID) that produced the row, when the
+	// session has a schema-2 turn log. It matches the frontend's live row
+	// prefix (a:<turnId>:…) so live and history rows align exactly.
+	TurnID string `json:"turnId,omitempty"`
 	// Turn is the absolute visible turn the row belongs to (1-based; 0 =
 	// before the first visible turn).
 	Turn int `json:"turn"`
@@ -266,6 +270,9 @@ type historySliceSource struct {
 	total      int    // total provider messages
 	turns      []int  // turns[i] = visible turn of message i (1-based; 0 = before first turn)
 	roles      []provider.Role
+	// turnIDs maps a durable message id to the turn that produced it (nil for
+	// legacy sessions without a schema-2 turn log).
+	turnIDs map[string]string
 	totalTurns int
 	revision   int64
 	revKnown   bool
@@ -395,6 +402,8 @@ type historyWindowController interface {
 	HistoryLen() int
 	HistoryWindow(start, end int) []provider.Message
 	SessionPersistedState() (agent.PersistedState, bool)
+	// MessageTurnIDs maps durable message ids to their producing turn.
+	MessageTurnIDs() map[string]string
 }
 
 // HistorySliceForTab returns one page of the tab's history toward older
@@ -495,6 +504,7 @@ func (a *App) liveHistorySliceSource(ctrl control.SessionAPI, sessionPath string
 				total:      n,
 				turns:      turns,
 				roles:      roles,
+				turnIDs:    wc.MessageTurnIDs(),
 				totalTurns: turn,
 				revision:   ps.Revision,
 				revKnown:   ps.RevisionKnown,
@@ -519,6 +529,7 @@ func (a *App) liveHistorySliceSource(ctrl control.SessionAPI, sessionPath string
 		state = ps
 	}
 	src := newInMemoryHistorySliceSource(sessionID, msgs, resolver, state, psOK)
+	src.turnIDs = wc.MessageTurnIDs()
 	if psOK && ps.UnchangedSincePersisted {
 		src.cacheKey = historyDerivedSourceKey(sessionPath, src)
 	}
@@ -1142,6 +1153,7 @@ func newHistoryEntry(src *historySliceSource, entryID string, msgIndex, sub int,
 	entry := HistoryEntry{
 		EntryID:   entryID,
 		MessageID: row.ID,
+		TurnID:    src.turnIDs[row.ID],
 		Turn:      src.turns[msgIndex],
 		Order:     msgIndex,
 		Message:   row,
