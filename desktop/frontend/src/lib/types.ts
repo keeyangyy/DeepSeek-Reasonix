@@ -886,9 +886,6 @@ export interface HistoryEntry {
   /** Stable per-message id (ULID); empty for legacy sessions. Survives
    * rewinds, unlike entryId (position + revision derived). */
   messageId?: string;
-  /** Runtime turn (ULID) that produced the row; matches the live row's
-   * a:<turnId>: prefix for exact live↔history alignment. */
-  turnId?: string;
   turn: number; // 1-based visible turn (0 = before the first turn)
   order: number; // absolute provider-message index
   message: HistoryMessage;
@@ -911,6 +908,9 @@ export interface HistorySlice {
   // Diagnostic read path: index|scan|event-log|live-index|live-fallback.
   source?: string;
   error?: string; // failed read; empty entries alone are not an error
+  /** In-flight turn's id (empty when none). The frontend drops that turn's
+   * live rows (a:<turnId>:…) in favour of this page. */
+  openTurnId?: string;
 }
 
 export interface HistoryContentChunk {
