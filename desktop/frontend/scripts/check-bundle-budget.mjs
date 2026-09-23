@@ -428,6 +428,8 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2412 with the gzip gate untouched.
 // 2026-09-23: session-switch diagnostics + switch parallelism add 1.4 KiB
 // (2413.4 KiB measured); widen to 2414 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_414;
+// 2026-09-23: A1+A2-a history id/turnId plumbing add 0.8 KiB (2414.2 KiB
+// measured); widen to 2415 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_415;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
