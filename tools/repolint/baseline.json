@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1900,
     "essay": 1917,
-    "file-size": 102655,
+    "file-size": 102705,
     "function-size": 8274,
     "layering": 1,
     "marker": 0,
@@ -144,13 +144,13 @@
       "file-size": 213
     },
     "desktop/frontend/src/lib/transcriptStore.ts": {
-      "file-size": 293
+      "file-size": 311
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1623
+      "file-size": 1626
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4505
+      "file-size": 4522
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -159,7 +159,7 @@
       "banner": 1,
       "complexity": 8,
       "essay": 35,
-      "file-size": 937,
+      "file-size": 949,
       "function-size": 20
     },
     "desktop/history_slice_test.go": {

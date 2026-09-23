@@ -233,6 +233,13 @@ export function hasReusableCachedTranscript(
   return state.historyRevision === undefined && !state.historyDigest;
 }
 
+// Extract the turn id from a live row id of the form a:<turnId>:<seq>. Returns
+// undefined for history rows (he:) and frontend-local rows (uN/sN/xN).
+export function liveItemTurnId(id: string): string | undefined {
+  const match = /^a:([^:]+):/.exec(id);
+  return match?.[1];
+}
+
 // An empty surface has to apply history or switch-back shows Welcome. A turn
 // that has already streamed rows keeps them — but a tab with no history page
 // behind it still gets one, prepended, instead of a blank transcript above the
