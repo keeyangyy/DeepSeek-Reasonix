@@ -12,7 +12,6 @@ import (
 	"reasonix/internal/ablation"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
-	"reasonix/internal/sessioncontext"
 )
 
 // Compaction is a low-frequency cache-reset point: the prompt grows append-only
@@ -383,31 +382,6 @@ func compactionInstructionWithFocus(instructions string) string {
 	return instruction
 }
 
-// compactionSnapshotRule is appended only when the fold actually carries a
-// host session-context snapshot; the summarizer must not restate it.
-const compactionSnapshotRule = "\n\nNever restate host-generated session-context snapshots " +
-	"(runtime, workspace, memory, or skills indexes): they are re-injected on every turn, " +
-	"so copying them here would duplicate stale state."
-
-// carriesSessionContext reports whether a fold replays a host session-context
-// snapshot. Matching on content keeps the check valid after provenance stripping.
-func carriesSessionContext(region []provider.Message) bool {
-	for _, m := range region {
-		if m.Role == provider.RoleUser && sessioncontext.IsContent(m.Content) {
-			return true
-		}
-	}
-	return false
-}
-
-func (a *Agent) compactionInstructionFor(region []provider.Message, instructions string) string {
-	instruction := compactionInstructionWithFocus(instructions)
-	if carriesSessionContext(region) {
-		instruction += compactionSnapshotRule
-	}
-	return instruction
-}
-
 // summaryRequest builds the exact cache-aligned request shape used by
 // summarize. Keeping planning and execution on this shared builder prevents a
 // supposedly safe overflow fold from being rejected only after it is selected.
@@ -420,7 +394,7 @@ func (a *Agent) summaryRequest(region []provider.Message, instructions string) p
 		}
 	}
 	messages := a.normalizeModelRequestMessages(prefix)
-	messages = append(messages, HostGeneratedUserMessage(a.compactionInstructionFor(prefix, instructions)))
+	messages = append(messages, HostGeneratedUserMessage(compactionInstructionWithFocus(instructions)))
 	var schemas []provider.ToolSchema
 	if a.svc.tools != nil {
 		schemas = a.providerToolSchemas()
