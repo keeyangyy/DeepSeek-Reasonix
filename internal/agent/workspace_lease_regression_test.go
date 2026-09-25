@@ -208,7 +208,10 @@ func TestWritableHooksRunWithoutWorkspaceLease(t *testing.T) {
 	}
 }
 
-func TestWritableHooksReserveWholeParentWorkspace(t *testing.T) {
+// TestWritableHooksTakeNoWholeParentReservation pins the narrowed scope: a
+// tool-capable hook no longer makes the parent reserve the whole workspace, so a
+// hook-side writer can take its own declared path without blocking the tool call.
+func TestWritableHooksTakeNoWholeParentReservation(t *testing.T) {
 	root := t.TempDir()
 	scheduler := NewSubagentScheduler(4, 2)
 	hookClaim, err := NormalizeWritePaths(root, []string{"hook-side.go"})
@@ -227,8 +230,8 @@ func TestWritableHooksReserveWholeParentWorkspace(t *testing.T) {
 	if out.blocked || out.errMsg != "" {
 		t.Fatalf("executeOne failed: %+v", out)
 	}
-	if hooks.acquireErr == nil {
-		t.Fatal("hook-side path bypassed the parent workspace reservation")
+	if hooks.acquireErr != nil {
+		t.Fatalf("writer hook must not force a workspace-wide parent reservation, got %v", hooks.acquireErr)
 	}
 }
 

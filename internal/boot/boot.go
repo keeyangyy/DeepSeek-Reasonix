@@ -1303,19 +1303,13 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// per-skill model, and resumable transcripts when the parent session supports
 	// them. Its tool activity nests under the invoking call, like `task`.
 	skillRunner := func(sctx context.Context, sk skill.Skill, task string, runOpts skill.SubagentRunOptions) (string, error) {
-		// Writer skills without write_paths claim the whole workspace so they
-		// cannot race fleet/task writers that declared disjoint paths.
+		// Writer skills without write_paths take no workspace-wide claim so
+		// they never serialize against fleet/task writers (2026-09-22
+		// claim-scope fix); only declared paths are reserved.
 		acq := agent.AcquireRequest{
 			Writer: !sk.ReadOnly,
 			Nested: agent.SubagentDepth(sctx) > 0,
 			Label:  sk.Name,
-		}
-		if !sk.ReadOnly {
-			whole, werr := agent.WholeWorkspaceWriteClaim(root)
-			if werr != nil {
-				return "", fmt.Errorf("subagent skill %q write claim: %w", sk.Name, werr)
-			}
-			acq.WritePaths = whole
 		}
 		releaseSlot, err := subagentScheduler.Acquire(sctx, acq)
 		if err != nil {
