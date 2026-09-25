@@ -25,7 +25,7 @@ import { createRafBatch } from "./rafBatch";
 import { foregroundRunningFromRuntimeMeta, type RuntimeMetaSnapshot } from "./runtimeMeta";
 import { aliasActivationRequest, noteActivationRequested, noteActivationSettled, noteActivationStarted } from "./sessionDiagnostics";
 import { noteDedupDrop, noteOrderAnomaly, noteSwitchPhase, noteSwitchStart } from "./sessionSwitchDiagnostics";
-import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
+import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, filterStaleStreamDeltas, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
 import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
 import { frontendDiagnosticsActive, recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
@@ -3735,7 +3735,14 @@ export function useController() {
   useEffect(() => {
     const textBatch = createRafBatch<StreamDeltaEntry>((batch) => {
       uiPerfTracker.onStreamDispatch();
-      for (const b of coalesceStreamDeltas(batch)) dispatchTo(b.tabId, { type: "stream_batch", segments: b.segments });
+      // Drop deltas enqueued before a same-tab re-bind (reset / newSession /
+      // switch): flushing them would splice the previous session's
+      // text/reasoning into the new transcript.
+      const live = filterStaleStreamDeltas(batch, (tabId) => {
+        const meta = statesRef.current.get(tabId)?.meta;
+        return { sessionGeneration: meta?.sessionGeneration, runtimeEpoch: runtimeEpochByTabRef.current.get(tabId) };
+      });
+      for (const b of coalesceStreamDeltas(live)) dispatchTo(b.tabId, { type: "stream_batch", segments: b.segments });
     });
     const handleWireEvent = (e: WireEvent) => {
       // TEMP probe: confirm whether compaction events reach the wire handler at
@@ -3774,7 +3781,7 @@ export function useController() {
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
       if (e.kind === "text" || e.kind === "reasoning") {
         if (e.submissionId) dispatchTo(targetTabId, { type: "send_confirmed", submissionId: e.submissionId });
-        textBatch.push({ tabId: targetTabId, e });
+        textBatch.push({ tabId: targetTabId, e, sessionGeneration: e.sessionGeneration ?? currentMeta?.sessionGeneration, runtimeEpoch: acceptedEpoch });
       } else {
         textBatch.drain();
         dispatchTo(targetTabId, { type: "event", e });
