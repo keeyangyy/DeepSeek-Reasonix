@@ -27,11 +27,9 @@ func (a *Agent) prepareWriteCoordination(ctx context.Context, plan *toolCallPlan
 }
 
 func (a *Agent) reserveCoordinatedParentWrite(plan *toolCallPlan) (func(), error) {
-	// Hooks that may mutate the workspace no longer force a whole-workspace
-	// reservation: that made every tool call (including reads and opaque
-	// commands) serialize against any running background writer. The
-	// reservation now always derives from the tool's own declared paths, and
-	// opaque tools (bash/MCP) declare none.
+	// Hooks no longer force a whole-workspace reservation: that serialized
+	// every tool call against a running writer. The reservation now derives
+	// from the tool's own declared paths; opaque tools declare none.
 	return a.reserveParentWrite(plan.runTool, plan.runArgs, !plan.effects.WorkspaceMutation)
 }
 
