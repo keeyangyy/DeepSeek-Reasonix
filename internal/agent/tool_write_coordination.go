@@ -27,14 +27,11 @@ func (a *Agent) prepareWriteCoordination(ctx context.Context, plan *toolCallPlan
 }
 
 func (a *Agent) reserveCoordinatedParentWrite(plan *toolCallPlan) (func(), error) {
-	if plan.hooksMayMutateWorkspace &&
-		a.svc.writeScheduler != nil && a.subagentDepth == 0 {
-		claim, err := WholeWorkspaceWriteClaim(a.writeWorkspaceRoot)
-		if err != nil {
-			return func() {}, err
-		}
-		return a.svc.writeScheduler.ReserveParentWrite(claim)
-	}
+	// Hooks that may mutate the workspace no longer force a whole-workspace
+	// reservation: that made every tool call (including reads and opaque
+	// commands) serialize against any running background writer. The
+	// reservation now always derives from the tool's own declared paths, and
+	// opaque tools (bash/MCP) declare none.
 	return a.reserveParentWrite(plan.runTool, plan.runArgs, !plan.effects.WorkspaceMutation)
 }
 
@@ -46,30 +43,22 @@ func (a *Agent) applyLiveWriteReservation(ctx context.Context, plan *toolCallPla
 	if id == 0 {
 		return toolOutcome{}, false
 	}
+	if !plan.effects.WorkspaceMutation || plan.hooksMayMutateWorkspace {
+		return toolOutcome{}, false
+	}
 	name := plan.runTool.Name()
-	if plan.hooksMayMutateWorkspace {
-		if err := a.svc.writeScheduler.MarkOpaque(id); err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
+	if !pathBoundWriterNames[name] {
+		// Bash, MCP, and hook-driven writers cannot declare concrete targets.
+		// They realize no claim, so a sub-agent running them never serializes
+		// against sibling writers (2026-09-22 claim-scope fix).
 		return toolOutcome{}, false
 	}
-	if !plan.effects.WorkspaceMutation {
-		return toolOutcome{}, false
+	claim, err := parentWriteReservation(a.writeWorkspaceRoot, name, plan.runArgs)
+	if err != nil {
+		return writeClaimBlockedOutcome(err), true
 	}
-	if pathBoundWriterNames[name] {
-		claim, err := parentWriteReservation(a.writeWorkspaceRoot, name, plan.runArgs)
-		if err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
-		if err := a.svc.writeScheduler.Realize(id, claim); err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
-		return toolOutcome{}, false
-	}
-	if parentWriteGuardTarget(name) {
-		if err := a.svc.writeScheduler.MarkOpaque(id); err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
+	if err := a.svc.writeScheduler.Realize(id, claim); err != nil {
+		return writeClaimBlockedOutcome(err), true
 	}
 	return toolOutcome{}, false
 }
