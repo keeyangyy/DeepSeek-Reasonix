@@ -18,6 +18,9 @@ import { normalizeRecoveryLineageView, userVisibleRecoveryVersions } from "../li
 type HistoryScopeFilter = "all" | "project" | "global";
 type HistoryStatusFilter = "all" | "current" | "open";
 type HistoryDateFilter = "all" | "today" | "yesterday" | "older";
+// Trash-only filter: "one"/"upto3"/"upto5" are cumulative upper bounds, so a
+// lower bucket is a subset of a higher one.
+type HistoryTurnsFilter = "all" | "one" | "upto3" | "upto5";
 
 // HistoryPanel lists saved sessions newest-first. In the wide management modal,
 // a single click selects a read-only preview; explicit actions resume, restore,
@@ -64,6 +67,7 @@ export function HistoryPanel({
   const [scopeFilter, setScopeFilter] = useState<HistoryScopeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<HistoryStatusFilter>("all");
   const [dateFilter, setDateFilter] = useState<HistoryDateFilter>("all");
+  const [turnsFilter, setTurnsFilter] = useState<HistoryTurnsFilter>("all");
   const [showSystemRecoveryData, setShowSystemRecoveryData] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState<RecoveryLineageView | null>(null);
   const [searchContext, setSearchContext] = useState<{ hit: HistorySearchHit; lines: HistorySearchContextLine[]; loading: boolean } | null>(null);
@@ -149,6 +153,18 @@ export function HistoryPanel({
     for (const s of ordinarySessions) counts[dateBucket(sessionTimeForGrouping(s, isTrash))]++;
     return counts;
   }, [isTrash, ordinarySessions]);
+  // Trash-only turn buckets. Only authoritative counts qualify; a session whose
+  // turn count is unknown/damaged stays out of every bucket (reachable via
+  // "all") so a bad count is never mistaken for a low one.
+  const turnsCounts = useMemo(() => {
+    const counted = ordinarySessions.filter((s) => s.turnsState === "valid");
+    return {
+      all: ordinarySessions.length,
+      one: counted.filter((s) => s.turns <= 1).length,
+      upto3: counted.filter((s) => s.turns <= 3).length,
+      upto5: counted.filter((s) => s.turns <= 5).length,
+    };
+  }, [ordinarySessions]);
 
   useEffect(() => {
     if (!isTrash || presentation === "page") return;
@@ -174,10 +190,11 @@ export function HistoryPanel({
       if (!isTrash && statusFilter === "current" && !s.current) return false;
       if (!isTrash && statusFilter === "open" && (!s.open || s.current)) return false;
       if (dateFilter !== "all" && dateBucket(sessionTimeForGrouping(s, isTrash)) !== dateFilter) return false;
+      if (isTrash && turnsFilter !== "all" && !sessionMatchesTurns(s, turnsFilter)) return false;
       if (!q) return true;
       return [s.title, s.preview, s.path, s.topicTitle, s.workspaceRoot].some((part) => (part ?? "").toLowerCase().includes(q));
     });
-  }, [dateFilter, isTrash, query, scopeFilter, sessions, statusFilter]);
+  }, [dateFilter, isTrash, query, scopeFilter, sessions, statusFilter, turnsFilter]);
   const displayedSessions = useMemo(
     () => filteredSessions.filter((session) => !session.recoveryCopy),
     [filteredSessions],
@@ -549,6 +566,19 @@ export function HistoryPanel({
             value={dateFilter}
             onChange={(next) => setDateFilter(next as HistoryDateFilter)}
           />
+          {isTrash && (
+            <HistoryFilterSelect
+              label={tr("history.filterTurns")}
+              options={[
+                { id: "all", label: tr("history.filterAll"), count: turnsCounts.all },
+                { id: "one", label: tr("history.filterTurnsOne"), count: turnsCounts.one },
+                { id: "upto3", label: tr("history.filterTurnsUpTo3"), count: turnsCounts.upto3 },
+                { id: "upto5", label: tr("history.filterTurnsUpTo5"), count: turnsCounts.upto5 },
+              ]}
+              value={turnsFilter}
+              onChange={(next) => setTurnsFilter(next as HistoryTurnsFilter)}
+            />
+          )}
         </div>
         {!isTrash && catalogPartial && (
           <div className="management-modal__summary history-modal__summary" role="status">
@@ -775,6 +805,17 @@ function sessionTimeForGrouping(s: SessionMeta, isTrash: boolean): number {
 
 function sessionScope(s: SessionMeta): "project" | "global" {
   return s.scope === "project" ? "project" : "global";
+}
+
+// A turn bucket only ever matches an authoritative count. "unknown"/"corrupt"
+// counts (see SessionMeta.turnsState) satisfy no bucket, so they are never
+// mistaken for a low-turn session and appear only under "all".
+function sessionMatchesTurns(s: SessionMeta, filter: HistoryTurnsFilter): boolean {
+  if (s.turnsState !== "valid") return false;
+  if (filter === "one") return s.turns <= 1;
+  if (filter === "upto3") return s.turns <= 3;
+  if (filter === "upto5") return s.turns <= 5;
+  return true;
 }
 
 function isChannelSession(s: SessionMeta): boolean {

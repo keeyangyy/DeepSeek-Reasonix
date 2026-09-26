@@ -299,7 +299,10 @@ for (const path of localeChunks) {
   // The process-fold policy adds six short labels per dialect (the folding-mode
   // switch and its hints); the measured chunks move to 62.2 KiB zh and
   // 62.9 KiB zh-TW, so retain the next one-decimal ceiling for each dialect.
-  const budget = name.startsWith("zh-TW-") ? 63.0 * 1024 : 62.3 * 1024;
+  // The trash turns filter adds four short labels per dialect ("Turns",
+  // "1 turn", "≤3 turns", "≤5 turns"); zh-TW measures 64551 B (63.038 KiB), so
+  // retain the next one-decimal ceiling for that dialect only.
+  const budget = name.startsWith("zh-TW-") ? 63.1 * 1024 : 62.3 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
