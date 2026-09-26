@@ -768,12 +768,9 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force, splitActive bool)
 		} else {
 			start = active
 		}
-		// Keeping the active turn verbatim must not shrink the fold below the
-		// minimum compactable size. Shrinking to the active-turn start can leave
-		// a single message inside the fold: that rewrites the cache prefix and
-		// pays a summarizer round-trip without reducing context, and the view
-		// stays above the compaction trigger so the next turn repeats it. Report
-		// "no fold" and let the caller decide instead.
+		// A shrink to the active-turn start must not leave a one-message fold:
+		// that pays a summarizer round-trip and rewrites the cache prefix with
+		// no context reduction. Report "no fold" instead.
 		if start-head < minCompactMessages {
 			return head, start, false
 		}
