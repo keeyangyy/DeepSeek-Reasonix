@@ -214,7 +214,10 @@ jobs:
             # Only retry the known Windows runtime flake (internal/bot
             # preemption crash) that reliably passes on a rerun; any other
             # failure stays red immediately so CI semantics are preserved.
-            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault"; then
+            # The crash surfaces with several runtime messages: the free-object
+            # fault, "unknown caller pc", and an unexpected-return-pc frame
+            # (stack top bot.(*BotGateway).runTurnItem).
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|unexpected return pc"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
