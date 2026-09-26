@@ -409,10 +409,10 @@ func (a *Agent) planVisibleCompression(snap explicitCompressionSnapshot, directi
 		selected := i >= start && i < end
 		mergeSummary := i < completedEnd && isCompactionSummary(msg)
 		if isSessionContextMessage(msg) {
-			// Context never enters the summarizer. Once an older snapshot falls
-			// inside the explicitly compressed range, remove it from the
-			// projection; the latest valid snapshot remains byte-identical.
-			plan.dropMask[i] = selected && i != latestContext
+			if selected {
+				plan.fold = append(plan.fold, msg)
+				plan.dropMask[i] = i != latestContext
+			}
 			continue
 		}
 		if msg.Role == provider.RoleSystem || i < head || (!selected && !mergeSummary) {
@@ -768,6 +768,12 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force, splitActive bool)
 		} else {
 			start = active
 		}
+		// A shrink to the active-turn start must not leave a one-message fold:
+		// that pays a summarizer round-trip and rewrites the cache prefix with
+		// no context reduction. Report "no fold" instead.
+		if start-head < minCompactMessages {
+			return head, start, false
+		}
 	}
 	return head, start, start > head
 }
@@ -786,13 +792,13 @@ func (a *Agent) partitionFoldForProjectionAt(region []provider.Message, offset, 
 		if m.LocalOnly || IsPinnedContextRevision(m) {
 			continue
 		}
+		fold = append(fold, m)
 		if isSessionContextMessage(m) {
 			if offset+i == latestContext {
 				kept = append(kept, m)
 			}
 			continue
 		}
-		fold = append(fold, m)
 		if IsUserAuthoredTurnMessage(m) {
 			retention.Dropped++
 		}
