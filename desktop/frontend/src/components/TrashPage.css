@@ -24,3 +24,22 @@
   .history-page .history-preview { grid-column: 2; grid-row: 1 / 3; }
 }
 @media (max-width: 959px) { .history-page .history-manager:has(.history-content[data-detail="true"]) > .history-toolbar { display: none; } }
+
+/* Bulk selection inside the trash page: a per-row checkbox plus a control bar
+   that spans the toolbar width. */
+.history-page .hist-item__check {
+  align-self: center;
+  flex: none;
+  margin-left: 10px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.history-page .history-selection {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.history-page .history-selection__count { color: var(--fg-faint); font-size: 12px; }
+.history-page .history-selection__spacer { flex: 1; }

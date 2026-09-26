@@ -18,6 +18,8 @@ const messages = {
   trashDescription: ["查看和恢复已删除的会话。", "查看與還原已刪除的會話。", "Review and restore deleted conversations."],
   purgeTitle: ["永久删除会话", "永久刪除會話", "Permanently delete conversation"],
   purgeDescription: ["删除“{name}”后无法恢复。", "刪除「{name}」後無法還原。", "Deleting “{name}” cannot be undone."],
+  purgeSelectedTitle: ["永久删除选中的会话", "永久刪除選中的會話", "Permanently delete selected conversations"],
+  purgeSelectedDescription: ["将永久删除选中的 {n} 条会话，此操作无法撤销。", "將永久刪除選中的 {n} 條會話，此操作無法復原。", "Permanently delete the {n} selected conversations. This cannot be undone."],
   clearTitle: ["清空回收站", "清空回收站", "Empty trash"],
   clearDescription: ["将永久删除全部 {n} 条普通会话，包括筛选隐藏的条目。系统恢复数据不在其中。此操作无法撤销。", "將永久刪除全部 {n} 條一般會話，包括篩選隱藏的項目。系統復原資料不在其中。此操作無法復原。", "Permanently delete all {n} ordinary conversations, including filtered-out items. System recovery data is excluded. This cannot be undone."],
   batchResult: ["已删除 {success} 条，{failed} 条未完成。", "已刪除 {success} 條，{failed} 條未完成。", "Deleted {success}; {failed} did not complete."],

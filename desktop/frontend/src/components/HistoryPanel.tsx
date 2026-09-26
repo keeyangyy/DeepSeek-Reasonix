@@ -13,6 +13,7 @@ import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type Cont
 import { useDeferredClose } from "../lib/useMountTransition";
 import { ModalCloseButton } from "./ModalCloseButton";
 import { HistoryFilterSelect } from "./HistoryFilterSelect";
+import { HistorySelectionBar } from "./HistorySelectionBar";
 import { normalizeRecoveryLineageView, userVisibleRecoveryVersions } from "../lib/sessionRecoveryVersions";
 
 type HistoryScopeFilter = "all" | "project" | "global";
@@ -37,6 +38,8 @@ export function HistoryPanel({
   onRestore,
   onPurge,
   onPurgeAll,
+  onRestoreMany,
+  onPurgeMany,
   onInspectVersions,
   onClose,
 }: {
@@ -51,6 +54,8 @@ export function HistoryPanel({
   onRestore?: (path: string) => Promise<void>;
   onPurge?: (path: string) => Promise<void>;
   onPurgeAll?: (paths: string[]) => Promise<void>;
+  onRestoreMany?: (paths: string[]) => Promise<void>;
+  onPurgeMany?: (paths: string[]) => Promise<void>;
   onInspectVersions?: (session: SessionMeta, view: RecoveryLineageView) => void;
   onClose: () => void;
 }) {
@@ -68,6 +73,7 @@ export function HistoryPanel({
   const [statusFilter, setStatusFilter] = useState<HistoryStatusFilter>("all");
   const [dateFilter, setDateFilter] = useState<HistoryDateFilter>("all");
   const [turnsFilter, setTurnsFilter] = useState<HistoryTurnsFilter>("all");
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [showSystemRecoveryData, setShowSystemRecoveryData] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState<RecoveryLineageView | null>(null);
   const [searchContext, setSearchContext] = useState<{ hit: HistorySearchHit; lines: HistorySearchContextLine[]; loading: boolean } | null>(null);
@@ -207,6 +213,45 @@ export function HistoryPanel({
     () => isTrash && showSystemRecoveryData ? [...displayedSessions, ...systemRecoverySessions] : displayedSessions,
     [displayedSessions, isTrash, showSystemRecoveryData, systemRecoverySessions],
   );
+
+  // Trash multi-select. The selection is scoped to the rows currently visible
+  // after filtering, so a bulk action can never reach a hidden row and the count
+  // matches what the user sees. Checked paths that leave the list (deleted,
+  // restored, or filtered out) are pruned on the next list update.
+  const selectedSessions = useMemo(
+    () => displayedSessions.filter((s) => checked.has(s.path)),
+    [checked, displayedSessions],
+  );
+  const toggleChecked = (path: string) => setChecked((current) => {
+    const next = new Set(current);
+    if (next.has(path)) next.delete(path); else next.add(path);
+    return next;
+  });
+  const selectAllChecked = () => setChecked((current) => {
+    const next = new Set(current);
+    for (const s of displayedSessions) next.add(s.path);
+    return next;
+  });
+  const clearChecked = () => setChecked(new Set());
+  const restoreChecked = () => {
+    if (busy || selectedSessions.length === 0) return;
+    void onRestoreMany?.(selectedSessions.map((s) => s.path));
+  };
+  const purgeChecked = () => {
+    if (busy || selectedSessions.length === 0) return;
+    void onPurgeMany?.(selectedSessions.map((s) => s.path));
+  };
+  useEffect(() => { setChecked(new Set()); }, [isTrash]);
+  useEffect(() => {
+    setChecked((current) => {
+      if (current.size === 0) return current;
+      const alive = new Set(sessions.map((s) => s.path));
+      let dropped = false;
+      const next = new Set<string>();
+      for (const path of current) { if (alive.has(path)) next.add(path); else dropped = true; }
+      return dropped ? next : current;
+    });
+  }, [sessions]);
 
   // Sessions arrive newest-first; bucket consecutive ones under a day heading
   // (Today / Yesterday / a date) while preserving that order.
@@ -441,6 +486,18 @@ export function HistoryPanel({
         key={session.path}
         onContextMenu={(event) => openSessionMenu(event, session)}
       >
+        {/* Trash rows carry a checkbox sibling to the preview button, so
+            checking a row never triggers the preview load. System recovery
+            data keeps no checkbox, matching the clear-trash exclusion. */}
+        {isTrash && !session.recoveryCopy && (
+          <input
+            type="checkbox"
+            className="hist-item__check"
+            aria-label={tr("history.selectRow")}
+            checked={checked.has(session.path)}
+            onChange={() => toggleChecked(session.path)}
+          />
+        )}
         {editing === session.path ? (
           <input
             className="hist-item__rename"
@@ -577,6 +634,17 @@ export function HistoryPanel({
               ]}
               value={turnsFilter}
               onChange={(next) => setTurnsFilter(next as HistoryTurnsFilter)}
+            />
+          )}
+          {isTrash && (
+            <HistorySelectionBar
+              selectedCount={selectedSessions.length}
+              selectableCount={displayedSessions.length}
+              busy={busy}
+              onSelectAll={selectAllChecked}
+              onClearSelected={clearChecked}
+              onRestoreSelected={restoreChecked}
+              onPurgeSelected={purgeChecked}
             />
           )}
         </div>
