@@ -299,7 +299,11 @@ for (const path of localeChunks) {
   // The process-fold policy adds six short labels per dialect (the folding-mode
   // switch and its hints); the measured chunks move to 62.2 KiB zh and
   // 62.9 KiB zh-TW, so retain the next one-decimal ceiling for each dialect.
-  const budget = name.startsWith("zh-TW-") ? 63.0 * 1024 : 62.3 * 1024;
+  // The trash turns filter adds four short labels per dialect; the bulk-action
+  // bar adds seven more (select-all/clear, {n}-selected count, restore/delete
+  // selected, row aria). zh measures 63827 B (62.331 KiB) and zh-TW 64622 B
+  // (63.107 KiB); retain the next one-decimal ceiling for each dialect.
+  const budget = name.startsWith("zh-TW-") ? 63.2 * 1024 : 62.4 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -430,6 +434,8 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // (2413.4 KiB measured); widen to 2414 with the gzip gate untouched.
 // 2026-09-23: A1+A2-a history id/turnId plumbing add 0.8 KiB (2414.2 KiB
 // measured); widen to 2415 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_415;
+// 2026-09-26: the trash turns filter and the bulk-action selection bar add
+// 0.9 KiB (2415.0 KiB measured); widen to 2416 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_416;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

@@ -13,11 +13,15 @@ import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type Cont
 import { useDeferredClose } from "../lib/useMountTransition";
 import { ModalCloseButton } from "./ModalCloseButton";
 import { HistoryFilterSelect } from "./HistoryFilterSelect";
+import { HistorySelectionBar } from "./HistorySelectionBar";
 import { normalizeRecoveryLineageView, userVisibleRecoveryVersions } from "../lib/sessionRecoveryVersions";
 
 type HistoryScopeFilter = "all" | "project" | "global";
 type HistoryStatusFilter = "all" | "current" | "open";
 type HistoryDateFilter = "all" | "today" | "yesterday" | "older";
+// Trash-only filter: "one"/"upto3"/"upto5" are cumulative upper bounds, so a
+// lower bucket is a subset of a higher one.
+type HistoryTurnsFilter = "all" | "one" | "upto3" | "upto5";
 
 // HistoryPanel lists saved sessions newest-first. In the wide management modal,
 // a single click selects a read-only preview; explicit actions resume, restore,
@@ -34,6 +38,8 @@ export function HistoryPanel({
   onRestore,
   onPurge,
   onPurgeAll,
+  onRestoreMany,
+  onPurgeMany,
   onInspectVersions,
   onClose,
 }: {
@@ -48,6 +54,8 @@ export function HistoryPanel({
   onRestore?: (path: string) => Promise<void>;
   onPurge?: (path: string) => Promise<void>;
   onPurgeAll?: (paths: string[]) => Promise<void>;
+  onRestoreMany?: (paths: string[]) => Promise<void>;
+  onPurgeMany?: (paths: string[]) => Promise<void>;
   onInspectVersions?: (session: SessionMeta, view: RecoveryLineageView) => void;
   onClose: () => void;
 }) {
@@ -64,6 +72,8 @@ export function HistoryPanel({
   const [scopeFilter, setScopeFilter] = useState<HistoryScopeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<HistoryStatusFilter>("all");
   const [dateFilter, setDateFilter] = useState<HistoryDateFilter>("all");
+  const [turnsFilter, setTurnsFilter] = useState<HistoryTurnsFilter>("all");
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [showSystemRecoveryData, setShowSystemRecoveryData] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState<RecoveryLineageView | null>(null);
   const [searchContext, setSearchContext] = useState<{ hit: HistorySearchHit; lines: HistorySearchContextLine[]; loading: boolean } | null>(null);
@@ -149,6 +159,18 @@ export function HistoryPanel({
     for (const s of ordinarySessions) counts[dateBucket(sessionTimeForGrouping(s, isTrash))]++;
     return counts;
   }, [isTrash, ordinarySessions]);
+  // Trash-only turn buckets. Only authoritative counts qualify; a session whose
+  // turn count is unknown/damaged stays out of every bucket (reachable via
+  // "all") so a bad count is never mistaken for a low one.
+  const turnsCounts = useMemo(() => {
+    const counted = ordinarySessions.filter((s) => s.turnsState === "valid");
+    return {
+      all: ordinarySessions.length,
+      one: counted.filter((s) => s.turns <= 1).length,
+      upto3: counted.filter((s) => s.turns <= 3).length,
+      upto5: counted.filter((s) => s.turns <= 5).length,
+    };
+  }, [ordinarySessions]);
 
   useEffect(() => {
     if (!isTrash || presentation === "page") return;
@@ -174,10 +196,11 @@ export function HistoryPanel({
       if (!isTrash && statusFilter === "current" && !s.current) return false;
       if (!isTrash && statusFilter === "open" && (!s.open || s.current)) return false;
       if (dateFilter !== "all" && dateBucket(sessionTimeForGrouping(s, isTrash)) !== dateFilter) return false;
+      if (isTrash && turnsFilter !== "all" && !sessionMatchesTurns(s, turnsFilter)) return false;
       if (!q) return true;
       return [s.title, s.preview, s.path, s.topicTitle, s.workspaceRoot].some((part) => (part ?? "").toLowerCase().includes(q));
     });
-  }, [dateFilter, isTrash, query, scopeFilter, sessions, statusFilter]);
+  }, [dateFilter, isTrash, query, scopeFilter, sessions, statusFilter, turnsFilter]);
   const displayedSessions = useMemo(
     () => filteredSessions.filter((session) => !session.recoveryCopy),
     [filteredSessions],
@@ -190,6 +213,45 @@ export function HistoryPanel({
     () => isTrash && showSystemRecoveryData ? [...displayedSessions, ...systemRecoverySessions] : displayedSessions,
     [displayedSessions, isTrash, showSystemRecoveryData, systemRecoverySessions],
   );
+
+  // Trash multi-select. The selection is scoped to the rows currently visible
+  // after filtering, so a bulk action can never reach a hidden row and the count
+  // matches what the user sees. Checked paths that leave the list (deleted,
+  // restored, or filtered out) are pruned on the next list update.
+  const selectedSessions = useMemo(
+    () => displayedSessions.filter((s) => checked.has(s.path)),
+    [checked, displayedSessions],
+  );
+  const toggleChecked = (path: string) => setChecked((current) => {
+    const next = new Set(current);
+    if (next.has(path)) next.delete(path); else next.add(path);
+    return next;
+  });
+  const selectAllChecked = () => setChecked((current) => {
+    const next = new Set(current);
+    for (const s of displayedSessions) next.add(s.path);
+    return next;
+  });
+  const clearChecked = () => setChecked(new Set());
+  const restoreChecked = () => {
+    if (busy || selectedSessions.length === 0) return;
+    void onRestoreMany?.(selectedSessions.map((s) => s.path));
+  };
+  const purgeChecked = () => {
+    if (busy || selectedSessions.length === 0) return;
+    void onPurgeMany?.(selectedSessions.map((s) => s.path));
+  };
+  useEffect(() => { setChecked(new Set()); }, [isTrash]);
+  useEffect(() => {
+    setChecked((current) => {
+      if (current.size === 0) return current;
+      const alive = new Set(sessions.map((s) => s.path));
+      let dropped = false;
+      const next = new Set<string>();
+      for (const path of current) { if (alive.has(path)) next.add(path); else dropped = true; }
+      return dropped ? next : current;
+    });
+  }, [sessions]);
 
   // Sessions arrive newest-first; bucket consecutive ones under a day heading
   // (Today / Yesterday / a date) while preserving that order.
@@ -424,6 +486,18 @@ export function HistoryPanel({
         key={session.path}
         onContextMenu={(event) => openSessionMenu(event, session)}
       >
+        {/* Trash rows carry a checkbox sibling to the preview button, so
+            checking a row never triggers the preview load. System recovery
+            data keeps no checkbox, matching the clear-trash exclusion. */}
+        {isTrash && !session.recoveryCopy && (
+          <input
+            type="checkbox"
+            className="hist-item__check"
+            aria-label={tr("history.selectRow")}
+            checked={checked.has(session.path)}
+            onChange={() => toggleChecked(session.path)}
+          />
+        )}
         {editing === session.path ? (
           <input
             className="hist-item__rename"
@@ -549,6 +623,30 @@ export function HistoryPanel({
             value={dateFilter}
             onChange={(next) => setDateFilter(next as HistoryDateFilter)}
           />
+          {isTrash && (
+            <HistoryFilterSelect
+              label={tr("history.filterTurns")}
+              options={[
+                { id: "all", label: tr("history.filterAll"), count: turnsCounts.all },
+                { id: "one", label: tr("history.filterTurnsOne"), count: turnsCounts.one },
+                { id: "upto3", label: tr("history.filterTurnsUpTo3"), count: turnsCounts.upto3 },
+                { id: "upto5", label: tr("history.filterTurnsUpTo5"), count: turnsCounts.upto5 },
+              ]}
+              value={turnsFilter}
+              onChange={(next) => setTurnsFilter(next as HistoryTurnsFilter)}
+            />
+          )}
+          {isTrash && (
+            <HistorySelectionBar
+              selectedCount={selectedSessions.length}
+              selectableCount={displayedSessions.length}
+              busy={busy}
+              onSelectAll={selectAllChecked}
+              onClearSelected={clearChecked}
+              onRestoreSelected={restoreChecked}
+              onPurgeSelected={purgeChecked}
+            />
+          )}
         </div>
         {!isTrash && catalogPartial && (
           <div className="management-modal__summary history-modal__summary" role="status">
@@ -775,6 +873,17 @@ function sessionTimeForGrouping(s: SessionMeta, isTrash: boolean): number {
 
 function sessionScope(s: SessionMeta): "project" | "global" {
   return s.scope === "project" ? "project" : "global";
+}
+
+// A turn bucket only ever matches an authoritative count. "unknown"/"corrupt"
+// counts (see SessionMeta.turnsState) satisfy no bucket, so they are never
+// mistaken for a low-turn session and appear only under "all".
+function sessionMatchesTurns(s: SessionMeta, filter: HistoryTurnsFilter): boolean {
+  if (s.turnsState !== "valid") return false;
+  if (filter === "one") return s.turns <= 1;
+  if (filter === "upto3") return s.turns <= 3;
+  if (filter === "upto5") return s.turns <= 5;
+  return true;
 }
 
 function isChannelSession(s: SessionMeta): boolean {
