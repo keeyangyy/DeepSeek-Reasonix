@@ -63,6 +63,7 @@ export const zhTW: Record<DictKey, string> = {
   "sidebar.plugins": "插件",
   "sidebar.scheduledTasks": "定時任務",
   "sidebar.utilityActions": "側邊欄工具",
+"sidebar.themeQuickSwitch": "淺色 / 深色",
   "summary.session": "會話摘要",
   "summary.tasks": "任務",
   "summary.refresh": "整理",

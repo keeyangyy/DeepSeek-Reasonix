@@ -72,6 +72,7 @@ export const en = {
   "sidebar.plugins": "Plugins",
   "sidebar.scheduledTasks": "Scheduled tasks",
   "sidebar.utilityActions": "Sidebar tools",
+"sidebar.themeQuickSwitch": "Light / dark",
   "summary.session": "Session summary",
   "summary.tasks": "Tasks",
   "summary.refresh": "Refresh",

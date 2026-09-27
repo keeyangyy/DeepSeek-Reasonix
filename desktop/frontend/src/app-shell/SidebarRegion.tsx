@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ComponentProps, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { AlarmClock, Brain, Command, MessageSquare, PanelLeft, PanelRight, Search, Settings, SquarePen, Trash2 } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
+import { ThemeQuickSwitch } from "./ThemeQuickSwitch";
 import type { Translator } from "../lib/i18n";
 import type { SettingsTab } from "../lib/types";
 import logoWordmark from "../assets/logo-wordmark.svg";
@@ -33,6 +34,8 @@ export type SidebarRegionProps = {
   onOpenSettings: (tab: SettingsTab) => void;
   onToggleSearch: () => void;
   onToggle: () => void;
+  /** Light/dark quick switch: sets the display without changing the theme mode. */
+  onSelectTheme: (theme: "light" | "dark") => void;
 };
 
 /** Sidebar presentation shared by classic, workbench and creation layouts. */
@@ -80,6 +83,7 @@ export function SidebarRegion(props: SidebarRegionProps) {
         </section>
         {props.workbench ? (
           <nav className="sidebar__nav sidebar__nav--footer">
+            <ThemeQuickSwitch t={t} onSelect={props.onSelectTheme} />
             <div className="sidebar__utility-row" aria-label={t("sidebar.utilityActions")}>
               <UtilityButton label={t("sidebar.trash")} icon={<Trash2 size={16} />} onClick={props.onOpenTrash} />
               <UtilityButton label={t("heartbeat.scheduler")} icon={<AlarmClock size={16} />} onClick={props.onOpenAutomation} />
