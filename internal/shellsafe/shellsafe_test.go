@@ -21,6 +21,21 @@ func TestCommandIsReadOnly(t *testing.T) {
 		// PowerShell permission-safe inspection commands.
 		`Get-Process -Name mongod`, `Get-ChildItem -Path .`,
 		`Get-NetTCPConnection -LocalPort 6379`, `Resolve-Path .`,
+		// Expanded PowerShell / host inspection cmdlets.
+		"Get-Date", "Test-Path x", "Get-FileHash x", "Get-Member", "Get-Help git",
+		"Get-Alias", "Get-Variable", "Get-PSDrive", "Get-Host", "Get-Culture",
+		"Get-TimeZone", "Get-ComputerInfo", "Get-Random", "Get-ItemProperty x",
+		// System, disk, and process observation.
+		"groups", "nproc", "uptime", "free", "pgrep node",
+		"lscpu", "lsblk", "vmstat", "iostat",
+		// Network observation.
+		"netstat -an", "ss -tuln", "ifconfig",
+		// Checksum, encoding, and binary inspection.
+		"md5sum f.txt", "sha256sum f.txt", "base64 f.txt",
+		"od f.bin", "hexdump f.bin", "strings f.bin", "jq . f.json",
+		"dir",
+		// Version probes for additional runtimes.
+		"dotnet --version", "rustc --version", "java -version",
 		// Narrow, recursively proven read-only command substitution.
 		`basename "$(pwd)"`, `dirname "$(realpath .)"`,
 	}
@@ -53,6 +68,12 @@ func TestCommandIsReadOnly(t *testing.T) {
 		// PowerShell mutators stay fail-closed.
 		`Start-Process mongod`, `Stop-Process -Name mongod`,
 		`Set-Content style.css bad`, `Remove-Item style.css`,
+		// Newly added families must not leak write-capable variants: env-wrapper
+		// smuggling, redirects/pipelines, and code-executing subcommands.
+		"env GOROOT=/x git status", "env -i git status",
+		"jq . f.json > out.json", "base64 f.txt > out.txt",
+		"strings f.bin | tee out.txt", "Get-Date; Remove-Item x",
+		"java -jar app.jar", "dotnet run", "rustc main.rs",
 	}
 	for _, c := range notReadOnly {
 		if _, _, ok := CommandIsReadOnly(c); ok {
