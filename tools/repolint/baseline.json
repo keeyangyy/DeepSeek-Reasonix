@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1917,
-    "file-size": 102800,
+    "file-size": 102802,
     "function-size": 8269,
     "layering": 1,
     "marker": 0,
@@ -389,7 +389,7 @@
     "internal/agent/agent.go": {
       "complexity": 27,
       "essay": 25,
-      "file-size": 2034,
+      "file-size": 2036,
       "function-size": 88,
       "struct-state": 3
     },

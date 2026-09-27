@@ -21,13 +21,13 @@ type ResolvedCall struct {
 	Target Tool
 	// ReadOnly is the effective read-only flag for the resolved target.
 	ReadOnly bool
-	// ProxyAction is inspect|call|decline for audit surfaces.
+	// ProxyAction is list|search|inspect|call|decline for audit surfaces.
 	ProxyAction string
 	// CapabilityID is the capability catalog id being acted on.
 	CapabilityID string
 	// SkipExecute is set when resolution produced the final result without
-	// running a target tool (inspect, decline, unavailable, or an already-
-	// connected server directory call).
+	// running a target tool (list, search, inspect, decline, unavailable, or an
+	// already-connected server directory call).
 	SkipExecute bool
 	// HostCompleted marks a call action whose final read-only result was produced
 	// and safety-checked by the host during resolution. Strict read-only agents
