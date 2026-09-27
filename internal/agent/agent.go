@@ -2359,7 +2359,9 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 	}
 
 	switch resolved.ProxyAction {
-	case "list", "inspect":
+	case "list", "search", "inspect":
+		// Discovery actions are read-only: they resolve locally and never
+		// execute the target, so a read-only agent may use them.
 		if !resolved.SkipExecute || resolved.Target != nil || !resolved.ReadOnly {
 			return block("execute a malformed dynamic inspection")
 		}
