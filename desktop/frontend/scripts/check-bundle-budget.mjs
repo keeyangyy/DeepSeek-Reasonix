@@ -436,6 +436,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // measured); widen to 2415 with the gzip gate untouched.
 // 2026-09-26: the trash turns filter and the bulk-action selection bar add
 // 0.9 KiB (2415.0 KiB measured); widen to 2416 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_416;
+// 2026-09-27: the sidebar light/dark quick switch adds 8.5 KiB on the initial
+// path (2423.5 KiB measured) — the switch component, its subscription hook and
+// the theme override logic are the bulk; widen to 2424.
+const rawInitialBudgetKiB = 2_424;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

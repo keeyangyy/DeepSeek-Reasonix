@@ -17,7 +17,7 @@ for (const layout of ["classic", "workbench", "creation"]) {
         creation={layout === "creation"} collapsed={false} automation={automation}
         navTooltipDisabled searchOpen={false} togglePressed={false} toggleTitle="toggle" t={t}
         onNewSession={noop} onOpenTrash={noop} onOpenAutomation={noop} onOpenSettings={noop}
-        onToggleSearch={noop} onToggle={noop}
+        onToggleSearch={noop} onToggle={noop} onSelectTheme={noop}
         resize={{ min: 180, max: 400, value: 240, onPointerDown: noop, onKeyDown: noop, onReset: noop }}
         projectTree={{ onOpenTopic: noop, onCreateTopic: noop, onTopicsChanged: noop }} />
       <AppBottomRegions terminal={{ surfaceVisible: !automation, open: !automation,

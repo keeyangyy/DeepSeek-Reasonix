@@ -31038,6 +31038,77 @@ body > .mermaid-diagram--fullscreen {
   gap: 6px;
 }
 
+/* ─── Sidebar light/dark quick switch ────────────────────────────────
+   Sits just above the utility row, sized to match it (32px tall, 9px
+   radius, 6px gap) so the two read as one group. The accent follows the
+   theme, and the thumb slides between the two positions. */
+.sidebar__theme-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  height: 32px;
+  margin-bottom: 6px;
+  padding: 3px;
+  border: 1px solid var(--sidebar-workbench-border, var(--border-soft));
+  border-radius: 10px;
+  background: var(--sidebar-hover);
+}
+
+.sidebar__theme-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-elev));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.28), inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar__theme-switch__thumb[data-state="dark"] {
+  transform: translateX(100%);
+}
+
+.sidebar__theme-switch__opt {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fg-faint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 560;
+  transition: color var(--dur-fast);
+}
+
+.sidebar__theme-switch__opt svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+}
+
+.sidebar__theme-switch__opt:hover {
+  color: var(--fg-dim);
+}
+
+.sidebar__theme-switch__opt.is-on {
+  color: var(--accent);
+  font-weight: 640;
+}
+
+.sidebar--collapsed .sidebar__theme-switch__opt span,
+.app--darwin .sidebar--collapsed .sidebar__theme-switch__opt span {
+  display: none;
+}
+
 .sidebar--workbench .sidebar__utility-row .tooltip-trigger {
   min-width: 0;
 }
