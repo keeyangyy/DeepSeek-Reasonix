@@ -31080,7 +31080,7 @@ body > .mermaid-diagram--fullscreen {
 
 .sidebar__theme-switch__opt {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-local-raised);
   display: flex;
   align-items: center;
   justify-content: center;
