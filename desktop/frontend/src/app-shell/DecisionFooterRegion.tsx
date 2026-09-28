@@ -32,9 +32,12 @@ export type DecisionFooterSurface =
 /** Loading one decision cannot hide an already available sibling or its focus. */
 export function DecisionFooterSlots({ todo, undo, strip, decision }: { todo: ReactNode; undo: ReactNode; strip: ReactNode; decision: ReactNode }) {
   return <>
+    {/* The activity strip sits above the todo list: it is a short single line,
+        and a long todo list would otherwise strand it in the middle of the
+        footer instead of against the top edge. */}
+    <Suspense fallback={null}>{strip}</Suspense>
     <Suspense fallback={null}>{todo}</Suspense>
     <Suspense fallback={null}>{undo}</Suspense>
-    <Suspense fallback={null}>{strip}</Suspense>
     <Suspense fallback={null}>{decision}</Suspense>
   </>;
 }

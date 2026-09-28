@@ -229,8 +229,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Match the todo shelf it sits above: the strip shares that column's width
+     so the two read as one stack rather than a narrow chip floating between
+     the shelf and the composer. */
+  width: 100%;
   max-width: var(--maxw);
-  margin: 0 auto 8px;
+  margin: 0 auto 10px;
   padding: 5px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -241,6 +245,15 @@
   text-align: left;
   cursor: pointer;
   min-width: 0;
+  box-sizing: border-box;
+  animation: subagent-strip-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes subagent-strip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .subagent-strip:hover {
