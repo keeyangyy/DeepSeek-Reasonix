@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"reasonix/internal/config"
-	"reasonix/internal/fileutil"
 	fileencoding "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/frontmatter"
 )
@@ -221,12 +220,16 @@ func (s Store) archiveLocked(name string) (string, error) {
 		if dir == "" {
 			continue
 		}
+		lines, contains, err := indexLinesExceptIn(dir, name)
+		if err != nil {
+			return "", err
+		}
 		p, err := archiveInDir(dir, name)
 		if err != nil {
 			return "", err
 		}
-		if p != "" || indexContainsIn(dir, name) {
-			if err := flushIndexIn(dir, indexLinesExceptIn(dir, name)); err != nil {
+		if p != "" || contains {
+			if err := flushIndexIn(dir, lines); err != nil {
 				return "", err
 			}
 		}
@@ -238,12 +241,16 @@ func (s Store) archiveLocked(name string) (string, error) {
 }
 
 func archiveMemoryInDir(dir, name string) (string, error) {
+	lines, contains, err := indexLinesExceptIn(dir, name)
+	if err != nil {
+		return "", err
+	}
 	path, err := archiveInDir(dir, name)
 	if err != nil {
 		return "", err
 	}
-	if path != "" || indexContainsIn(dir, name) {
-		if err := flushIndexIn(dir, indexLinesExceptIn(dir, name)); err != nil {
+	if path != "" || contains {
+		if err := flushIndexIn(dir, lines); err != nil {
 			return "", err
 		}
 	}
@@ -366,110 +373,6 @@ func repairOwnerWrite(root *os.Root, path string, dir bool) {
 		need = 0o700
 	}
 	_ = root.Chmod(path, info.Mode().Perm()|need)
-}
-
-// indexLineRe matches a managed index line so reindex/Delete can target the line
-// for one memory by its filename without disturbing the rest of a hand-edited
-// MEMORY.md.
-var indexLineRe = regexp.MustCompile(`(?m)^\s*-\s\[.+?\]\(([^)]+)\.md\)\s*—\s.*$`)
-
-// indexLinesExceptIn returns the managed MEMORY.md lines keyed by filename stem
-// in the given directory, dropping the entry for name (a missing index → empty map).
-func indexLinesExceptIn(dir, name string) map[string]string {
-	existing, _ := fileencoding.ReadFileUTF8(filepath.Join(dir, indexFile))
-	keep := map[string]string{}
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		if mt := indexLineRe.FindStringSubmatch(line); mt != nil && mt[1] != name {
-			keep[mt[1]] = strings.TrimRight(line, "\r")
-		}
-	}
-	return keep
-}
-
-func indexContainsIn(dir, name string) bool {
-	existing, err := fileencoding.ReadFileUTF8(filepath.Join(dir, indexFile))
-	if err != nil {
-		return false
-	}
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		if mt := indexLineRe.FindStringSubmatch(line); mt != nil && mt[1] == name {
-			return true
-		}
-	}
-	return false
-}
-
-// flushIndexIn rewrites MEMORY.md in the given directory from the managed lines,
-// preserving hand-written content. Managed lines are updated or removed, and
-// new managed entries are appended in sorted order.
-func flushIndexIn(dir string, lines map[string]string) error {
-	path := filepath.Join(dir, indexFile)
-	existing, _ := fileencoding.ReadFileUTF8(path)
-	processed := map[string]bool{}
-	var preserved strings.Builder
-	preservedEmpty := true
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		trimmed := strings.TrimRight(line, "\r")
-		if mt := indexLineRe.FindStringSubmatch(trimmed); mt != nil {
-			name := mt[1]
-			if fresh, ok := lines[name]; ok {
-				preserved.WriteString(fresh)
-				preserved.WriteString("\n")
-				processed[name] = true
-				preservedEmpty = false
-			}
-			continue
-		}
-		preserved.WriteString(trimmed)
-		preserved.WriteString("\n")
-		if strings.TrimSpace(trimmed) != "" {
-			preservedEmpty = false
-		}
-	}
-
-	names := make([]string, 0, len(lines))
-	for n := range lines {
-		if !processed[n] {
-			names = append(names, n)
-		}
-	}
-	sort.Strings(names)
-
-	var b strings.Builder
-	if preservedEmpty && len(names) > 0 {
-		b.WriteString("# Memory\n\n")
-	} else {
-		b.WriteString(preserved.String())
-	}
-	for _, n := range names {
-		b.WriteString(lines[n])
-		b.WriteString("\n")
-	}
-	result := strings.TrimRight(b.String(), "\n")
-	if result != "" {
-		result += "\n"
-	}
-	// The index is derived state, but a torn write would still hide facts
-	// from the next real turn's session-context until the next reindex.
-	return fileutil.AtomicWriteFile(path, []byte(result), 0o644)
-}
-
-// reindexIn rewrites the MEMORY.md line for name in the given directory,
-// preserving every other managed line.
-func reindexIn(dir, name string, m Memory) error {
-	lines := indexLinesExceptIn(dir, name)
-	lines[name] = renderIndexLine(name, m)
-	return flushIndexIn(dir, lines)
-}
-
-func renderIndexLine(name string, m Memory) string {
-	marker := ""
-	if ResolveActivation(m) == ActivationPinned {
-		marker = " pinned" // the body already rides session-context; no need to read it
-	}
-	return fmt.Sprintf("- [%s](%s.md) — [%s/%s%s] %s",
-		displayTitle(m.Title, name), name,
-		NormalizeFactScope(string(m.Scope)), NormalizeType(string(m.Type)), marker, oneLine(m.Description))
 }
 
 // List returns the saved memories parsed from their files, sorted by name. Used
