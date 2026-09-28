@@ -513,5 +513,86 @@ const warningTurn: Item[] = [
   }
 }
 
+// ── Phase 7: the fold header names the sub-agents it hides ───────────────────
+// A delegated call is process material: a settled turn folds it away. Nested
+// calls (a `task` under a `fleet`) never reach the fold body, so the header is
+// the only place left to see that sub-agents ran — and that any still run.
+{
+  const harness = await createTranscriptHarness();
+  const container = harness.container;
+  try {
+    await render(harness, [
+      { kind: "user", id: "u-sub", text: "delegate" },
+      { kind: "assistant", id: "a-sub", text: "", reasoning: "delegating", streaming: false },
+      { kind: "tool", id: "t-fleet", name: "fleet", args: "{}", readOnly: false, status: "done" },
+      { kind: "tool", id: "t-sub-1", parentId: "t-fleet", name: "task", args: "{}", readOnly: false, status: "running" },
+      { kind: "tool", id: "t-sub-2", parentId: "t-fleet", name: "task", args: "{}", readOnly: false, status: "done" },
+      { kind: "assistant", id: "a-sub-2", text: "final answer", reasoning: "", streaming: false, workDurationMs: 30_000 },
+    ]);
+    {
+      const label = container.querySelector(".turn-collapse__label")?.textContent ?? "";
+      // The fan-out itself already counts as a tool; the two nested calls are
+      // the sub-agents the header must name.
+      ok(label.includes("1 tools"), "the dispatch counts as a tool, not as a second sub-agent");
+      ok(label.includes("2 sub-agents"), "the fold header names the sub-agents it hides");
+      ok(label.includes("1 running"), "the fold header flags the sub-agent still producing output");
+      ok(!container.querySelector(".turn-collapse")?.classList.contains("turn-collapse--open"), "a settled turn folds the delegated work away");
+      const answer = Array.from(container.querySelectorAll(".msg--assistant")).find((node) => node.textContent?.includes("final answer"));
+      ok(answer && !answer.closest(".turn-collapse__body"), "the turn's answer stays outside the fold");
+    }
+
+    // A turn with no delegation keeps the historical label untouched.
+    await render(harness, [
+      { kind: "user", id: "u-plain", text: "inspect" },
+      { kind: "assistant", id: "a-plain", text: "", reasoning: "thinking", streaming: false },
+      { kind: "tool", id: "t-plain", name: "read_file", args: "{}", readOnly: true, status: "done" },
+      { kind: "assistant", id: "a-plain-2", text: "done", reasoning: "", streaming: false, workDurationMs: 3_000 },
+    ]);
+    {
+      const label = container.querySelector(".turn-collapse__label")?.textContent ?? "";
+      ok(!label.includes("sub-agent"), "a turn without sub-agents is unchanged");
+      ok(!container.querySelector(".turn-collapse__label")?.hasAttribute("data-subagents"), "no sub-agent data attribute without sub-agents");
+    }
+
+    // While the delegating turn runs, its fold stays open (follow-turn) but the
+    // header still has to report the running count for scroll-away segments.
+    await render(harness, [
+      { kind: "user", id: "u-sub-run", text: "delegate" },
+      { kind: "assistant", id: "a-sub-run", text: "interim answer", reasoning: "", streaming: false },
+      { kind: "assistant", id: "a-sub-run-2", text: "", reasoning: "second thought", streaming: false },
+      { kind: "tool", id: "t-sub-run", parentId: "t-dispatch-missing", name: "task", args: "{}", readOnly: false, status: "running" },
+    ], { running: true, turnStartAt: 1_000 });
+    {
+      const labels = Array.from(container.querySelectorAll(".turn-collapse__label")).map((node) => node.textContent ?? "");
+      ok(labels.some((label) => label.includes("1 sub-agents") && label.includes("1 running")), "a running sub-agent is reported on its segment's header");
+    }
+
+    // The same dispatch through the use_capability proxy: the provider-visible
+    // name is "use_capability" and the real target sits in capabilityId, which
+    // is how ordinary sessions actually record a fleet/task call.
+    await render(harness, [
+      { kind: "user", id: "u-sub-proxy", text: "delegate" },
+      { kind: "assistant", id: "a-sub-proxy", text: "done", reasoning: "", streaming: false, workDurationMs: 4_000 },
+      {
+        kind: "tool", id: "t-proxy-fleet", name: "use_capability", args: "{}", readOnly: false,
+        status: "done", capabilityId: "tool:fleet", resolvedName: "fleet",
+      },
+      {
+        kind: "tool", id: "t-proxy-child", parentId: "t-proxy-fleet", name: "use_capability", args: "{}",
+        readOnly: false, status: "done", capabilityId: "tool:task",
+      },
+    ]);
+    {
+      const label = container.querySelector(".turn-collapse__label")?.textContent ?? "";
+      ok(label.includes("1 sub-agents"), "a fleet call behind the use_capability proxy is counted, not missed");
+      ok(!label.includes("2 sub-agents"), "the proxied fan-out container itself is not counted as a sub-agent");
+    }
+    await harness.settle();
+  } finally {
+    await harness.unmount();
+    await harness.close();
+  }
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

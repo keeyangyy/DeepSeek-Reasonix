@@ -77,6 +77,10 @@ export function TopicbarActionsStack(props: {
   setTasksOpen: (update: (open: false | "session" | "all") => false | "session" | "all") => void;
   onCloseTasks: () => void;
   onOpenTaskSession: (tabID: string, taskID: string) => Promise<boolean>;
+  /** Sub-agent panel: session-level state and the badge count it shows. */
+  subagentsOpen: boolean;
+  setSubagentsOpen: (update: (open: boolean) => boolean) => void;
+  subagentCount: number;
   creation: boolean;
   dockToggle: ReactNode;
 }) {
@@ -103,6 +107,8 @@ export function TopicbarActionsStack(props: {
           toggleTerminal: props.terminal.toggle, terminalEnabled: props.terminal.enabled,
           terminalOpen: props.terminal.open, prefetchTerminal: props.terminal.prefetch,
           openSessionSummary: () => props.setTasksOpen((open) => open ? false : "session"), tasksOpen: Boolean(props.tasksOpen),
+          openSubagents: () => props.setSubagentsOpen((open) => !open), subagentsOpen: props.subagentsOpen,
+          subagentCount: props.subagentCount,
         } : undefined}
       />
       {props.creation && props.dockToggle}

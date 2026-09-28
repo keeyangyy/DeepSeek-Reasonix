@@ -27,13 +27,15 @@ import { DockToggleButton } from "./DockToggleButton";
 import { SessionStatusBanners } from "./SessionStatusBanners";
 import { ChatPaneRegion } from "./ChatPaneRegion";
 import { DecisionFooterRegion } from "./DecisionFooterRegion";
+import { SubagentRunningStrip } from "../components/SubagentRunningStrip";
 import { WorkspaceDockRegion } from "./WorkspaceDockRegion";
 import { AppBottomRegions } from "./AppBottomRegions";
 import { AppOverlayHost } from "./AppOverlayHost";
 import { buildAppShellClassNames, buildSessionStatusBannerProps, buildSidebarRegionProps } from "./chromeRegionBuilders";
 import { buildBottomRegionsProps, buildWorkspaceDockProps } from "./dockRegionBuilders";
 import { buildOverlayHostProps } from "./overlayBuilders";
-import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo } from "./decisionFooterBuilders";
+import type { SubagentRunView } from "../lib/subagentRunsBridge";
+import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo, buildSubagentFooterStrip } from "./decisionFooterBuilders";
 
 const WindowsWindowControls = lazy(() => import("./WindowsWindowControls").then((module) => ({ default: module.WindowsWindowControls })));
 
@@ -68,6 +70,10 @@ export type AppRuntimeViewProps = {
   local: {
     tasksOpen: false | "session" | "all";
     setTasksOpen: React.Dispatch<React.SetStateAction<false | "session" | "all">>;
+    subagentsOpen: boolean;
+    setSubagentsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    subagentCount: number;
+    subagentRuns: readonly SubagentRunView[];
     topicTimeFilter: TopicTimeFilter;
     setTopicTimeFilter: (value: TopicTimeFilter) => void;
     sidebarImDetailConnectionId: string;
@@ -156,6 +162,12 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
     onDismiss: session.todoPanel.dismissTodos,
   });
   const footerUndo = buildFooterUndo({ rewindState: session.sessionUndo.rewindState, activeTabId, onUndo: session.sessionUndo.handleUndoRewind });
+  // The strip lives next to the composer, so it shares the panel's projection
+  // (and therefore its activity grouping) rather than re-deriving one.
+  const subagentStripView = buildSubagentFooterStrip({
+    items: session.transcript.visibleTranscriptItems,
+    runs: local.subagentRuns,
+  });
   const decisionFooterSurface = buildDecisionFooterSurface({
     view: {
       surface: visibleDecisionSurface,
@@ -295,6 +307,9 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
               setTasksOpen={local.setTasksOpen}
               onCloseTasks={() => local.setTasksOpen(false)}
               onOpenTaskSession={navigationCommands.openTaskMonitorSession}
+              subagentsOpen={local.subagentsOpen}
+              setSubagentsOpen={local.setSubagentsOpen}
+              subagentCount={local.subagentCount}
               creation={sidebarCreation}
               dockToggle={<DockToggleButton renderable={surfaceWorkspacePanelRenderable} t={t} onToggle={session.workspacePanelCommands.toggleWorkspacePanel} />}
             />
@@ -364,6 +379,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
             style={core.surface.surface?.phase === "source-retained" && footerHeight > 0 ? { height: footerHeight, minHeight: footerHeight, boxSizing: "border-box" } : undefined}
             todo={footerTodo}
             undo={footerUndo}
+            strip={subagentStripView ? <SubagentRunningStrip forest={subagentStripView.forest} onOpen={() => local.setSubagentsOpen(true)} /> : undefined}
             decision={decisionFooterSurface}
             composer={buildComposerSurface({
               view: {
@@ -495,6 +511,12 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
         worktree: navigation.worktreeMergeCommands,
         onAddSelectedText: session.insertCommands.addSelectedTextToComposer,
         prefillSubagentCommand: session.insertCommands.prefillSubagentCommand,
+        subagents: {
+          open: local.subagentsOpen,
+          items: session.transcript.visibleTranscriptItems,
+          runs: local.subagentRuns,
+          close: () => local.setSubagentsOpen(false),
+        },
         sessionActions: {
           previewSession: runtime.sessionActions.previewSession,
           listTrashedSessions: runtime.sessionActions.listTrashedSessions,

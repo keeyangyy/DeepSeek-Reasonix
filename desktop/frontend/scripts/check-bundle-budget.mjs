@@ -303,7 +303,14 @@ for (const path of localeChunks) {
   // bar adds seven more (select-all/clear, {n}-selected count, restore/delete
   // selected, row aria). zh measures 63827 B (62.331 KiB) and zh-TW 64622 B
   // (63.107 KiB); retain the next one-decimal ceiling for each dialect.
-  const budget = name.startsWith("zh-TW-") ? 63.2 * 1024 : 62.4 * 1024;
+  // 2026-09-28: the sub-agent panel adds eleven labels per dialect (title,
+  // summary, empty state, per-row toggle/phase hints); the measured chunks move
+  // to 64090 B (62.588 KiB) zh and 64895 B (63.374 KiB) zh-TW, so retain the
+  // next one-decimal ceiling for each dialect.
+  // 2026-09-28: the running-first grouping and the activity strip add four more
+  // labels per dialect; the measured chunks move to 64148 B (62.645 KiB) zh and
+  // 64940 B (63.418 KiB) zh-TW, so retain the next one-decimal ceiling.
+  const budget = name.startsWith("zh-TW-") ? 63.5 * 1024 : 62.7 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -439,6 +446,18 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-27: the sidebar light/dark quick switch adds 8.5 KiB on the initial
 // path (2423.5 KiB measured) — the switch component, its subscription hook and
 // the theme override logic are the bulk; widen to 2424.
-const rawInitialBudgetKiB = 2_424;
+// 2026-09-28: naming the sub-agents a fold hides (segment counts, header label
+// and its three-dialect strings) adds 0.7 KiB over the 2423.7 KiB baseline;
+// widen to 2425 with the gzip gate untouched.
+// 2026-09-28: the sub-agent panel (its own drawer view, the inventory
+// projection and eleven labels per dialect) adds 1.6 KiB on the initial path
+// (2426.6 KiB measured); widen to 2427 with the gzip gate untouched.
+// 2026-09-28: sub-agent visibility after a session switch (proxy-aware
+// dispatch detection, the run-sidecar projection and its loader) adds 1.5 KiB
+// (2428.5 KiB measured); widen to 2429 with the gzip gate untouched.
+// 2026-09-28: the panel's running-first grouping and the composer-side activity
+// strip (group headings, the strip component and three more labels per dialect)
+// add 1.6 KiB (2430.6 KiB measured); widen to 2431.
+const rawInitialBudgetKiB = 2_431;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

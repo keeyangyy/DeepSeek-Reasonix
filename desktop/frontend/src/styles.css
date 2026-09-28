@@ -12062,6 +12062,13 @@ body > .mermaid-diagram--fullscreen {
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
 }
+/* The Windows caption buttons are fixed at the window's top-right, which is
+   exactly where a right-docked drawer's header sits — the drawer's own close
+   button would land on top of them. Push the header below the caption strip so
+   the two never share a target; other platforms keep the normal padding. */
+.app--windows-frameless .drawer__head {
+  padding-top: calc(14px + var(--windows-window-controls-height, 48px));
+}
 .drawer__title {
   font-size: 15px;
   font-weight: 650;
@@ -23456,6 +23463,28 @@ body > .mermaid-diagram--fullscreen {
 
 .topicbar__actions > .tooltip-trigger {
   display: inline-flex;
+}
+
+/* Sub-agent badge: a count over the action icon. The button has no z-index of
+   its own — it sits in the topicbar's own stacking context. */
+.topicbar__action-btn:has(> .topicbar__action-badge) {
+  position: relative;
+}
+
+.topicbar__action-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9.5px;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .topicbar__subtitle {

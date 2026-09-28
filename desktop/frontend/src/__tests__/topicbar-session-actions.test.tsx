@@ -63,7 +63,7 @@ Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
   writeText: async (value: string) => { calls.push(`copy:${value}`); },
 } });
 
-async function render(terminalEnabled = true, sessionHasContent = true, tabID = "one") {
+async function render(terminalEnabled = true, sessionHasContent = true, tabID = "one", subagentCount = 0) {
   await act(async () => {
     root.render(<LocaleProvider><TopicbarSessionActions
       key={tabID} sessionHasContent={sessionHasContent}
@@ -72,15 +72,21 @@ async function render(terminalEnabled = true, sessionHasContent = true, tabID = 
       toggleTerminal={() => { calls.push("terminal"); }} terminalOpen={false}
       terminalEnabled={terminalEnabled} prefetchTerminal={() => { calls.push("prefetch"); }}
       openSessionSummary={() => { calls.push("summary"); }} tasksOpen={false}
+      openSubagents={() => { calls.push("subagents"); }} subagentsOpen={false} subagentCount={subagentCount}
     /></LocaleProvider>);
   });
 }
 await render();
 const buttons = Array.from(rootElement.querySelectorAll<HTMLButtonElement>("button"));
-ok(buttons.length === 4 && !rootElement.querySelector('[role="menu"]'), "all four session actions are directly available without opening a menu");
-const [copy, trigger, terminal, summary] = buttons as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
+ok(buttons.length === 5 && !rootElement.querySelector('[role="menu"]'), "all five session actions are directly available without opening a menu");
+const [copy, trigger, terminal, summary, subagents] = buttons as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
 await act(async () => { copy.click(); terminal.click(); summary.click(); });
 ok(calls.includes("copy:# Session") && calls.includes("terminal") && calls.includes("summary"), "one click invokes each direct action, including asynchronous copy");
+ok(subagents.disabled, "the sub-agent action stays disabled until the session delegates work");
+await render(true, true, "one", 3);
+await act(async () => { subagents.click(); });
+ok(calls.includes("subagents"), "the sub-agent action opens the panel once the session has delegated work");
+ok(rootElement.querySelector(".topicbar__action-badge")?.textContent === "3", "the badge shows how many sub-agents the session dispatched");
 await act(async () => { terminal.focus(); });
 ok(calls.includes("prefetch"), "focusing the terminal action prefetches its panel");
 
