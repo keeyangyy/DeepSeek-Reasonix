@@ -43,8 +43,7 @@ type coalescer struct {
 	// called under mu. A single drainer forwards FIFO, so a sink that
 	// synchronously re-enters Emit enqueues and returns instead of deadlocking.
 	mu          sync.Mutex
-	kind        Kind
-	source      string
+	key         deltaKey
 	buf         strings.Builder
 	pending     bool
 	timer       *time.Timer
@@ -62,17 +61,53 @@ type coalescedEvent struct {
 var _ OptionalSinkCapabilities = (*coalescer)(nil)
 var _ CheckedSink = (*coalescer)(nil)
 
-// isStreamDelta reports whether e is a pure streaming delta: merging is only
-// safe when no other field carries meaning. The zero-probe comparison keeps
-// this true by construction as Event grows fields.
-func isStreamDelta(e Event) bool {
-	if (e.Kind != Text && e.Kind != Reasoning) || e.Text == "" {
-		return false
-	}
+// deltaKey is the identity a buffered burst merges under; any change flushes.
+// Streaming text/reasoning bursts key on their kind and source; a tool's output
+// burst also keys on the tool id, so two tools streaming at once never merge
+// into each other.
+type deltaKey struct {
+	kind   Kind
+	source string
+	toolID string
+}
+
+// streamDelta reports whether e is a pure streaming delta, with its merge key
+// and payload: merging is only safe when no other field carries meaning. The
+// zero-probe comparison keeps this true by construction as Event grows fields.
+// ToolProgress carrying nothing but one tool's Output merges too — otherwise a
+// verbose command's every pipe chunk becomes its own frame (see ec915df21).
+func streamDelta(e Event) (deltaKey, string, bool) {
+	key := deltaKey{kind: e.Kind, source: e.Source}
 	probe := e
-	probe.Text = ""
 	probe.Source = ""
-	return reflect.DeepEqual(probe, Event{Kind: e.Kind})
+	payload := e.Text
+	switch e.Kind {
+	case Text, Reasoning:
+		probe.Text = ""
+	case ToolProgress:
+		key.toolID, payload = e.Tool.ID, e.Tool.Output
+		probe.Tool.ID, probe.Tool.Output = "", ""
+	default:
+		return deltaKey{}, "", false
+	}
+	if payload == "" || (e.Kind == ToolProgress && key.toolID == "") ||
+		!reflect.DeepEqual(probe, Event{Kind: e.Kind}) {
+		return deltaKey{}, "", false
+	}
+	return key, payload, true
+}
+
+// event rebuilds the event a burst's buffered payload stands for. Progress with
+// any field beyond id+output never reaches here (streamDelta rejects it), so
+// the rebuilt event keeps every consumer's append semantics unchanged.
+func (k deltaKey) event(payload string) Event {
+	e := Event{Kind: k.kind, Source: k.source}
+	if k.kind == ToolProgress {
+		e.Tool = Tool{ID: k.toolID, Output: payload}
+	} else {
+		e.Text = payload
+	}
+	return e
 }
 
 func (c *coalescer) Emit(e Event) {
@@ -93,14 +128,15 @@ func (c *coalescer) enqueue(e Event, checked bool) error {
 	if checked {
 		done = make(chan error, 1)
 	}
+	key, payload, delta := streamDelta(e)
 	c.mu.Lock()
-	if checked && isStreamDelta(e) {
+	if checked && delta {
 		c.enqueueFlushLocked()
 		c.queue = append(c.queue, coalescedEvent{event: e, done: done})
 		c.drainAndUnlock()
 		return <-done
 	}
-	if !isStreamDelta(e) {
+	if !delta {
 		c.enqueueFlushLocked()
 		c.queue = append(c.queue, coalescedEvent{event: e, done: done})
 		c.drainAndUnlock()
@@ -109,7 +145,7 @@ func (c *coalescer) enqueue(e Event, checked bool) error {
 		}
 		return nil
 	}
-	if c.pending && (c.kind != e.Kind || c.source != e.Source) {
+	if c.pending && c.key != key {
 		c.enqueueFlushLocked()
 	}
 	if !c.pending && time.Since(c.lastForward) >= c.window {
@@ -123,15 +159,14 @@ func (c *coalescer) enqueue(e Event, checked bool) error {
 	}
 	if !c.pending {
 		c.pending = true
-		c.kind = e.Kind
-		c.source = e.Source
+		c.key = key
 		if c.timer == nil {
 			c.timer = time.AfterFunc(c.window, c.flush)
 		} else {
 			c.timer.Reset(c.window)
 		}
 	}
-	c.buf.WriteString(e.Text)
+	c.buf.WriteString(payload)
 	if c.buf.Len() >= coalesceMaxBytes {
 		c.enqueueFlushLocked()
 	}
@@ -154,10 +189,10 @@ func (c *coalescer) enqueueFlushLocked() {
 		return
 	}
 	c.timer.Stop()
-	c.queue = append(c.queue, coalescedEvent{event: Event{Kind: c.kind, Text: c.buf.String(), Source: c.source}})
+	c.queue = append(c.queue, coalescedEvent{event: c.key.event(c.buf.String())})
 	c.buf.Reset()
 	c.pending = false
-	c.source = ""
+	c.key = deltaKey{}
 	c.lastForward = time.Now()
 }
 
