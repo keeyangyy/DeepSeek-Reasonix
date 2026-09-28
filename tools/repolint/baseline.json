@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1898,
     "essay": 1917,
-    "file-size": 102802,
+    "file-size": 102804,
     "function-size": 8269,
     "layering": 1,
     "marker": 0,
@@ -138,7 +138,7 @@
       "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 5001
+      "file-size": 5003
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213

@@ -449,6 +449,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-28: the sub-agent panel (its own drawer view, the inventory
 // projection and eleven labels per dialect) adds 1.6 KiB on the initial path
 // (2426.6 KiB measured); widen to 2427 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_427;
+// 2026-09-28: sub-agent visibility after a session switch (proxy-aware
+// dispatch detection, the run-sidecar projection and its loader) adds 1.5 KiB
+// (2428.5 KiB measured); widen to 2429 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_429;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
