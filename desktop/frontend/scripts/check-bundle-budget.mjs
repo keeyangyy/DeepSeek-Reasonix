@@ -439,6 +439,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-27: the sidebar light/dark quick switch adds 8.5 KiB on the initial
 // path (2423.5 KiB measured) — the switch component, its subscription hook and
 // the theme override logic are the bulk; widen to 2424.
-const rawInitialBudgetKiB = 2_424;
+// 2026-09-28: naming the sub-agents a fold hides (segment counts, header label
+// and its three-dialect strings) adds 0.7 KiB over the 2423.7 KiB baseline;
+// widen to 2425 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_425;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
