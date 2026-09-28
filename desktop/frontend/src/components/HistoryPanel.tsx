@@ -505,6 +505,7 @@ export function HistoryPanel({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
               if (event.key === "Enter") commitRename(session);
               if (event.key === "Escape") setEditing(null);
             }}
