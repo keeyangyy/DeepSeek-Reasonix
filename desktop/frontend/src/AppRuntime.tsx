@@ -22,6 +22,7 @@ import { useAppSessionComposition } from "./app-runtime/useAppSessionComposition
 import { useAppNavigationComposition } from "./app-runtime/useAppNavigationComposition";
 import { useTopicTimeFilter } from "./app-runtime/useLocalUiLifecycles";
 import { buildSubagentForest, summarizeSubagents } from "./lib/subagentInventory";
+import { useSubagentRuns } from "./lib/useSubagentRuns";
 import { AppRuntimeView } from "./app-shell/AppRuntimeView";
 
 // Hold reasoning UI until the authoritative desktop startup settings arrive;
@@ -124,9 +125,11 @@ export function AppRuntime() {
   });
   // The topicbar badge needs the session's sub-agent count before the panel
   // ever opens, so the projection runs here rather than only inside the panel.
+  // Persisted run sidecars supply the children a rebuilt transcript lost.
+  const subagentRuns = useSubagentRuns(activeTabId, activeSessionIdentity);
   const subagentCount = useMemo(
-    () => summarizeSubagents(buildSubagentForest(session.transcript.visibleTranscriptItems)).total,
-    [session.transcript.visibleTranscriptItems],
+    () => summarizeSubagents(buildSubagentForest(session.transcript.visibleTranscriptItems, subagentRuns)).total,
+    [session.transcript.visibleTranscriptItems, subagentRuns],
   );
   const navigation = useAppNavigationComposition({
     runtime,
@@ -160,6 +163,7 @@ export function AppRuntime() {
       local={{
         tasksOpen, setTasksOpen, topicTimeFilter, setTopicTimeFilter,
         subagentsOpen, setSubagentsOpen, subagentCount,
+        subagentRuns,
         sidebarImDetailConnectionId, setSidebarImDetailConnectionId,
         tabRevealSignal, transcriptRevealSignal, histView,
         projectRevision, dockRefreshKey, composerFileRefRefreshKey, refreshComposerFileRefs,

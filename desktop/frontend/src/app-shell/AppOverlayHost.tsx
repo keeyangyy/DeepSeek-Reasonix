@@ -32,7 +32,7 @@ export type AppOverlayHostProps = {
   startup?: Region<ComponentProps<typeof StartupSplash>, "hold">;
   selection: Region<ComponentProps<typeof TranscriptSelectionMenu>, "enabled" | "resetKey">;
   worktree?: Region<ComponentProps<typeof WorktreeMergeModal>, "tabId" | "isOpen">;
-  subagents?: Region<ComponentProps<typeof SubagentPanel>, "items">;
+  subagents?: Region<ComponentProps<typeof SubagentPanel>, "items" | "runs">;
 };
 
 /** Presentation-only overlay region. Async ownership stays in feature owners. */

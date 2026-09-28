@@ -10,6 +10,7 @@ import { SubagentOutcomeCard } from "./SubagentOutcomeCard";
 import { useT, type Translator } from "../lib/i18n";
 import type { Item, SubagentPhase } from "../lib/useController";
 import { buildSubagentForest, summarizeSubagents, type SubagentEntry } from "../lib/subagentInventory";
+import type { SubagentRunView } from "../lib/subagentRunsBridge";
 
 // The panel answers "what did this session delegate to sub-agents?" without
 // requiring the reader to expand a settled turn's fold. It lists the same
@@ -119,16 +120,19 @@ function SubagentRow({ entry, depth }: { entry: SubagentEntry; depth: number }) 
 
 export function SubagentPanel({
   items,
+  runs,
   onClose,
   onOpenTranscript,
 }: {
   /** The session's transcript items (the same list the transcript renders). */
   items: readonly Item[];
+  /** Persisted run sidecars: the nesting/outcome a rebuilt session lost. */
+  runs?: readonly SubagentRunView[];
   onClose: () => void;
   onOpenTranscript?: () => void;
 }) {
   const t = useT();
-  const forest = useMemo(() => buildSubagentForest(items), [items]);
+  const forest = useMemo(() => buildSubagentForest(items, runs ?? []), [items, runs]);
   const summary = useMemo(() => summarizeSubagents(forest), [forest]);
   const [tick, setTick] = useState(0);
   // Elapsed time of running entries: tick only while something is in flight.

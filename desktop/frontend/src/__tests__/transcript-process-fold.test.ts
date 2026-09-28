@@ -566,6 +566,27 @@ const warningTurn: Item[] = [
       const labels = Array.from(container.querySelectorAll(".turn-collapse__label")).map((node) => node.textContent ?? "");
       ok(labels.some((label) => label.includes("1 sub-agents") && label.includes("1 running")), "a running sub-agent is reported on its segment's header");
     }
+
+    // The same dispatch through the use_capability proxy: the provider-visible
+    // name is "use_capability" and the real target sits in capabilityId, which
+    // is how ordinary sessions actually record a fleet/task call.
+    await render(harness, [
+      { kind: "user", id: "u-sub-proxy", text: "delegate" },
+      { kind: "assistant", id: "a-sub-proxy", text: "done", reasoning: "", streaming: false, workDurationMs: 4_000 },
+      {
+        kind: "tool", id: "t-proxy-fleet", name: "use_capability", args: "{}", readOnly: false,
+        status: "done", capabilityId: "tool:fleet", resolvedName: "fleet",
+      },
+      {
+        kind: "tool", id: "t-proxy-child", parentId: "t-proxy-fleet", name: "use_capability", args: "{}",
+        readOnly: false, status: "done", capabilityId: "tool:task",
+      },
+    ]);
+    {
+      const label = container.querySelector(".turn-collapse__label")?.textContent ?? "";
+      ok(label.includes("1 sub-agents"), "a fleet call behind the use_capability proxy is counted, not missed");
+      ok(!label.includes("2 sub-agents"), "the proxied fan-out container itself is not counted as a sub-agent");
+    }
     await harness.settle();
   } finally {
     await harness.unmount();

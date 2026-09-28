@@ -33,6 +33,7 @@ import { AppOverlayHost } from "./AppOverlayHost";
 import { buildAppShellClassNames, buildSessionStatusBannerProps, buildSidebarRegionProps } from "./chromeRegionBuilders";
 import { buildBottomRegionsProps, buildWorkspaceDockProps } from "./dockRegionBuilders";
 import { buildOverlayHostProps } from "./overlayBuilders";
+import type { SubagentRunView } from "../lib/subagentRunsBridge";
 import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo } from "./decisionFooterBuilders";
 
 const WindowsWindowControls = lazy(() => import("./WindowsWindowControls").then((module) => ({ default: module.WindowsWindowControls })));
@@ -71,6 +72,7 @@ export type AppRuntimeViewProps = {
     subagentsOpen: boolean;
     setSubagentsOpen: React.Dispatch<React.SetStateAction<boolean>>;
     subagentCount: number;
+    subagentRuns: readonly SubagentRunView[];
     topicTimeFilter: TopicTimeFilter;
     setTopicTimeFilter: (value: TopicTimeFilter) => void;
     sidebarImDetailConnectionId: string;
@@ -504,6 +506,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
         subagents: {
           open: local.subagentsOpen,
           items: session.transcript.visibleTranscriptItems,
+          runs: local.subagentRuns,
           close: () => local.setSubagentsOpen(false),
         },
         sessionActions: {

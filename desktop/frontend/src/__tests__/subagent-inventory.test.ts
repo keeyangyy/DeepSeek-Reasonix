@@ -80,5 +80,72 @@ const items: Item[] = [
   ok(isSubagentItem(items[2]!), "fleet is a sub-agent dispatch");
 }
 
+// ── The use_capability proxy ─────────────────────────────────────────────────
+// A model that delegates through the stable use_capability proxy reports the
+// provider-visible name "use_capability"; the real target is in
+// resolvedName/capabilityId. Matching on `name` alone missed every such call,
+// which is what left the panel empty for ordinary sessions.
+{
+  const proxied: Item[] = [
+    {
+      kind: "tool", id: "call_00_fleet", name: "use_capability", args: "{}", readOnly: false,
+      status: "done", capabilityId: "tool:fleet", resolvedName: "fleet",
+    },
+    {
+      kind: "tool", id: "call_01_task", name: "use_capability", args: "{}", readOnly: false,
+      status: "running", capabilityId: "tool:task", parentId: "call_00_fleet",
+    },
+    {
+      kind: "tool", id: "call_02_memory", name: "use_capability", args: "{}", readOnly: false,
+      status: "done", capabilityId: "tool:memory", resolvedName: "memory",
+    },
+  ];
+  const forest = buildSubagentForest(proxied);
+  ok(forest.length === 1, "a proxied fleet call is recognised as one dispatch");
+  ok(forest[0]?.name === "fleet", "the entry reports the real target, not use_capability");
+  ok(forest[0]?.children.length === 1 && forest[0]?.children[0]?.name === "task", "a proxied child nests under its proxied parent");
+  ok(summarizeSubagents(forest).running === 1, "a proxied running child counts as running");
+  ok(!isSubagentItem(proxied[2]!), "a proxied non-dispatch tool is not a sub-agent");
+}
+
+// ── Persisted run sidecars ───────────────────────────────────────────────────
+// A settled session records only the dispatching call, so after a session
+// switch the children and their outcomes exist only in the run sidecars.
+{
+  const rebuilt: Item[] = [
+    {
+      kind: "tool", id: "call_00_fleet", name: "use_capability", args: "{}", readOnly: false,
+      status: "done", capabilityId: "tool:fleet",
+    },
+  ];
+  const runs = [
+    { ref: "sa_1", parentToolCallId: "call_00_fleet/fleet-1", kind: "task", name: "task", status: "completed", model: "m1", effort: "high" },
+    { ref: "sa_2", parentToolCallId: "call_00_fleet/fleet-2", kind: "task", name: "task", status: "failed", errorCode: "E1", retryable: true },
+  ];
+  const forest = buildSubagentForest(rebuilt, runs);
+  ok(forest.length === 1, "the rebuilt dispatch stays the single root");
+  ok(forest[0]?.children.length === 2, "sidecar runs restore the children the transcript dropped");
+  ok(forest[0]?.children[0]?.outcome?.[1] === "completed", "a settled run carries its outcome for the card");
+  ok(forest[0]?.children[1]?.outcome?.[1] === "failed" && forest[0]?.children[1]?.outcome?.[3] === true, "a failed run keeps its error code and retryable flag");
+  ok(forest[0]?.children[0]?.profile?.model === "m1", "the dispatch model survives a rebuild");
+  ok(summarizeSubagents(forest).total === 3, "the summary counts restored children");
+
+  // A run whose dispatch is missing from the transcript (older than the paged
+  // window) still lists rather than vanishing.
+  const orphaned = buildSubagentForest([], runs);
+  ok(orphaned.length === 2, "runs with no surviving dispatch list as roots");
+  ok(orphaned[0]?.running === false, "a terminal sidecar status is not running");
+
+  // Idempotence: a live session already has the children as transcript items,
+  // and the sidecar must not list them twice.
+  const live: Item[] = [
+    { kind: "tool", id: "call_00_fleet", name: "fleet", args: "{}", readOnly: false, status: "done" },
+    { kind: "tool", id: "call_00_fleet/fleet-1", parentId: "call_00_fleet", name: "task", args: "{}", readOnly: false, status: "done" },
+  ];
+  const merged = buildSubagentForest(live, runs);
+  ok(merged[0]?.children.length === 2, "a run already represented by a transcript item is not listed twice");
+  ok(merged[0]?.children.filter((c) => c.id === "call_00_fleet/fleet-1").length === 1, "the transcript's own child keeps its identity");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

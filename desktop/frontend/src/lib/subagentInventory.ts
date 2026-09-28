@@ -11,7 +11,14 @@
 // yields the calls without their live phase, which the view renders as a
 // status-less entry rather than inventing one.
 
-import { SUBAGENT_PROGRESS_TOOLS, isTerminalSubagentPhase, type Item, type SubagentPhase, type SubagentProgress } from "./useController";
+import { isTerminalSubagentPhase, type Item, type SubagentPhase, type SubagentProgress } from "./useController";
+import { subagentDispatchName } from "./subagentDispatch";
+import {
+  parentToolCallIdPrefix,
+  subagentRunIsRunning,
+  subagentRunOutcome,
+  type SubagentRunView,
+} from "./subagentRunsBridge";
 import type { SubagentOutcome } from "./subagentOutcome";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
@@ -41,7 +48,7 @@ export interface SubagentEntry {
 
 /** True when a tool item is a sub-agent dispatch (or a fan-out container). */
 export function isSubagentItem(item: Item): item is ToolItem {
-  return item.kind === "tool" && SUBAGENT_PROGRESS_TOOLS.has(item.name);
+  return item.kind === "tool" && subagentDispatchName(item) !== undefined;
 }
 
 function subagentRunning(item: ToolItem): boolean {
@@ -55,7 +62,9 @@ function subagentRunning(item: ToolItem): boolean {
 function toEntry(item: ToolItem): SubagentEntry {
   return {
     id: item.id,
-    name: item.name,
+    // The dispatch target, not the provider-visible proxy name: a fleet call
+    // arrives as "use_capability" and would otherwise be listed as such.
+    name: subagentDispatchName(item) ?? item.name,
     subject: item.subject ?? item.summary ?? "",
     phase: item.subagentProgress?.phase,
     running: subagentRunning(item),
@@ -74,8 +83,14 @@ function toEntry(item: ToolItem): SubagentEntry {
  * Order is the transcript's own (dispatch order), and a call whose parent is
  * missing from the list — a paged history window can drop the parent — stays
  * top-level rather than disappearing: an orphan is still work that ran.
+ *
+ * `runs` (the persisted sidecars) fills what the transcript cannot carry: a
+ * settled session records only the dispatching call, so after a session switch
+ * the children and their outcomes exist nowhere else. A run already represented
+ * by a transcript item is skipped, so a live session and a rehydrated one
+ * produce the same forest.
  */
-export function buildSubagentForest(items: readonly Item[]): SubagentEntry[] {
+export function buildSubagentForest(items: readonly Item[], runs: readonly SubagentRunView[] = []): SubagentEntry[] {
   const entries = new Map<string, SubagentEntry>();
   const parentOf = new Map<string, string>();
   const order: string[] = [];
@@ -94,7 +109,54 @@ export function buildSubagentForest(items: readonly Item[]): SubagentEntry[] {
     if (parent) parent.children.push(entry);
     else roots.push(entry);
   }
+  attachPersistedRuns(roots, entries, runs);
   return roots;
+}
+
+function runEntry(run: SubagentRunView): SubagentEntry {
+  const status: ToolItem["status"] = subagentRunIsRunning(run)
+    ? "running"
+    : run.status === "failed"
+      ? "error"
+      : run.status === "interrupted"
+        ? "stopped"
+        : "done";
+  return {
+    id: run.ref,
+    name: run.name || run.kind || "task",
+    // The run sidecar records the dispatch model/effort but no display subject;
+    // the panel titles the row from the ref instead of inventing one.
+    subject: "",
+    // No live phase survives a restart; the settle status is all there is.
+    phase: undefined,
+    running: subagentRunIsRunning(run),
+    status,
+    profile: run.model || run.effort ? { model: run.model, effort: run.effort } : undefined,
+    durationMs: undefined,
+    progress: undefined,
+    outcome: subagentRunOutcome(run),
+    children: [],
+  };
+}
+
+/** Attach persisted runs the transcript no longer represents. */
+function attachPersistedRuns(
+  roots: SubagentEntry[],
+  entries: ReadonlyMap<string, SubagentEntry>,
+  runs: readonly SubagentRunView[],
+): void {
+  if (runs.length === 0) return;
+  for (const run of runs) {
+    // A transcript item with this exact id already carries the run (the child
+    // call is namespaced "<parentCallID>/<childIndex>", which is what the
+    // sidecar stores as parentToolCallId).
+    if (entries.has(run.parentToolCallId ?? "")) continue;
+    const parentID = parentToolCallIdPrefix(run.parentToolCallId);
+    const parent = parentID ? entries.get(parentID) : undefined;
+    const entry = runEntry(run);
+    if (parent) parent.children.push(entry);
+    else roots.push(entry);
+  }
 }
 
 /** Flattened dispatch count and the number still producing output. */

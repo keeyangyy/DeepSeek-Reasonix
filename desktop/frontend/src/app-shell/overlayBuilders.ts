@@ -42,7 +42,7 @@ export function buildOverlayHostProps(input: {
   onAddSelectedText: (text: string) => void;
   prefillSubagentCommand: (command: string) => void;
   /** Session sub-agent inventory, for the sub-agent panel's view props. */
-  subagents: { open: boolean; items: NonNullable<AppOverlayHostProps["subagents"]>["view"]["items"]; close: () => void };
+  subagents: { open: boolean; items: NonNullable<AppOverlayHostProps["subagents"]>["view"]["items"]; runs: NonNullable<AppOverlayHostProps["subagents"]>["view"]["runs"]; close: () => void };
 
   sessionActions: {
     previewSession: NonNullable<AppOverlayHostProps["history"]>["commands"]["onPreview"];
@@ -103,7 +103,7 @@ export function buildOverlayHostProps(input: {
       commands: { onClose: worktree.closeWorktreeMerge, onMerged: worktree.handleWorktreeMerged },
     } : undefined,
     subagents: input.subagents.open ? {
-      view: { items: input.subagents.items },
+      view: { items: input.subagents.items, runs: input.subagents.runs },
       commands: { onClose: input.subagents.close },
     } : undefined,
   };
