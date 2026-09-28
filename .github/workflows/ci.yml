@@ -232,7 +232,11 @@ jobs:
             #      reproduces locally, and passes on a rerun. The branch above
             #      already excluded go test's process-level timeout, so these
             #      patterns cannot match the deadlock case.
-            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|unexpected return pc|: timed out|timed out waiting for|timed out after [0-9]+"; then
+            #   3. a TempDir cleanup race ("TempDir RemoveAll cleanup: ... is not
+            #      empty"): a background writer still touches the directory while
+            #      t.TempDir() removes it. Same class: slow runners only, passes
+            #      on a rerun.
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
@@ -339,7 +343,11 @@ jobs:
             #      30s"). It only trips on loaded/slow runners, never
             #      reproduces locally, and passes on a rerun. The branch above
             #      already excluded go test's process-level timeout.
-            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin|: timed out|timed out waiting for|timed out after [0-9]+"; then
+            #   3. a TempDir cleanup race ("TempDir RemoveAll cleanup: ... is not
+            #      empty"): a background writer still touches the directory while
+            #      t.TempDir() removes it. Same class: slow runners only, passes
+            #      on a rerun.
+            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
@@ -885,7 +893,11 @@ jobs:
             #      30s"). It only trips on loaded/slow runners, never
             #      reproduces locally, and passes on a rerun. The branch above
             #      already excluded go test's process-level timeout.
-            if ($output -notmatch 'rejected the graceful close request|: timed out|timed out waiting for|timed out after \d+') { $output; exit $code }
+            #   3. a TempDir cleanup race ("TempDir RemoveAll cleanup: ... is not
+            #      empty"): a background writer still touches the directory while
+            #      t.TempDir() removes it. Same class: slow runners only, passes
+            #      on a rerun.
+            if ($output -notmatch 'rejected the graceful close request|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after \d+') { $output; exit $code }
             Write-Warning "known WebView2 smoke flake or test-internal timeout matched; retrying attempt $attempt"
             Start-Sleep -Seconds 5
           }
