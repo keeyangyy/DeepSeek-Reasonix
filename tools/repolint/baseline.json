@@ -1505,9 +1505,6 @@
     },
     "sdk/go/wire.go": {
       "essay": 1
-    },
-    "workers/crash-report/src/index.ts": {
-      "file-size": 874
     }
   }
 }
