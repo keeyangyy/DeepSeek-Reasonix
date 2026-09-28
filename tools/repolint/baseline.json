@@ -1273,18 +1273,21 @@
     "internal/recovery/decision_test.go": {
       "essay": 1
     },
-    "internal/recovery/gate.go": {
+    "internal/recovery/gate_decision.go": {
       "complexity": 2,
-      "essay": 4,
-      "file-size": 685
+      "essay": 4
     },
     "internal/recovery/gate_test.go": {
       "test-file-size": 746
     },
     "internal/recovery/rules.go": {
-      "complexity": 19,
-      "essay": 1,
-      "file-size": 211
+      "essay": 1
+    },
+    "internal/recovery/rules_command_risk.go": {
+      "complexity": 15
+    },
+    "internal/recovery/rules_command_safe.go": {
+      "complexity": 4
     },
     "internal/remote/auth.go": {
       "essay": 1
