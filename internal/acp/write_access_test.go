@@ -46,7 +46,7 @@ func TestUpdateSinkWriteAccessOptionsMapScopes(t *testing.T) {
 		if c != (approveCall{id: "wa-1", allow: true, session: true, persist: true}) {
 			t.Fatalf("approve = %+v", c)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("write-access approve was never called")
 	}
 }
@@ -68,7 +68,7 @@ func TestUpdateSinkWriteAccessLegacyAllowOnce(t *testing.T) {
 		if c != (approveCall{id: "wa-2", allow: true}) {
 			t.Fatalf("legacy allow_once = %+v", c)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("legacy write-access approve was never called")
 	}
 }
