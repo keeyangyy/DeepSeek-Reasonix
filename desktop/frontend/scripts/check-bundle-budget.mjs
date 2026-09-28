@@ -303,7 +303,11 @@ for (const path of localeChunks) {
   // bar adds seven more (select-all/clear, {n}-selected count, restore/delete
   // selected, row aria). zh measures 63827 B (62.331 KiB) and zh-TW 64622 B
   // (63.107 KiB); retain the next one-decimal ceiling for each dialect.
-  const budget = name.startsWith("zh-TW-") ? 63.2 * 1024 : 62.4 * 1024;
+  // 2026-09-28: the sub-agent panel adds eleven labels per dialect (title,
+  // summary, empty state, per-row toggle/phase hints); the measured chunks move
+  // to 64090 B (62.588 KiB) zh and 64895 B (63.374 KiB) zh-TW, so retain the
+  // next one-decimal ceiling for each dialect.
+  const budget = name.startsWith("zh-TW-") ? 63.4 * 1024 : 62.6 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -442,6 +446,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-28: naming the sub-agents a fold hides (segment counts, header label
 // and its three-dialect strings) adds 0.7 KiB over the 2423.7 KiB baseline;
 // widen to 2425 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_425;
+// 2026-09-28: the sub-agent panel (its own drawer view, the inventory
+// projection and eleven labels per dialect) adds 1.6 KiB on the initial path
+// (2426.6 KiB measured); widen to 2427 with the gzip gate untouched.
+const rawInitialBudgetKiB = 2_427;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
