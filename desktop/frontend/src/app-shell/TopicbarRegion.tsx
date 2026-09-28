@@ -54,6 +54,7 @@ export function TopicbarRegion({ view, commands, children }: {
             onChange={event => commands.setTitleDraft(event.target.value)}
             onFocus={event => event.currentTarget.select()}
             onKeyDown={event => {
+              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
               if (event.key === "Enter") { event.preventDefault(); void commands.commitRename(); }
               if (event.key === "Escape") { event.preventDefault(); commands.cancelRename(); }
             }} onBlur={() => void commands.commitRename()} />

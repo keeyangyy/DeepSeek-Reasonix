@@ -76,6 +76,22 @@ eq(
   true,
   "a stale project-tree revision falls back to a full snapshot refetch instead of dropping the event",
 );
+eq(
+  /onKeyDown=\{\(event\) => \{\s*if \(event\.nativeEvent\.isComposing \|\| event\.nativeEvent\.keyCode === 229\) return;\s*if \(event\.key === "Enter"\) void commitRenameTopic\(topicId\)/.test(projectTreeSource),
+  true,
+  "topic rename ignores Enter while an IME composition is active",
+);
+eq(
+  /onKeyDown=\{\(event\) => \{\s*if \(event\.nativeEvent\.isComposing \|\| event\.nativeEvent\.keyCode === 229\) return;\s*if \(event\.key === "Enter"\) void commitRenameProject\(projectRoot\)/.test(projectTreeSource),
+  true,
+  "project folder rename ignores Enter while an IME composition is active",
+);
+const organizationSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../components/ProjectTreeOrganization.tsx"), "utf8");
+eq(
+  /onKeyDown=\{\(event\) => \{\s*if \(event\.nativeEvent\.isComposing \|\| event\.nativeEvent\.keyCode === 229\) return;\s*if \(event\.key === "Enter"\) commitRename\(group\.id\)/.test(organizationSource),
+  true,
+  "group rename ignores Enter while an IME composition is active",
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
