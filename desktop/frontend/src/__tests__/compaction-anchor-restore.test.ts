@@ -174,7 +174,8 @@ console.log("\ncompaction anchor restore");
   ok(compactionCards(s.items).length === 1, "重复 latest_compaction 不重复插卡");
 }
 
-// 场景 3：锚点越界（rewind 后 user 行变少）→ 回退 append 末尾，不丢失。
+// 场景 3：rewind 后页面 user 行与锚点文本不符（同计数、不同轮次）→ 回退末尾，不丢失。
+// （注意与场景 7 区分：那是计数越界 → 顶部。）
 {
   const SESSION = "t3.jsonl";
   let s = reducer(initialState, {
@@ -396,6 +397,60 @@ console.log("\ncompaction anchor restore");
   ok(
     idxB === 0 && idxA === u4Idx - 1,
     "压B（无新回合）在顶部、压A 在四回合前（各自语义）",
+  );
+}
+
+// 场景 7：锚点计数越界（压缩后又聊了多轮，切回页面只含最近几轮）→ 卡片在顶部，
+// 不沉到消息流最底部。长会话里压缩边界滚出 60-turn 页面窗口时触发。
+{
+  const SESSION = "t7.jsonl";
+  let s = reducer(initialState, {
+    type: "meta",
+    meta: { sessionPath: SESSION },
+  } as never);
+  s = reducer(s, {
+    type: "history",
+    messages: [userMsg("一"), assistantMsg("答一")],
+    seq: 2,
+    remote: false,
+  } as never);
+  s = reducer(s, {
+    type: "event",
+    e: { kind: "compaction_started", compaction: { trigger: "manual" } },
+  } as never);
+  s = reducer(s, {
+    type: "event",
+    e: {
+      kind: "compaction_done",
+      compaction: { trigger: "manual", messages: 2, summary: "压F" },
+    },
+  } as never);
+  // 压缩后又聊了 5 轮：锚点 usersAfter=5
+  for (const t of ["二", "三", "四", "五", "六"]) {
+    s = reducer(s, { type: "user", text: t } as never);
+    s = reducer(s, {
+      type: "assistant",
+      text: "答" + t,
+      reasoning: "",
+      streaming: false,
+    } as never);
+  }
+  // 切回：页面只含最近 2 轮（userCount=2 < usersAfter=5）→ 计数越界
+  let back = reducer(initialState, {
+    type: "meta",
+    meta: { sessionPath: SESSION },
+  } as never);
+  back = reducer(back, {
+    type: "history",
+    messages: [userMsg("五"), assistantMsg("答五"), userMsg("六"), assistantMsg("答六")],
+    seq: 4,
+    remote: false,
+  } as never);
+  const cards = compactionCards(back.items);
+  ok(cards.length === 1, "越界场景卡片不丢失");
+  ok(
+    back.items[0].kind === "compaction",
+    "锚点计数越界（锚点轮次滚出页面窗口）时卡片在顶部，而非消息流最底部",
   );
 }
 
