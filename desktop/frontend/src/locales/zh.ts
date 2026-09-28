@@ -3457,6 +3457,15 @@ export const zh: Record<DictKey, string> = {
   "subagent.preview.notice": "提示",
   "subagent.preview.truncated": "预览已截断",
   "subagent.outcome.retryable": "可重试",
+  "subagent.panel.title": "子代理",
+  "subagent.panel.summary": "共派发 {total} 个 · {running} 个运行中",
+  "subagent.panel.emptySummary": "尚未派发子代理",
+  "subagent.panel.empty": "本会话还没有派发过子代理。",
+  "subagent.panel.backToTranscript": "返回对话",
+  "subagent.panel.noPreview": "没有实时预览——这条调用来自历史记录。",
+  "subagent.panel.unknownPhase": "无实时状态",
+  "subagent.panel.toggle": "展开/收起详情",
+  "topicBar.subagents": "子代理",
 
   // 软件更新
   "config.loadWarning": "配置问题：{msg}",

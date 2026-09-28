@@ -3454,6 +3454,15 @@ export const en = {
   "subagent.preview.notice": "Notices",
   "subagent.preview.truncated": "preview truncated",
   "subagent.outcome.retryable": "retryable",
+  "subagent.panel.title": "Sub-agents",
+  "subagent.panel.summary": "{total} dispatched · {running} running",
+  "subagent.panel.emptySummary": "No sub-agents yet",
+  "subagent.panel.empty": "This session has not dispatched a sub-agent yet.",
+  "subagent.panel.backToTranscript": "Back to conversation",
+  "subagent.panel.noPreview": "No live preview — this call came from history.",
+  "subagent.panel.unknownPhase": "no live status",
+  "subagent.panel.toggle": "Toggle details",
+  "topicBar.subagents": "Sub-agents",
 
   // software update
   "config.loadWarning": "Configuration issue: {msg}",

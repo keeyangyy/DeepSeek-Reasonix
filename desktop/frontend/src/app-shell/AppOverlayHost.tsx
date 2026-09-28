@@ -14,6 +14,7 @@ type LoadedProps<T> = T extends () => Promise<{ default: React.ComponentType<inf
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
 const TranscriptSelectionMenu = lazy(() => import("../components/TranscriptSelectionMenu").then((module) => ({ default: module.TranscriptSelectionMenu })));
 const WorktreeMergeModal = lazy(() => import("../components/WorktreeMergeModal").then((module) => ({ default: module.WorktreeMergeModal })));
+const SubagentPanel = lazy(() => import("../components/SubagentPanel").then((module) => ({ default: module.SubagentPanel })));
 
 type Region<Props, ViewKey extends keyof Props> = {
   view: Pick<Props, ViewKey>;
@@ -31,10 +32,11 @@ export type AppOverlayHostProps = {
   startup?: Region<ComponentProps<typeof StartupSplash>, "hold">;
   selection: Region<ComponentProps<typeof TranscriptSelectionMenu>, "enabled" | "resetKey">;
   worktree?: Region<ComponentProps<typeof WorktreeMergeModal>, "tabId" | "isOpen">;
+  subagents?: Region<ComponentProps<typeof SubagentPanel>, "items">;
 };
 
 /** Presentation-only overlay region. Async ownership stays in feature owners. */
-export function AppOverlayHost({ history, recovery, settings, trash, automation, palette, shortcuts, startup, selection, worktree }: AppOverlayHostProps) {
+export function AppOverlayHost({ history, recovery, settings, trash, automation, palette, shortcuts, startup, selection, worktree, subagents }: AppOverlayHostProps) {
   return (
     <>
       {history && <Suspense fallback={null}><HistoryPanel {...history.view} {...history.commands} /></Suspense>}
@@ -52,6 +54,7 @@ export function AppOverlayHost({ history, recovery, settings, trash, automation,
       {startup && <StartupSplash {...startup.view} {...startup.commands} />}
       <Suspense fallback={null}><TranscriptSelectionMenu {...selection.view} {...selection.commands} /></Suspense>
       {worktree && <Suspense fallback={null}><WorktreeMergeModal {...worktree.view} {...worktree.commands} /></Suspense>}
+      {subagents && <Suspense fallback={null}><SubagentPanel {...subagents.view} {...subagents.commands} /></Suspense>}
     </>
   );
 }

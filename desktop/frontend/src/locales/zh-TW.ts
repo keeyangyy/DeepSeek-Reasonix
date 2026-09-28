@@ -2502,6 +2502,15 @@ export const zhTW: Record<DictKey, string> = {
   "subagent.preview.notice": "提示",
   "subagent.preview.truncated": "預覽已截斷",
   "subagent.outcome.retryable": "可重試",
+  "subagent.panel.title": "子代理",
+  "subagent.panel.summary": "共派發 {total} 個 · {running} 個執行中",
+  "subagent.panel.emptySummary": "尚未派發子代理",
+  "subagent.panel.empty": "本工作階段還沒有派發過子代理。",
+  "subagent.panel.backToTranscript": "返回對話",
+  "subagent.panel.noPreview": "沒有即時預覽——這筆呼叫來自歷史記錄。",
+  "subagent.panel.unknownPhase": "無即時狀態",
+  "subagent.panel.toggle": "展開/收合詳情",
+  "topicBar.subagents": "子代理",
 
   // 軟體更新
   "config.loadWarning": "設定問題：{msg}",

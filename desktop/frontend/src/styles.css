@@ -23458,6 +23458,28 @@ body > .mermaid-diagram--fullscreen {
   display: inline-flex;
 }
 
+/* Sub-agent badge: a count over the action icon. The button has no z-index of
+   its own — it sits in the topicbar's own stacking context. */
+.topicbar__action-btn:has(> .topicbar__action-badge) {
+  position: relative;
+}
+
+.topicbar__action-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9.5px;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
 .topicbar__subtitle {
   min-width: 0;
   display: flex;

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Activity, Download, TerminalSquare } from "lucide-react";
+import { Activity, Download, Network, TerminalSquare } from "lucide-react";
 import { CopyButton } from "./CopyButton";
 import { Tooltip } from "./Tooltip";
 import { t } from "../lib/i18n";
@@ -17,6 +17,10 @@ export interface TopicbarSessionActionsProps {
   prefetchTerminal?: () => void;
   openSessionSummary: () => void;
   tasksOpen: boolean;
+  /** Opens the session's sub-agent panel; disabled when the session has none. */
+  openSubagents: () => void;
+  subagentsOpen: boolean;
+  subagentCount: number;
 }
 
 const actionClass = "topicbar__action-btn topicbar__action-btn--icon topicbar__action-btn--utility";
@@ -26,6 +30,7 @@ export function TopicbarSessionActions({
   sessionHasContent, getSessionMarkdown, exportSession,
   toggleTerminal, terminalEnabled = true, terminalOpen, prefetchTerminal,
   openSessionSummary, tasksOpen,
+  openSubagents, subagentsOpen, subagentCount,
 }: TopicbarSessionActionsProps) {
   const exportRootRef = useRef<HTMLDivElement>(null);
   const exportTriggerRef = useRef<HTMLButtonElement>(null);
@@ -101,6 +106,16 @@ export function TopicbarSessionActions({
       <Tooltip label={t("summary.session")}>
         <button className={actionClass} type="button" aria-label={t("summary.session")} aria-expanded={tasksOpen} onClick={openSessionSummary}>
           <Activity size={14} />
+        </button>
+      </Tooltip>
+      <Tooltip label={t("topicBar.subagents")}>
+        <button
+          className={actionClass} type="button" aria-label={t("topicBar.subagents")}
+          aria-expanded={subagentsOpen} disabled={subagentCount === 0}
+          onClick={openSubagents}
+        >
+          <Network size={14} />
+          {subagentCount > 0 && <span className="topicbar__action-badge" data-count={subagentCount}>{subagentCount}</span>}
         </button>
       </Tooltip>
     </>

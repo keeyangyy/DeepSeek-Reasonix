@@ -73,3 +73,127 @@
 .tool__subagent-outcome code {
   overflow-wrap: anywhere;
 }
+
+/* ── Sub-agent panel: the session's delegated work, listed independently of
+   the transcript fold that normally hides it. Docked in ResizableDrawer, so
+   the styles stay inside its body. ──────────────────────────────────────── */
+
+.subagent-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subagent-panel__row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.subagent-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 4px 4px 0;
+  border-radius: 6px;
+}
+
+.subagent-panel__head:hover {
+  background: var(--bg-soft);
+}
+
+.subagent-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.subagent-panel__chevron {
+  transition: transform 0.12s;
+}
+
+.subagent-panel__chevron--open {
+  transform: rotate(90deg);
+}
+
+.subagent-panel__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subagent-panel__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-panel__phase {
+  flex: 0 0 auto;
+  color: var(--fg-dim);
+  font-size: var(--font-caption);
+}
+
+.subagent-panel__phase--running {
+  color: var(--accent);
+}
+
+.subagent-panel__duration {
+  flex: 0 0 auto;
+  color: var(--fg-dim);
+  font-family: var(--font-code-family);
+  font-size: var(--font-caption);
+}
+
+.subagent-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 8px 18px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+.subagent-panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-dim);
+  font-size: var(--font-caption);
+}
+
+.subagent-panel__note,
+.subagent-panel__empty {
+  color: var(--fg-dim);
+  font-size: var(--font-caption);
+}
+
+.subagent-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+}
+
+.subagent-panel__children {
+  display: flex;
+  flex-direction: column;
+}

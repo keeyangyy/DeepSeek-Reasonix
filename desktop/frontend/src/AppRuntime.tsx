@@ -21,6 +21,7 @@ import { useAppShellStores } from "./app-runtime/useAppShellStores";
 import { useAppSessionComposition } from "./app-runtime/useAppSessionComposition";
 import { useAppNavigationComposition } from "./app-runtime/useAppNavigationComposition";
 import { useTopicTimeFilter } from "./app-runtime/useLocalUiLifecycles";
+import { buildSubagentForest, summarizeSubagents } from "./lib/subagentInventory";
 import { AppRuntimeView } from "./app-shell/AppRuntimeView";
 
 // Hold reasoning UI until the authoritative desktop startup settings arrive;
@@ -88,6 +89,7 @@ export function AppRuntime() {
   const [sidebarImDetailConnectionId, setSidebarImDetailConnectionId] = useState("");
   const [topicTimeFilter, setTopicTimeFilter] = useTopicTimeFilter();
   const [tasksOpen, setTasksOpen] = useState<false | "session" | "all">(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
   const workspaceScopeActiveTabRef = useRef(activeTabId);
   const [workspaceControllerEpoch, setWorkspaceControllerEpoch] = useState(0);
   workspaceScopeActiveTabRef.current = activeTabId;
@@ -120,6 +122,12 @@ export function AppRuntime() {
     },
     goal: { runGoalAction, handleGoalActionError },
   });
+  // The topicbar badge needs the session's sub-agent count before the panel
+  // ever opens, so the projection runs here rather than only inside the panel.
+  const subagentCount = useMemo(
+    () => summarizeSubagents(buildSubagentForest(session.transcript.visibleTranscriptItems)).total,
+    [session.transcript.visibleTranscriptItems],
+  );
   const navigation = useAppNavigationComposition({
     runtime,
     t,
@@ -151,6 +159,7 @@ export function AppRuntime() {
       runtime={runtime}
       local={{
         tasksOpen, setTasksOpen, topicTimeFilter, setTopicTimeFilter,
+        subagentsOpen, setSubagentsOpen, subagentCount,
         sidebarImDetailConnectionId, setSidebarImDetailConnectionId,
         tabRevealSignal, transcriptRevealSignal, histView,
         projectRevision, dockRefreshKey, composerFileRefRefreshKey, refreshComposerFileRefs,

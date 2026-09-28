@@ -68,6 +68,9 @@ export type AppRuntimeViewProps = {
   local: {
     tasksOpen: false | "session" | "all";
     setTasksOpen: React.Dispatch<React.SetStateAction<false | "session" | "all">>;
+    subagentsOpen: boolean;
+    setSubagentsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    subagentCount: number;
     topicTimeFilter: TopicTimeFilter;
     setTopicTimeFilter: (value: TopicTimeFilter) => void;
     sidebarImDetailConnectionId: string;
@@ -295,6 +298,9 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
               setTasksOpen={local.setTasksOpen}
               onCloseTasks={() => local.setTasksOpen(false)}
               onOpenTaskSession={navigationCommands.openTaskMonitorSession}
+              subagentsOpen={local.subagentsOpen}
+              setSubagentsOpen={local.setSubagentsOpen}
+              subagentCount={local.subagentCount}
               creation={sidebarCreation}
               dockToggle={<DockToggleButton renderable={surfaceWorkspacePanelRenderable} t={t} onToggle={session.workspacePanelCommands.toggleWorkspacePanel} />}
             />
@@ -495,6 +501,11 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
         worktree: navigation.worktreeMergeCommands,
         onAddSelectedText: session.insertCommands.addSelectedTextToComposer,
         prefillSubagentCommand: session.insertCommands.prefillSubagentCommand,
+        subagents: {
+          open: local.subagentsOpen,
+          items: session.transcript.visibleTranscriptItems,
+          close: () => local.setSubagentsOpen(false),
+        },
         sessionActions: {
           previewSession: runtime.sessionActions.previewSession,
           listTrashedSessions: runtime.sessionActions.listTrashedSessions,
