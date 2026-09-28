@@ -12062,6 +12062,13 @@ body > .mermaid-diagram--fullscreen {
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
 }
+/* The Windows caption buttons are fixed at the window's top-right, which is
+   exactly where a right-docked drawer's header sits — the drawer's own close
+   button would land on top of them. Push the header below the caption strip so
+   the two never share a target; other platforms keep the normal padding. */
+.app--windows-frameless .drawer__head {
+  padding-top: calc(14px + var(--windows-window-controls-height, 48px));
+}
 .drawer__title {
   font-size: 15px;
   font-weight: 650;

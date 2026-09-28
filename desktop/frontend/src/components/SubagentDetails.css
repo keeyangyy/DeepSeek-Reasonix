@@ -197,3 +197,109 @@
   display: flex;
   flex-direction: column;
 }
+
+/* ── Panel groups: running work first, settled history folded below ───── */
+.subagent-panel__group + .subagent-panel__group {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.subagent-panel__group-title {
+  padding: 2px 4px 6px;
+  color: var(--fg-faint);
+  font-size: var(--font-caption);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The id tail that tells two subject-less rows apart. */
+.subagent-panel__tag {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--fg-faint);
+  font-family: var(--font-code-family);
+  font-size: var(--font-caption);
+}
+
+
+/* ── Activity strip: composer-side visibility while sub-agents run ────── */
+.subagent-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: var(--maxw);
+  margin: 0 auto 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: var(--font-caption);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.subagent-strip:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.subagent-strip__pulse {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: subagent-strip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes subagent-strip-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.subagent-strip__count {
+  flex: 0 0 auto;
+  font-weight: 650;
+  color: var(--fg);
+}
+
+.subagent-strip__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-strip__time {
+  color: var(--fg-faint);
+  font-style: normal;
+}
+
+.subagent-strip__more {
+  flex: 0 0 auto;
+  color: var(--fg-faint);
+}
+
+.subagent-strip__open {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subagent-strip__pulse {
+    animation: none;
+  }
+}

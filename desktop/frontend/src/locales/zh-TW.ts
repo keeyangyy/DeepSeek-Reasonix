@@ -2510,6 +2510,11 @@ export const zhTW: Record<DictKey, string> = {
   "subagent.panel.noPreview": "沒有即時預覽——這筆呼叫來自歷史記錄。",
   "subagent.panel.unknownPhase": "無即時狀態",
   "subagent.panel.toggle": "展開/收合詳情",
+  "subagent.panel.groupRunning": "執行中",
+  "subagent.panel.groupSettled": "已完成",
+  "subagent.strip.running": "{n} 個子代理執行中",
+  "subagent.strip.more": "另有 {n} 個",
+  "subagent.strip.open": "查看",
   "topicBar.subagents": "子代理",
 
   // 軟體更新

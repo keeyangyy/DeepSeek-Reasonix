@@ -173,3 +173,29 @@ export function summarizeSubagents(forest: readonly SubagentEntry[]): { total: n
   walk(forest);
   return { total, running };
 }
+
+/** A tree is "active" when it or any descendant still produces output. */
+export function subagentTreeIsActive(entry: SubagentEntry): boolean {
+  if (entry.running) return true;
+  return entry.children.some(subagentTreeIsActive);
+}
+
+/**
+ * Split the forest into the trees that still have work in flight and the trees
+ * that settled, keeping dispatch order inside each group.
+ *
+ * Grouping happens at the TREE level, not per row: a running child must not be
+ * filed under "settled" because its parent finished first, and hoisting a whole
+ * active fan-out keeps its children next to the call that owns them.
+ */
+export function splitSubagentsByActivity(forest: readonly SubagentEntry[]): {
+  active: SubagentEntry[];
+  settled: SubagentEntry[];
+} {
+  const active: SubagentEntry[] = [];
+  const settled: SubagentEntry[] = [];
+  for (const entry of forest) {
+    (subagentTreeIsActive(entry) ? active : settled).push(entry);
+  }
+  return { active, settled };
+}

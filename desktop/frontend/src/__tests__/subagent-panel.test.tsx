@@ -10,6 +10,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { SubagentPanel } from "../components/SubagentPanel";
 import { LocaleProvider } from "../lib/i18n";
+import type { SubagentRunView } from "../lib/subagentRunsBridge";
 import type { Item } from "../lib/useController";
 
 let passed = 0;
@@ -61,11 +62,11 @@ const items: Item[] = [
   },
 ];
 
-async function renderPanel(root: ReturnType<typeof createRoot>, panelItems: Item[]) {
+async function renderPanel(root: ReturnType<typeof createRoot>, panelItems: Item[], panelRuns?: readonly SubagentRunView[]) {
   await act(async () => {
     root.render(
       <LocaleProvider locale="en">
-        <SubagentPanel items={panelItems} onClose={() => {}} />
+        <SubagentPanel items={panelItems} runs={panelRuns} onClose={() => {}} />
       </LocaleProvider>,
     );
   });
@@ -82,18 +83,60 @@ await renderPanel(root, items);
   ok(container.querySelectorAll(".subagent-panel__row[data-running]").length === 2, "running dispatches are marked");
   ok(container.textContent?.includes("3 dispatched"), "the header summarizes the flattened count");
   ok(container.textContent?.includes("2 running"), "the header summarizes the running count");
-  ok(container.textContent?.includes("reading files"), "the live reasoning preview renders");
-  ok(container.textContent?.includes("gpt-x"), "the dispatched model is shown");
+  // Rows start folded: the detail only appears once the reader expands one.
+  ok(!container.textContent?.includes("reading files"), "a folded row hides its live reasoning preview");
+  ok(!container.textContent?.includes("gpt-x"), "a folded row hides its dispatch model");
 }
 
-// Collapsing the fan-out hides its children rather than dropping them.
+// Expanding one row reveals that row's detail only.
 {
-  const head = document.querySelector(".subagent-panel__row .subagent-panel__title") as HTMLButtonElement | null;
-  await act(async () => { head?.click(); });
+  // The rows in the DOM are the fan-out followed by its children, so the
+  // second title is the child that carries the dispatch model.
+  const titles = Array.from(document.querySelectorAll(".subagent-panel__title")) as HTMLButtonElement[];
+  const child = titles.find((node) => node.textContent?.includes("check the fold header"));
+  await act(async () => { child?.click(); });
   const container = document.body;
-  ok(!container.textContent?.includes("check the fold header"), "collapsing a fan-out hides its children");
-  ok(container.textContent?.includes("audit the fork"), "the collapsed fan-out itself stays listed");
-  await act(async () => { head?.click(); });
+  ok(container.textContent?.includes("gpt-x"), "expanding a row shows its dispatch model");
+  ok(container.textContent?.includes("check the fold header"), "expanding keeps the fan-out's children visible");
+  await act(async () => { child?.click(); });
+  ok(!container.textContent?.includes("gpt-x"), "collapsing the row hides its detail again");
+  ok(container.textContent?.includes("check the fold header"), "a collapsed fan-out still shows the calls it fanned out");
+}
+
+// Running work is grouped above settled work.
+{
+  await renderPanel(root, [
+    { kind: "tool", id: "s-1", name: "task", args: "{}", readOnly: false, status: "done", subject: "finished one" },
+    { kind: "tool", id: "s-2", name: "task", args: "{}", readOnly: false, status: "running", subject: "still going" },
+  ]);
+  const titles = Array.from(document.body.querySelectorAll(".subagent-panel__group-title")).map((node) => node.textContent);
+  const rows = Array.from(document.body.querySelectorAll(".subagent-panel__name")).map((node) => node.textContent);
+  ok(titles[0] === "Running" && titles[1] === "Finished", "the running group is listed before the settled group");
+  ok(rows[0]?.includes("still going"), "the running dispatch comes first regardless of dispatch order");
+}
+
+// A running child keeps its whole tree in the running group.
+{
+  await renderPanel(root, [
+    { kind: "tool", id: "c-parent", name: "fleet", args: "{}", readOnly: false, status: "done", subject: "settled orchestrator" },
+    { kind: "tool", id: "c-child", parentId: "c-parent", name: "task", args: "{}", readOnly: false, status: "running", subject: "child still working" },
+  ]);
+  const groups = Array.from(document.body.querySelectorAll(".subagent-panel__group"));
+  ok(groups.length === 1, "a tree with a running child is not split across groups");
+  ok(groups[0]?.textContent?.includes("settled orchestrator") && groups[0]?.textContent?.includes("child still working"), "the running child keeps its parent in the same group");
+  ok(Boolean(document.body.querySelector(".subagent-panel__row[data-running]")), "the running child is still marked");
+}
+
+// Sidecar runs the transcript lost are listed and folded like any other row.
+{
+  await renderPanel(root, [
+    { kind: "tool", id: "r-1", name: "use_capability", args: "{}", readOnly: false, status: "done", capabilityId: "tool:fleet" },
+  ], [
+    { ref: "sa_lost", parentToolCallId: "r-1/fleet-1", kind: "task", name: "task", status: "completed", model: "m-lost" },
+  ]);
+  const container = document.body;
+  ok(container.textContent?.includes("sa_lost") || Boolean(container.querySelector(".subagent-panel__tag")), "a restored sidecar run is listed");
+  ok(container.textContent?.includes("2 dispatched"), "the restored run counts toward the summary");
 }
 
 // A hydrated call has no live preview: the panel must say so, not invent state.
@@ -104,8 +147,13 @@ await renderPanel(root, [
   const container = document.body;
   ok(container.textContent?.includes("old call"), "a hydrated call is listed");
   ok(container.textContent?.includes("no live status"), "a hydrated call reports no live phase instead of inventing one");
-  ok(container.textContent?.includes("No live preview"), "a hydrated call explains the missing preview");
   ok(!container.querySelector(".subagent-panel__row[data-running]"), "a hydrated settled call is not marked running");
+}
+// The "no preview" note is row detail, so it appears only after expanding.
+{
+  const head = document.querySelector(".subagent-panel__row .subagent-panel__title") as HTMLButtonElement | null;
+  await act(async () => { head?.click(); });
+  ok(document.body.textContent?.includes("No live preview"), "expanding a hydrated call explains the missing preview");
 }
 
 await renderPanel(root, [{ kind: "assistant", id: "a1", text: "nothing delegated", reasoning: "", streaming: false }]);

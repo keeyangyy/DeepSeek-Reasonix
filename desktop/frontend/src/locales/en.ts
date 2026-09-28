@@ -3462,6 +3462,11 @@ export const en = {
   "subagent.panel.noPreview": "No live preview — this call came from history.",
   "subagent.panel.unknownPhase": "no live status",
   "subagent.panel.toggle": "Toggle details",
+  "subagent.panel.groupRunning": "Running",
+  "subagent.panel.groupSettled": "Finished",
+  "subagent.strip.running": "{n} sub-agents running",
+  "subagent.strip.more": "+{n} more",
+  "subagent.strip.open": "View",
   "topicBar.subagents": "Sub-agents",
 
   // software update

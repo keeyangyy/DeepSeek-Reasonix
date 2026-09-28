@@ -30,10 +30,11 @@ export type DecisionFooterSurface =
   | { kind: "clear-context"; identity: string; props: ClearContextProps };
 
 /** Loading one decision cannot hide an already available sibling or its focus. */
-export function DecisionFooterSlots({ todo, undo, decision }: { todo: ReactNode; undo: ReactNode; decision: ReactNode }) {
+export function DecisionFooterSlots({ todo, undo, strip, decision }: { todo: ReactNode; undo: ReactNode; strip: ReactNode; decision: ReactNode }) {
   return <>
     <Suspense fallback={null}>{todo}</Suspense>
     <Suspense fallback={null}>{undo}</Suspense>
+    <Suspense fallback={null}>{strip}</Suspense>
     <Suspense fallback={null}>{decision}</Suspense>
   </>;
 }
@@ -45,6 +46,8 @@ export type DecisionFooterRegionProps = {
   footerRef: ComponentProps<"footer">["ref"];
   todo?: { identity: string; props: TodoProps };
   undo?: { identity: string; props: UndoProps };
+  /** One-line sub-agent activity strip; absent when nothing is running. */
+  strip?: ReactNode;
   decision?: DecisionFooterSurface;
   composer: {
     hidden: boolean;
@@ -79,6 +82,7 @@ export function DecisionFooterRegion({
   footerRef,
   todo,
   undo,
+  strip,
   decision,
   composer,
 }: DecisionFooterRegionProps) {
@@ -89,6 +93,7 @@ export function DecisionFooterRegion({
       <DecisionFooterSlots
         todo={todo ? <TodoPanel key={todo.identity} {...todo.props} /> : null}
         undo={undo ? <UndoRewindBanner key={undo.identity} {...undo.props} /> : null}
+        strip={strip ?? null}
         decision={decision ? <DecisionSurface surface={decision} /> : null}
       />
       {/* Composer remains mounted while decisions are visible so session-scoped drafts survive. */}

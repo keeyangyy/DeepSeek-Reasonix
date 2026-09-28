@@ -27,6 +27,7 @@ import { DockToggleButton } from "./DockToggleButton";
 import { SessionStatusBanners } from "./SessionStatusBanners";
 import { ChatPaneRegion } from "./ChatPaneRegion";
 import { DecisionFooterRegion } from "./DecisionFooterRegion";
+import { SubagentRunningStrip } from "../components/SubagentRunningStrip";
 import { WorkspaceDockRegion } from "./WorkspaceDockRegion";
 import { AppBottomRegions } from "./AppBottomRegions";
 import { AppOverlayHost } from "./AppOverlayHost";
@@ -34,7 +35,7 @@ import { buildAppShellClassNames, buildSessionStatusBannerProps, buildSidebarReg
 import { buildBottomRegionsProps, buildWorkspaceDockProps } from "./dockRegionBuilders";
 import { buildOverlayHostProps } from "./overlayBuilders";
 import type { SubagentRunView } from "../lib/subagentRunsBridge";
-import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo } from "./decisionFooterBuilders";
+import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo, buildSubagentFooterStrip } from "./decisionFooterBuilders";
 
 const WindowsWindowControls = lazy(() => import("./WindowsWindowControls").then((module) => ({ default: module.WindowsWindowControls })));
 
@@ -161,6 +162,12 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
     onDismiss: session.todoPanel.dismissTodos,
   });
   const footerUndo = buildFooterUndo({ rewindState: session.sessionUndo.rewindState, activeTabId, onUndo: session.sessionUndo.handleUndoRewind });
+  // The strip lives next to the composer, so it shares the panel's projection
+  // (and therefore its activity grouping) rather than re-deriving one.
+  const subagentStripView = buildSubagentFooterStrip({
+    items: session.transcript.visibleTranscriptItems,
+    runs: local.subagentRuns,
+  });
   const decisionFooterSurface = buildDecisionFooterSurface({
     view: {
       surface: visibleDecisionSurface,
@@ -372,6 +379,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
             style={core.surface.surface?.phase === "source-retained" && footerHeight > 0 ? { height: footerHeight, minHeight: footerHeight, boxSizing: "border-box" } : undefined}
             todo={footerTodo}
             undo={footerUndo}
+            strip={subagentStripView ? <SubagentRunningStrip forest={subagentStripView.forest} onOpen={() => local.setSubagentsOpen(true)} /> : undefined}
             decision={decisionFooterSurface}
             composer={buildComposerSurface({
               view: {

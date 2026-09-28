@@ -3465,6 +3465,11 @@ export const zh: Record<DictKey, string> = {
   "subagent.panel.noPreview": "没有实时预览——这条调用来自历史记录。",
   "subagent.panel.unknownPhase": "无实时状态",
   "subagent.panel.toggle": "展开/收起详情",
+  "subagent.panel.groupRunning": "运行中",
+  "subagent.panel.groupSettled": "已完成",
+  "subagent.strip.running": "{n} 个子代理运行中",
+  "subagent.strip.more": "另有 {n} 个",
+  "subagent.strip.open": "查看",
   "topicBar.subagents": "子代理",
 
   // 软件更新

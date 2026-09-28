@@ -4,7 +4,7 @@
 // a fan-out nests, and which are still running. Pure function tests — the panel
 // view is covered separately.
 
-import { buildSubagentForest, isSubagentItem, summarizeSubagents } from "../lib/subagentInventory";
+import { buildSubagentForest, isSubagentItem, splitSubagentsByActivity, subagentTreeIsActive, summarizeSubagents } from "../lib/subagentInventory";
 import type { Item } from "../lib/useController";
 
 let passed = 0;
@@ -145,6 +145,37 @@ const items: Item[] = [
   const merged = buildSubagentForest(live, runs);
   ok(merged[0]?.children.length === 2, "a run already represented by a transcript item is not listed twice");
   ok(merged[0]?.children.filter((c) => c.id === "call_00_fleet/fleet-1").length === 1, "the transcript's own child keeps its identity");
+}
+
+// ── Activity grouping ────────────────────────────────────────────────────────
+// The panel puts running work first and folds the settled history below it.
+// Grouping is per TREE: a running child must not be filed under "settled"
+// because its parent finished first, and a whole active fan-out moves together.
+{
+  const forest = buildSubagentForest([
+    { kind: "tool", id: "g-done", name: "task", args: "{}", readOnly: false, status: "done" },
+    { kind: "tool", id: "g-live", name: "task", args: "{}", readOnly: false, status: "running" },
+  ]);
+  const groups = splitSubagentsByActivity(forest);
+  ok(groups.active.length === 1 && groups.settled.length === 1, "a running and a settled tree split into two groups");
+  ok(groups.active[0]?.id === "g-live", "the running tree is the active group");
+  ok(groups.settled[0]?.id === "g-done", "the settled tree is the settled group");
+}
+{
+  const forest = buildSubagentForest([
+    { kind: "tool", id: "p-settled", name: "fleet", args: "{}", readOnly: false, status: "done" },
+    { kind: "tool", id: "p-live-child", parentId: "p-settled", name: "task", args: "{}", readOnly: false, status: "running" },
+  ]);
+  ok(subagentTreeIsActive(forest[0]!), "a tree with a running descendant counts as active");
+  const groups = splitSubagentsByActivity(forest);
+  ok(groups.active.length === 1 && groups.settled.length === 0, "a running child keeps the whole tree in the active group");
+}
+{
+  const forest = buildSubagentForest([
+    { kind: "tool", id: "z-1", name: "task", args: "{}", readOnly: false, status: "done" },
+  ]);
+  ok(!subagentTreeIsActive(forest[0]!), "a settled tree without running descendants is not active");
+  ok(splitSubagentsByActivity(forest).settled.length === 1, "it lands in the settled group");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

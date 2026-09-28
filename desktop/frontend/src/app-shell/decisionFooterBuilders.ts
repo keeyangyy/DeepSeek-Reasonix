@@ -1,5 +1,8 @@
 import type { Todo } from "../lib/tools";
 import type { RewindUndoState } from "../lib/rewindTypes";
+import type { Item } from "../lib/useController";
+import { buildSubagentForest, summarizeSubagents, type SubagentEntry } from "../lib/subagentInventory";
+import type { SubagentRunView } from "../lib/subagentRunsBridge";
 import type { WorkspaceConflictView } from "../lib/types";
 import type { DecisionSurfaceKind as MockDecisionSurfaceKind } from "../lib/decisionSurfaceMock";
 import type { Translator } from "../lib/i18n";
@@ -329,4 +332,19 @@ export function buildComposerSurface(input: ComposerSurfaceInput): DecisionFoote
       heroMode: view.hero,
     },
   };
+}
+
+/**
+ * The sub-agent activity strip's view model, or undefined when nothing runs.
+ *
+ * Built from the same projection the panel uses, so a run listed as finished
+ * here can never still appear as running there.
+ */
+export function buildSubagentFooterStrip(input: {
+  items: readonly Item[];
+  runs: readonly SubagentRunView[];
+}): { forest: SubagentEntry[] } | undefined {
+  const forest = buildSubagentForest(input.items, input.runs);
+  if (summarizeSubagents(forest).running === 0) return undefined;
+  return { forest };
 }
