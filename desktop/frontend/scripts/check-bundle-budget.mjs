@@ -307,7 +307,10 @@ for (const path of localeChunks) {
   // summary, empty state, per-row toggle/phase hints); the measured chunks move
   // to 64090 B (62.588 KiB) zh and 64895 B (63.374 KiB) zh-TW, so retain the
   // next one-decimal ceiling for each dialect.
-  const budget = name.startsWith("zh-TW-") ? 63.4 * 1024 : 62.6 * 1024;
+  // 2026-09-28: the running-first grouping and the activity strip add four more
+  // labels per dialect; the measured chunks move to 64148 B (62.645 KiB) zh and
+  // 64940 B (63.418 KiB) zh-TW, so retain the next one-decimal ceiling.
+  const budget = name.startsWith("zh-TW-") ? 63.5 * 1024 : 62.7 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -452,6 +455,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-28: sub-agent visibility after a session switch (proxy-aware
 // dispatch detection, the run-sidecar projection and its loader) adds 1.5 KiB
 // (2428.5 KiB measured); widen to 2429 with the gzip gate untouched.
-const rawInitialBudgetKiB = 2_429;
+// 2026-09-28: the panel's running-first grouping and the composer-side activity
+// strip (group headings, the strip component and three more labels per dialect)
+// add 1.6 KiB (2430.6 KiB measured); widen to 2431.
+const rawInitialBudgetKiB = 2_431;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
