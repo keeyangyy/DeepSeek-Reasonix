@@ -3236,6 +3236,8 @@ export const en = {
   "transcript.loadEarlierFailed": "Earlier conversation could not be loaded",
   "transcript.toolCount": "{n} tools",
   "transcript.thoughtCount": "{n} thoughts",
+  "transcript.subagentCount": "{n} sub-agents",
+  "transcript.subagentRunningCount": "{n} running",
   "transcript.steer": "Mid-turn steer",
   "transcript.working": "Working",
   "transcript.workingDuration": "Working {duration}",

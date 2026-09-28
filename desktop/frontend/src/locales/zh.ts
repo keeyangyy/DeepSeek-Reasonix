@@ -3239,6 +3239,8 @@ export const zh: Record<DictKey, string> = {
   "transcript.loadEarlierFailed": "较早的对话加载失败",
   "transcript.toolCount": "{n} 个工具",
   "transcript.thoughtCount": "{n} 段思考",
+  "transcript.subagentCount": "{n} 个子代理",
+  "transcript.subagentRunningCount": "{n} 个运行中",
   "transcript.steer": "中途引导",
   "transcript.working": "工作中",
   "transcript.workingDuration": "工作中 {duration}",

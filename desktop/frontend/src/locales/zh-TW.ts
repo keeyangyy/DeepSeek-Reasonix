@@ -2289,6 +2289,8 @@ export const zhTW: Record<DictKey, string> = {
   "transcript.loadEarlierFailed": "較早的對話載入失敗",
   "transcript.toolCount": "{n} 個工具",
   "transcript.thoughtCount": "{n} 段思考",
+  "transcript.subagentCount": "{n} 個子代理",
+  "transcript.subagentRunningCount": "{n} 個執行中",
   "transcript.steer": "中途引導",
   "transcript.working": "工作中",
   "transcript.workingDuration": "工作中 {duration}",

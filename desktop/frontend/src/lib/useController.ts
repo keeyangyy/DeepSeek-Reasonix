@@ -118,7 +118,7 @@ const SUBAGENT_PROGRESS_PHASES = new Set(["queued", "running", "reasoning", "res
 // Tool names that initialize a sub-agent progress card. parallel_tasks/fleet
 // are group cards: they settle when their whole child progress tree is
 // terminal, since they never receive a terminal status of their own.
-const SUBAGENT_PROGRESS_TOOLS = new Set(["task", "read_only_task", "parallel_tasks", "fleet"]);
+export const SUBAGENT_PROGRESS_TOOLS = new Set(["task", "read_only_task", "parallel_tasks", "fleet"]);
 // Per-channel preview retention. The backend already bounds what it sends
 // (8 KiB pending per child); these caps keep one hot card from dominating the
 // live conversation memory.

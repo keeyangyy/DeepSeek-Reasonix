@@ -8,7 +8,7 @@
 
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { stableStringHash } from "./stableStringHash";
-import { isBatchedReadOnlyTool, isSteerNoticeText, type ExtensionItem, type Item } from "./useController";
+import { isBatchedReadOnlyTool, isSteerNoticeText, SUBAGENT_PROGRESS_TOOLS, type ExtensionItem, type Item } from "./useController";
 import { appendTurnActionCopyText } from "./turnActionCopy";
 import { isCreationGroupableTool, toolGroupKind, type ToolGroupKind } from "../components/ToolGroup";
 import type { SessionExperience } from "./sessionExperience";
@@ -183,6 +183,15 @@ export interface SegmentModel {
   /** "full" carries the work-duration label; earlier segments only list counts. */
   labelStyle: "full" | "counts";
   turnActive: boolean;
+  /**
+   * Sub-agent calls this fold hides. Counted from the raw process items, not
+   * from `displayItems`: a nested call carries a parentId and is filtered out
+   * of the fold body, yet it is exactly what the header must account for —
+   * once a segment collapses the header is the only thing left on screen.
+   */
+  subagentCount: number;
+  /** Sub-agent calls of this segment that are still producing output. */
+  subagentRunningCount: number;
 }
 
 export interface TurnModel {
@@ -239,6 +248,30 @@ function segmentHasRunningWork(displayItems: readonly Item[], turnActive: boolea
   return turnActive || hasRunningProcess || hasLiveAssistant;
 }
 
+// Group dispatches hold the child calls; the children ARE the sub-agents. They
+// already appear in the tool count (they are top-level process items), so
+// counting them again would double-report one fan-out.
+const SUBAGENT_GROUP_TOOLS = new Set(["parallel_tasks", "fleet"]);
+
+/**
+ * Sub-agent dispatches a fold hides, and how many still produce output.
+ *
+ * Counted from the raw process items, not from `displayItems`: a nested call
+ * carries a parentId and is filtered out of the fold body, yet it is exactly
+ * what the header must account for — once a segment collapses the header is the
+ * only thing left on screen.
+ */
+export function countSegmentSubagents(processItems: readonly Item[]): { total: number; running: number } {
+  let total = 0;
+  let running = 0;
+  for (const item of processItems) {
+    if (item.kind !== "tool" || !SUBAGENT_PROGRESS_TOOLS.has(item.name) || SUBAGENT_GROUP_TOOLS.has(item.name)) continue;
+    total += 1;
+    if (item.status === "running") running += 1;
+  }
+  return { total, running };
+}
+
 export function buildTurnModels(
   items: readonly Item[],
   live: TranscriptLiveFlags = NO_LIVE,
@@ -283,6 +316,7 @@ export function buildTurnModels(
       const displayItems = foldDisplayItems(segment.processItems, live, hideReasoning);
       const turnActive = model.isActive && isLastSegment;
       const hasRunningWork = segmentHasRunningWork(displayItems, turnActive, live);
+      const subagents = countSegmentSubagents(segment.processItems);
       return {
         // Duplicate raw ids occur in imported/merged histories. Derive the
         // disambiguator from stable turn/item identity rather than occurrence
@@ -304,6 +338,8 @@ export function buildTurnModels(
         durationMs: isLastSegment ? turnWorkDurationMs(model.turnItems) : 0,
         labelStyle: isLastSegment ? "full" : "counts",
         turnActive,
+        subagentCount: subagents.total,
+        subagentRunningCount: subagents.running,
       } satisfies SegmentModel;
     });
     let actionText = "";
