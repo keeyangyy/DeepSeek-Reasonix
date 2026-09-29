@@ -13,7 +13,9 @@
 
 import { useEffect, useState } from "react";
 
+import "./SubagentRunningStrip.css";
 import { useT } from "../lib/i18n";
+import { splitSubagentLabel } from "../lib/subagentInventory";
 import { subagentRunIsRunning } from "../lib/useSubagentRuns";
 import type { SubagentRunView } from "../lib/types";
 
@@ -48,12 +50,16 @@ export function SubagentRunningStrip({ runs }: { runs: readonly SubagentRunView[
     <div className="subagent-strip" role="status" aria-live="polite">
       <span className="subagent-strip__pulse" aria-hidden="true" />
       <span className="subagent-strip__count">{t("subagent.strip.running", { n: running.length })}</span>
-      {named.map((run) => (
-        <span key={run.ref} className="subagent-strip__name" title={run.label}>
-          {run.label}
-          <em className="subagent-strip__time">{elapsedLabel(run.createdAt, now) ?? ""}</em>
-        </span>
-      ))}
+      {named.map((run) => {
+        const { tool, content } = splitSubagentLabel(run.label);
+        return (
+          <span key={run.ref} className="subagent-strip__name" title={run.label}>
+            <span className="subagent-strip__tool">{tool}</span>
+            {content && <span className="subagent-strip__subject">{content}</span>}
+            <em className="subagent-strip__time">{elapsedLabel(run.createdAt, now) ?? ""}</em>
+          </span>
+        );
+      })}
       {extra > 0 && <span className="subagent-strip__more">{t("subagent.strip.more", { n: extra })}</span>}
     </div>
   );

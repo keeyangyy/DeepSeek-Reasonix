@@ -443,8 +443,8 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // path (2423.5 KiB measured) — the switch component, its subscription hook and
 // the theme override logic are the bulk; widen to 2424.
 // 2026-09-29: the sub-agent status strip adds the sidecar polling hook, the
-// strip component and the fold-header sub-agent count (2426.3 KiB measured);
-// widen to 2427.
-const rawInitialBudgetKiB = 2_427;
+// strip component and its CSS, and the fold-header sub-agent count (2427.9 KiB
+// measured); widen to 2429.
+const rawInitialBudgetKiB = 2_429;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

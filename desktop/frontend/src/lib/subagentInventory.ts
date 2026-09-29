@@ -36,3 +36,14 @@ export function isSubagentDispatchItem(item: Item): boolean {
   // A proxied capability call: the target may be an agent profile, so re-read.
   return Boolean(item.capabilityId);
 }
+
+/**
+ * Split a backend label "<tool>: <content>" for display, so the strip can
+ * emphasize the tool name over the subject. Only the first separator splits;
+ * a label without one is all tool.
+ */
+export function splitSubagentLabel(label: string): { tool: string; content: string } {
+  const sep = label.indexOf(": ");
+  if (sep <= 0) return { tool: label, content: "" };
+  return { tool: label.slice(0, sep), content: label.slice(sep + 2) };
+}

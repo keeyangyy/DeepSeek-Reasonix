@@ -5,7 +5,7 @@
 // rows count as dispatches, that the strip never composes a label itself, and
 // that a settled run drops off.
 
-import { isSubagentDispatchItem, subagentDispatchName } from "../lib/subagentInventory";
+import { isSubagentDispatchItem, splitSubagentLabel, subagentDispatchName } from "../lib/subagentInventory";
 import { subagentRunIsRunning } from "../lib/useSubagentRuns";
 import type { Item } from "../lib/useController";
 import type { SubagentRunView } from "../lib/types";
@@ -68,6 +68,14 @@ ok(!subagentRunIsRunning(run({ status: "interrupted" })), "an interrupted run is
 // strip must not re-derive it from anything else.
 ok(run({}).label === "task: 调研上游修复", "the strip renders the stored label verbatim");
 ok(run({ label: "read_only_task: 极简任务：用 web…" }).label.endsWith("…"), "a clipped backend label arrives already shortened");
+
+// The strip splits "<tool>: <content>" only to style the two parts; the split
+// must never damage a label that has no separator or a clipped one.
+ok(splitSubagentLabel("task: 调研上游修复").tool === "task", "the tool name is split off the label");
+ok(splitSubagentLabel("task: 调研上游修复").content === "调研上游修复", "the subject follows the tool name");
+ok(splitSubagentLabel("read_only_task: 极简任务：用 web…").tool === "read_only_task", "a long tool name survives the split");
+ok(splitSubagentLabel("task").tool === "task" && splitSubagentLabel("task").content === "", "a bare tool name has no subject");
+ok(splitSubagentLabel("a: b: c").content === "b: c", "only the first separator splits the label");
 
 process.stdout.write(`\nsubagent status strip: ${passed} passed, ${failed} failed\n`);
 if (failed > 0) process.exit(1);

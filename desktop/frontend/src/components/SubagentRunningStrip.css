@@ -1,0 +1,92 @@
+/* The running sub-agent strip above the composer.
+   It sits in the same column as the todo shelf, so it mirrors that shelf's
+   card geometry (width, radius, spacing) and reads as one stack. */
+
+.subagent-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: var(--maxw);
+  margin: 0 auto 10px;
+  padding: 5px 12px;
+  border: 1px solid var(--soft-border, var(--border));
+  border-radius: 20px;
+  background: rgba(64, 64, 64, 0.06);
+  color: var(--fg-dim);
+  font-size: 12px;
+  animation: subagent-strip-in var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes subagent-strip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.subagent-strip__pulse {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: subagent-strip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes subagent-strip-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.subagent-strip__count {
+  flex: 0 0 auto;
+  font-weight: 650;
+  color: var(--fg);
+}
+
+/* Each entry is a chip: the strip must show several without wrapping. */
+.subagent-strip__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-strip__time {
+  color: var(--fg-faint);
+  font-style: normal;
+}
+
+/* The tool name stays legible while the subject may be clipped away. */
+.subagent-strip__tool {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.subagent-strip__subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-dim);
+}
+
+.subagent-strip__more {
+  flex: 0 0 auto;
+  color: var(--fg-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subagent-strip,
+  .subagent-strip__pulse {
+    animation: none;
+  }
+}
