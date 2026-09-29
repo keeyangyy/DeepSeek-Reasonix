@@ -124,7 +124,7 @@ func TestCoalesceVerboseCommandFramesStayBounded(t *testing.T) {
 	inner := &coalesceRecordSink{}
 	c := Coalesce(inner, time.Hour)
 	const chunks = 3000
-	for i := 0; i < chunks; i++ {
+	for range chunks {
 		c.Emit(Event{Kind: ToolProgress, Tool: Tool{ID: "t1", Output: "line\n"}})
 	}
 	barrier(c)
