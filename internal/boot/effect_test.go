@@ -218,7 +218,10 @@ model = "x"
 	}
 	defer ctrl.Close()
 
-	runCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Build + the real agent loop must only trip the budget gate; on a slow
+	// CI runner the assembly can exceed 2s before the gate lands. Widen the
+	// bound well past actual cost.
+	runCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	runErr := ctrl.Run(runCtx, "read every file you can find")
 

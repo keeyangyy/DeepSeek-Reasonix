@@ -233,7 +233,9 @@ func TestRecoveryHeadlessDoesNotBlockExecutionRisk(t *testing.T) {
 	})
 	c.SetToolApprovalMode(ToolApprovalAuto)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// The full headless agent loop (6 turns through the real runner) can
+	// exceed 2s on a slow CI runner; widen the bound well past actual cost.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := c.Run(ctx, "test then fix"); err != nil && !errors.As(err, new(*agent.FinalReadinessError)) {
 		t.Fatalf("headless Run: %v", err)

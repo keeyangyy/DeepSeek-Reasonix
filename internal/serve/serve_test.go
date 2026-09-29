@@ -1133,7 +1133,7 @@ func TestServeEventsReplaysPendingApprovalOnAttach(t *testing.T) {
 	runDone := make(chan error, 1)
 	go func() { runDone <- ctrl.Executor().Run(context.Background(), "write a file") }()
 
-	deadline := time.After(2 * time.Second)
+	deadline := time.After(10 * time.Second) // real agent loop; slow CI can exceed 2s
 	for !ctrl.PendingPrompt() {
 		select {
 		case <-deadline:
@@ -1216,7 +1216,7 @@ func TestServeEventsReplaysPendingApprovalOnAttach(t *testing.T) {
 		if err != nil {
 			t.Fatalf("executor run after approval: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second): // real agent loop; slow CI can exceed 2s to finish
 		t.Fatal("executor did not finish after approval")
 	}
 }

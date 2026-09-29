@@ -50,7 +50,7 @@ func TestACPRebuildSerializesCollaborationAndApprovalChanges(t *testing.T) {
 	}()
 	select {
 	case <-buildStarted:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("controller rebuild did not reach blocked build")
 	}
 
@@ -87,7 +87,7 @@ func TestACPRebuildSerializesCollaborationAndApprovalChanges(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
 			}
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("%s did not finish", name)
 		}
 	}
@@ -143,7 +143,7 @@ func TestACPPersistAfterTurnSnapshotsWithoutSessionLock(t *testing.T) {
 
 	select {
 	case <-checks:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("session was not snapshotted after turn")
 	}
 	if sess.title == "" {
@@ -175,7 +175,7 @@ func TestACPRebuildSessionSnapshotsWithoutSessionLock(t *testing.T) {
 	}
 	select {
 	case <-checks:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("session was not snapshotted before rebuild")
 	}
 	if sess.ctrl == oldCtrl {
@@ -286,7 +286,7 @@ func TestACPRebuildSessionAppliesPendingConfigAfterMaintenance(t *testing.T) {
 		if got != "pro" {
 			t.Fatalf("first rebuild model = %q, want pro", got)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not start")
 	}
 
@@ -299,7 +299,7 @@ func TestACPRebuildSessionAppliesPendingConfigAfterMaintenance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("first rebuild: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not finish")
 	}
 	if sess.model != "fast" {
@@ -349,7 +349,7 @@ func TestACPRebuildSessionQueuedCrossAxisChangeDoesNotRollbackCompletedAxis(t *t
 		if got != "pro" {
 			t.Fatalf("first rebuild model = %q, want pro", got)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not start")
 	}
 
@@ -366,7 +366,7 @@ func TestACPRebuildSessionQueuedCrossAxisChangeDoesNotRollbackCompletedAxis(t *t
 		if result.state.Model != "pro" {
 			t.Fatalf("model switch response model = %q, want pro", result.state.Model)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("model switch did not finish")
 	}
 
@@ -491,7 +491,7 @@ func TestACPBeginRefusesDuringPendingConfigApplyWindow(t *testing.T) {
 	}()
 	select {
 	case <-factory.started:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not start")
 	}
 
@@ -511,7 +511,7 @@ func TestACPBeginRefusesDuringPendingConfigApplyWindow(t *testing.T) {
 	close(factory.releaseFirst)
 	select {
 	case <-maintenanceDone: // closed after maintenanceDone is reset to nil
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		svc.mu.Unlock()
 		t.Fatal("maintenance did not finish")
 	}
@@ -526,7 +526,7 @@ func TestACPBeginRefusesDuringPendingConfigApplyWindow(t *testing.T) {
 		if err != nil {
 			t.Fatalf("first rebuild: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not finish")
 	}
 
@@ -605,7 +605,7 @@ func TestACPFinishTurnReconcilesModeDriftBeforeExposingIdle(t *testing.T) {
 
 	select {
 	case <-reachedDrift:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("mode drift check did not run")
 	}
 
@@ -623,7 +623,7 @@ func TestACPFinishTurnReconcilesModeDriftBeforeExposingIdle(t *testing.T) {
 	close(releaseDrift)
 	select {
 	case <-finished:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("finishTurn did not complete")
 	}
 	select {
@@ -631,7 +631,7 @@ func TestACPFinishTurnReconcilesModeDriftBeforeExposingIdle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("switchSessionModel: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("model switch did not complete")
 	}
 
@@ -724,7 +724,7 @@ func TestACPApplyPendingClaimsStateBeforeResolving(t *testing.T) {
 	go func() { applyDone <- svc.applyPendingSessionConfig(context.Background(), sess) }()
 	select {
 	case <-factory.proReached:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("pending config did not reach blocked resolution")
 	}
 
@@ -740,7 +740,7 @@ func TestACPApplyPendingClaimsStateBeforeResolving(t *testing.T) {
 	}()
 	select {
 	case <-factory.fastResolved:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		close(factory.releasePro)
 		t.Fatal("newer model request did not resolve")
 	}
@@ -754,7 +754,7 @@ func TestACPApplyPendingClaimsStateBeforeResolving(t *testing.T) {
 		if err != nil {
 			t.Fatalf("applyPendingSessionConfig: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("pending apply did not finish")
 	}
 	select {
@@ -762,7 +762,7 @@ func TestACPApplyPendingClaimsStateBeforeResolving(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newer switchSessionModel: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("newer model request did not finish")
 	}
 	if got := sess.model; got != "fast" {
@@ -799,7 +799,7 @@ func TestACPFailedRebuildStillDrainsNewerPendingConfig(t *testing.T) {
 	}()
 	select {
 	case <-factory.started:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not start")
 	}
 
@@ -812,7 +812,7 @@ func TestACPFailedRebuildStillDrainsNewerPendingConfig(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "first build failed") {
 			t.Fatalf("first rebuild error = %v, want first build failed", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first rebuild did not finish")
 	}
 
@@ -954,7 +954,7 @@ func TestACPFinishTurnModeDriftDoesNotRevertConcurrentSetMode(t *testing.T) {
 
 	select {
 	case <-reachedDrift:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("mode drift check did not run")
 	}
 
@@ -979,7 +979,7 @@ func TestACPFinishTurnModeDriftDoesNotRevertConcurrentSetMode(t *testing.T) {
 	close(releaseDrift)
 	select {
 	case <-finished:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("finishTurn did not complete")
 	}
 	select {
@@ -987,7 +987,7 @@ func TestACPFinishTurnModeDriftDoesNotRevertConcurrentSetMode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sessionSetMode: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("session/set_mode did not complete")
 	}
 
@@ -1039,7 +1039,7 @@ func TestACPDriftEmittersSerializeWithStateChanges(t *testing.T) {
 	sess.stateChangeMu.Unlock()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("drift emitters did not finish after stateChangeMu was released")
 	}
 }

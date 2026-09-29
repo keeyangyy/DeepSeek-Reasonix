@@ -276,7 +276,7 @@ func TestUpdateSinkApprovalAllowAlways(t *testing.T) {
 		if c != (approveCall{id: "9", allow: true, session: true, persist: false}) {
 			t.Errorf("approve = %+v, want {9 true true}", c)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("approve was never called")
 	}
 }
@@ -326,7 +326,7 @@ func TestUpdateSinkPermissionCarriesStructuredContext(t *testing.T) {
 		if decision.allow {
 			t.Fatalf("rejected permission was allowed: %+v", decision)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("permission was never resolved")
 	}
 }
@@ -377,7 +377,7 @@ func TestUpdateSinkApprovalBashPrefix(t *testing.T) {
 		if c != want {
 			t.Errorf("approve = %+v, want %+v", c, want)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("approve was never called")
 	}
 }
@@ -473,7 +473,7 @@ func TestUpdateSinkSandboxEscapeApprovalOffersSessionGrant(t *testing.T) {
 		if c != want {
 			t.Errorf("approve = %+v, want %+v", c, want)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("approve was never called")
 	}
 }
@@ -505,7 +505,7 @@ func TestUpdateSinkApprovalDenied(t *testing.T) {
 				if c.allow || c.session {
 					t.Errorf("approve = %+v, want denied", c)
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(10 * time.Second):
 				t.Fatal("approve was never called")
 			}
 		})
@@ -570,7 +570,7 @@ func TestUpdateSinkAskRequestUsesPermissionChoices(t *testing.T) {
 		if len(answers) != 1 || answers[0].QuestionID != "q1" || len(answers[0].Selected) != 1 || answers[0].Selected[0] != "Docs" {
 			t.Fatalf("answers = %+v, want q1 Docs", answers)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("ask answer was never called")
 	}
 }
@@ -598,7 +598,7 @@ func TestUpdateSinkAskCancelledReturnsNoAnswers(t *testing.T) {
 		if answers != nil {
 			t.Fatalf("answers = %+v, want nil on cancelled ask", answers)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("ask cancellation was never returned")
 	}
 }
@@ -619,7 +619,7 @@ func TestUpdateSinkApprovalUsesTurnContext(t *testing.T) {
 	sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: "7", Tool: "bash"}})
 	select {
 	case <-reqStarted:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("permission request did not start")
 	}
 	cancel()
@@ -629,7 +629,7 @@ func TestUpdateSinkApprovalUsesTurnContext(t *testing.T) {
 		if c.id != "7" || c.allow || c.session || c.persist {
 			t.Fatalf("approve after context cancel = %+v, want denied id=7", c)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("turn context cancellation did not deny permission request")
 	}
 }

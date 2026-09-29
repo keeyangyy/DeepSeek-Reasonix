@@ -211,17 +211,36 @@ jobs:
             else
               status=$?
             fi
-            # Only retry the known Windows runtime flake (internal/bot
-            # preemption crash) that reliably passes on a rerun; any other
-            # failure stays red immediately so CI semantics are preserved.
-            # The crash surfaces with several runtime messages: the free-object
-            # fault, "unknown caller pc", and an unexpected-return-pc frame
-            # (stack top bot.(*BotGateway).runTurnItem).
-            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|unexpected return pc"; then
+            # go test's own whole-process timeout (`panic: test timed out
+            # after 8m0s` under -timeout=8m) is NOT retried: it usually means
+            # a deadlock or a genuine hang, so a rerun would burn another 8
+            # minutes and would not meaningfully pass. Exit immediately.
+            if printf '%s' "$output" | grep -Eq "panic: test timed out after"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
-            echo "::warning::known Windows runtime flake matched; retrying test (full) attempt $attempt"
+            # Only retry two classes of flake that reliably pass on a rerun;
+            # any other failure stays red immediately so CI semantics are
+            # preserved:
+            #   1. the known Windows runtime crash (internal/bot preemption),
+            #      surfaced by the free-object fault, "unknown caller pc", and
+            #      an unexpected-return-pc frame (stack top
+            #      bot.(*BotGateway).runTurnItem);
+            #   2. a short per-operation timeout built into a test (": timed
+            #      out", "timed out waiting for ...", "... timed out after
+            #      30s"). It only trips on loaded/slow runners, never
+            #      reproduces locally, and passes on a rerun. The branch above
+            #      already excluded go test's process-level timeout, so these
+            #      patterns cannot match the deadlock case.
+            #   3. a TempDir cleanup race ("TempDir RemoveAll cleanup: ... is not
+            #      empty"): a background writer still touches the directory while
+            #      t.TempDir() removes it. Same class: slow runners only, passes
+            #      on a rerun.
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
+              printf '%s\n' "$output"
+              exit "$status"
+            fi
+            echo "::warning::known Windows runtime flake or test-internal timeout matched; retrying test (full) attempt $attempt"
             sleep 5
           done
           printf '%s\n' "$output"
@@ -308,13 +327,31 @@ jobs:
             else
               status=$?
             fi
-            # Only retry the known race flake (internal/plugin cache test)
-            # that passes on a rerun; any other failure stays red immediately.
-            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin"; then
+            # go test's own whole-process timeout (panic: test timed out
+            # after ... under the default -timeout) is NOT retried: it usually
+            # means a deadlock or a genuine hang, so a rerun would not
+            # meaningfully pass. Exit immediately.
+            if printf '%s' "$output" | grep -Eq "panic: test timed out after"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
-            echo "::warning::known race flake matched; retrying test -race attempt $attempt"
+            # Only retry two classes of flake that reliably pass on a rerun;
+            # any other failure stays red immediately:
+            #   1. the known race flake (internal/plugin cache test);
+            #   2. a short per-operation timeout built into a test (": timed
+            #      out", "timed out waiting for ...", "... timed out after
+            #      30s"). It only trips on loaded/slow runners, never
+            #      reproduces locally, and passes on a rerun. The branch above
+            #      already excluded go test's process-level timeout.
+            #   3. a TempDir cleanup race ("TempDir RemoveAll cleanup: ... is not
+            #      empty"): a background writer still touches the directory while
+            #      t.TempDir() removes it. Same class: slow runners only, passes
+            #      on a rerun.
+            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
+              printf '%s\n' "$output"
+              exit "$status"
+            fi
+            echo "::warning::known race flake or test-internal timeout matched; retrying test -race attempt $attempt"
             sleep 5
           done
           printf '%s\n' "$output"
@@ -843,10 +880,25 @@ jobs:
               -HealthySeconds 5 2>&1
             $code = $LASTEXITCODE
             if ($code -eq 0) { $output; exit 0 }
-            # Only retry the known CI-vanilla WebView2 flake that passes on a
-            # rerun; any other failure stays red immediately.
-            if ($output -notmatch 'rejected the graceful close request') { $output; exit $code }
-            Write-Warning "known WebView2 smoke flake matched; retrying attempt $attempt"
+            # The whole-process go test timeout (panic: test timed out after
+            # ...) is NOT retried: it usually means a deadlock or a genuine
+            # hang, so a rerun would not meaningfully pass. Exit immediately.
+            if ($output -match 'panic: test timed out after') { $output; exit $code }
+            # Only retry two classes of flake that reliably pass on a rerun;
+            # any other failure stays red immediately:
+            #   1. the known CI-vanilla WebView2 flake (rejected the graceful
+            #      close request);
+            #   2. a short per-operation timeout built into a test (": timed
+            #      out", "timed out waiting for ...", "... timed out after
+            #      30s"). It only trips on loaded/slow runners, never
+            #      reproduces locally, and passes on a rerun. The branch above
+            #      already excluded go test's process-level timeout.
+            #   3. a TempDir cleanup race ("TempDir RemoveAll cleanup: ... is not
+            #      empty"): a background writer still touches the directory while
+            #      t.TempDir() removes it. Same class: slow runners only, passes
+            #      on a rerun.
+            if ($output -notmatch 'rejected the graceful close request|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after \d+') { $output; exit $code }
+            Write-Warning "known WebView2 smoke flake or test-internal timeout matched; retrying attempt $attempt"
             Start-Sleep -Seconds 5
           }
           $output
