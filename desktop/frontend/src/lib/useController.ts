@@ -40,7 +40,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -3092,10 +3092,10 @@ export function useController() {
                 }
               }
               // A page fetched after a full-turn replay carries the turn's
-              // persisted rows; the replayed rebuild would co-mount next to
-              // them (v2 log: dup=16). Let the page own the turn: drop the
-              // rebuild rows and same-id tool copies, keep later deltas.
-              if (pageOverlapsLiveContent(projection.items, liveItems)) {
+              // persisted rows; a re-entry replays that turn BEFORE the page
+              // lands with empty rows, so the content guards above miss them —
+              // the page owning the turn's output counts too (bfb949b2).
+              if (pageOverlapsLiveContent(projection.items, liveItems) || pageSupersedesInFlightTurn(projection.items, liveItems)) {
                 const prefix = liveState?.activeTurnId ? `a:${liveState.activeTurnId}:` : undefined;
                 for (const item of liveItems) {
                   if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
