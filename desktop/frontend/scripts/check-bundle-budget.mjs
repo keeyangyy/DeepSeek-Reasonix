@@ -303,7 +303,10 @@ for (const path of localeChunks) {
   // bar adds seven more (select-all/clear, {n}-selected count, restore/delete
   // selected, row aria). zh measures 63827 B (62.331 KiB) and zh-TW 64622 B
   // (63.107 KiB); retain the next one-decimal ceiling for each dialect.
-  const budget = name.startsWith("zh-TW-") ? 63.2 * 1024 : 62.4 * 1024;
+  // The sub-agent status strip adds two labels per dialect (running count,
+  // overflow count) plus the fold header's sub-agent count; the measured chunks
+  // move just past the previous ceiling, so retain the next one-decimal one.
+  const budget = name.startsWith("zh-TW-") ? 63.3 * 1024 : 62.5 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -439,6 +442,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-27: the sidebar light/dark quick switch adds 8.5 KiB on the initial
 // path (2423.5 KiB measured) — the switch component, its subscription hook and
 // the theme override logic are the bulk; widen to 2424.
-const rawInitialBudgetKiB = 2_424;
+// 2026-09-29: the sub-agent status strip adds the sidecar polling hook, the
+// strip component and the fold-header sub-agent count (2426.3 KiB measured);
+// widen to 2427.
+const rawInitialBudgetKiB = 2_427;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
