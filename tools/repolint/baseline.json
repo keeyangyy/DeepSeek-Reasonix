@@ -2,15 +2,15 @@
   "limits": {
     "banner": 13,
     "commented-code": 0,
-    "complexity": 1898,
+    "complexity": 1894,
     "essay": 1917,
-    "file-size": 102805,
-    "function-size": 8269,
+    "file-size": 101002,
+    "function-size": 8268,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 116,
-    "test-file-size": 69003
+    "test-file-size": 69002
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -138,7 +138,7 @@
       "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 5001
+      "file-size": 5004
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213
@@ -147,7 +147,7 @@
       "file-size": 300
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1626
+      "file-size": 1637
     },
     "desktop/frontend/src/lib/useController.ts": {
       "file-size": 4520
@@ -501,7 +501,7 @@
     "internal/agent/save.go": {
       "complexity": 30,
       "essay": 79,
-      "file-size": 1419,
+      "file-size": 1393,
       "function-size": 103
     },
     "internal/agent/save_test.go": {
@@ -541,15 +541,15 @@
     },
     "internal/agent/subagent_store.go": {
       "essay": 4,
-      "file-size": 124
+      "file-size": 135
     },
     "internal/agent/subagent_store_test.go": {
       "test-file-size": 250
     },
     "internal/agent/task.go": {
       "essay": 12,
-      "file-size": 1173,
-      "function-size": 8
+      "file-size": 1175,
+      "function-size": 9
     },
     "internal/agent/task_test.go": {
       "essay": 1,
@@ -569,8 +569,8 @@
     "internal/boot/boot.go": {
       "complexity": 256,
       "essay": 77,
-      "file-size": 2080,
-      "function-size": 1702,
+      "file-size": 2084,
+      "function-size": 1706,
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
@@ -915,7 +915,7 @@
       "test-file-size": 220
     },
     "internal/control/input_test.go": {
-      "test-file-size": 740
+      "test-file-size": 739
     },
     "internal/control/memory.go": {
       "essay": 2
@@ -1146,15 +1146,12 @@
     "internal/jobs/jobs_test.go": {
       "test-file-size": 12
     },
-    "internal/memory/store.go": {
-      "file-size": 38
-    },
     "internal/memory/store_test.go": {
       "test-file-size": 138
     },
     "internal/memory/store_v2.go": {
-      "complexity": 17,
-      "function-size": 17
+      "complexity": 13,
+      "function-size": 11
     },
     "internal/permission/bash_decompose.go": {
       "essay": 13

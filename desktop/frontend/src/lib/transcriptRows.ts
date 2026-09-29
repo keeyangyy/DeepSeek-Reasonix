@@ -9,6 +9,7 @@
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { stableStringHash } from "./stableStringHash";
 import { isBatchedReadOnlyTool, isSteerNoticeText, type ExtensionItem, type Item } from "./useController";
+import { isSubagentDispatch } from "./subagentInventory";
 import { appendTurnActionCopyText } from "./turnActionCopy";
 import { isCreationGroupableTool, toolGroupKind, type ToolGroupKind } from "../components/ToolGroup";
 import type { SessionExperience } from "./sessionExperience";
@@ -183,6 +184,13 @@ export interface SegmentModel {
   /** "full" carries the work-duration label; earlier segments only list counts. */
   labelStyle: "full" | "counts";
   turnActive: boolean;
+  /**
+   * Sub-agent dispatches in this segment. A nested call carries a parentId and
+   * never reaches the fold body, so the header is the only place a closed fold
+   * can say that delegated work happened — and it must, because "2 tools" would
+   * otherwise hide that two of them spawned sub-agents.
+   */
+  subagentCount: number;
 }
 
 export interface TurnModel {
@@ -304,6 +312,7 @@ export function buildTurnModels(
         durationMs: isLastSegment ? turnWorkDurationMs(model.turnItems) : 0,
         labelStyle: isLastSegment ? "full" : "counts",
         turnActive,
+        subagentCount: segment.processItems.reduce((n, it) => n + (isSubagentDispatch(it) ? 1 : 0), 0),
       } satisfies SegmentModel;
     });
     let actionText = "";

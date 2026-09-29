@@ -118,6 +118,10 @@ type ContextRequest struct {
 	// Ephemeral forces a non-persisted transcript for entry points that promise
 	// no durable host side effects, such as read_only_task.
 	Ephemeral bool
+	// StatusOnly persists the run's status sidecar (so the desktop status strip
+	// names it live and after a session switch) while writing no transcript body,
+	// keeping read-only runs invisible-but-present as running work.
+	StatusOnly bool
 	// Decisions, EvidenceSummary, FileAnchors, and OutputFormat are the only
 	// parent facts a child should start from. The parent transcript is not copied.
 	Decisions       []acceptedDecision
@@ -263,9 +267,11 @@ func NamedBuiltinProfile(name string) bool {
 }
 
 // parentSession returns the owning session, or empty when the caller asked for
-// an ephemeral run so the store never persists a transcript for it.
+// an ephemeral run so the store never persists a transcript for it. StatusOnly
+// keeps the owning session: the run still records a status sidecar, it just
+// writes no transcript body.
 func (c ContextRequest) parentSession(ctx context.Context) string {
-	if c.Ephemeral {
+	if c.Ephemeral && !c.StatusOnly {
 		return ""
 	}
 	return ParentSession(ctx)

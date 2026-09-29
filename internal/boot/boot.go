@@ -1295,7 +1295,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		// the child model's own vision capability. Text-only children retain the
 		// attachment metadata locally but never receive image parts on the wire.
 		childCtx := agent.WithUserImages(sctx, agent.SubagentImageCandidates(sctx))
-		return runReadOnlySkillSession(childCtx, prov, subReg, task, runOptions, agent.NestedSink(sctx, event.Discard), sysPrompt, agent.RunReadOnlySubAgentWithSession)
+		return runReadOnlySkillSession(childCtx, prov, subReg, task, runOptions, agent.NestedSink(sctx, event.Discard), agent.RunReadOnlySubAgentWithSession, subagentStore, readOnlyStatusSpec(sctx, sk.Name, task, root, sysPrompt, usageModelRef, effortRef))
 	}
 	// Writer-capable subagent skills reuse the sub-agent machinery via this
 	// runner: an isolated loop with the skill body as system prompt, a tool set
@@ -1369,6 +1369,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			spec := agent.SubagentSpec{
 				Kind:             "skill",
 				Name:             sk.Name,
+				Label:            agent.SubagentDispatchLabel(sk.Name, "", task),
 				WorkspaceRoot:    root,
 				ParentSession:    parentSession,
 				ParentToolCallID: parentID,
@@ -1388,6 +1389,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			if prepErr != nil {
 				return "", prepErr
 			}
+			// Mark the run running before execution: the strip reads only the
+			// sidecar. Best-effort, like the task path.
+			agent.MarkDispatchRunning(subagentStore, run, false)
 		}
 		defer run.Release()
 		steps := maxSteps

@@ -33,24 +33,27 @@ const (
 // SubagentMeta is the sidecar for a persisted sub-agent transcript. It captures
 // the execution identity that must stay stable for continuation/fork.
 type SubagentMeta struct {
-	Ref              string         `json:"ref"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	UpdatedAt        time.Time      `json:"updatedAt"`
-	Status           SubagentStatus `json:"status"`
-	Outcome          string         `json:"outcome,omitempty"`
-	Retryable        bool           `json:"retryable,omitempty"`
-	ErrorCode        string         `json:"errorCode,omitempty"`
-	Kind             string         `json:"kind"` // task | skill
-	Name             string         `json:"name"`
-	WorkspaceRoot    string         `json:"workspaceRoot"`
-	ParentSession    string         `json:"parentSession,omitempty"`
-	ParentToolCallID string         `json:"parentToolCallId,omitempty"`
-	ForkedFrom       string         `json:"forkedFrom,omitempty"`
-	SystemPromptHash string         `json:"systemPromptHash"`
-	ToolScope        []string       `json:"toolScope"`
-	ToolSchemaHash   string         `json:"toolSchemaHash"`
-	Model            string         `json:"model"`
-	Effort           string         `json:"effort"`
+	Ref       string         `json:"ref"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	Status    SubagentStatus `json:"status"`
+	Outcome   string         `json:"outcome,omitempty"`
+	Retryable bool           `json:"retryable,omitempty"`
+	ErrorCode string         `json:"errorCode,omitempty"`
+	Kind      string         `json:"kind"` // task | skill
+	Name      string         `json:"name"`
+	// Label is the backend-computed display string ("<name>: <content>"), clipped
+	// at dispatch so every surface that reads the sidecar renders one label.
+	Label            string   `json:"label,omitempty"`
+	WorkspaceRoot    string   `json:"workspaceRoot"`
+	ParentSession    string   `json:"parentSession,omitempty"`
+	ParentToolCallID string   `json:"parentToolCallId,omitempty"`
+	ForkedFrom       string   `json:"forkedFrom,omitempty"`
+	SystemPromptHash string   `json:"systemPromptHash"`
+	ToolScope        []string `json:"toolScope"`
+	ToolSchemaHash   string   `json:"toolSchemaHash"`
+	Model            string   `json:"model"`
+	Effort           string   `json:"effort"`
 	// Capsule records what context this run was given; CapsuleHash is its
 	// stable identity for comparing two runs.
 	Capsule     ContextCapsule `json:"capsule"`
@@ -78,8 +81,13 @@ func isSubagentMetaDecodeError(err error) bool {
 
 // SubagentSpec describes the current invocation identity.
 type SubagentSpec struct {
-	Kind             string
-	Name             string
+	Kind string
+	Name string
+	// Label is the dispatch's display label ("<name>: <content>"), clipped at
+	// dispatch so every surface renders one identical string. Never hashed.
+	Label string
+	// StatusOnly records the status sidecar but no transcript body.
+	StatusOnly       bool
 	WorkspaceRoot    string
 	ParentSession    string
 	ParentToolCallID string
@@ -99,6 +107,9 @@ type SubagentRun struct {
 	Session    *Session
 	Meta       SubagentMeta
 	ForkedFrom string
+	// StatusOnly persists the status sidecar but no transcript body, for
+	// read-only runs that promise no readable transcript.
+	StatusOnly bool
 
 	store             *SubagentStore
 	release           func()

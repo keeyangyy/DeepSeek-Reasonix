@@ -1374,6 +1374,17 @@ export interface SubagentProfileInput {
   readOnly?: boolean;
   scope?: "project" | "global";
 }
+/** One persisted sub-agent run; label is backend-computed and clipped at dispatch. */
+export interface SubagentRunView {
+  ref: string;
+  parentToolCallId?: string;
+  label: string;
+  status: string;
+  outcome?: string;
+  errorCode?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface PluginView {
   name: string;
   version?: string;
