@@ -253,8 +253,13 @@ grep -Fq 'node packaging/package.mjs windows/amd64 v0.0.0-ci canary' \
 grep -Fq -- '-X main.version=v0.0.0-ci -X main.channel=canary' "$repo_root/.github/workflows/ci.yml"
 grep -Fq 'node packaging/smoke.mjs build/electron/windows-amd64/app --service build/bin/reasonix-desktop.exe' \
 	"$repo_root/.github/workflows/ci.yml"
-grep -Fq 'node packaging/verify.mjs ../dist/Reasonix-darwin-arm64.zip' \
-	"$repo_root/.github/workflows/ci.yml"
+# Fork: this branch has no macOS runner, so the darwin packaging verify
+# step went away with the desktop-macos job. Pin that so an upstream merge
+# cannot silently reintroduce a macOS leg.
+if grep -Fq 'dist/Reasonix-darwin-arm64.zip' "$repo_root/.github/workflows/ci.yml"; then
+	echo "ci.yml must not package or verify a darwin artifact in this fork" >&2
+	exit 1
+fi
 grep -Fq 'node packaging/verify.mjs ../dist/Reasonix-windows-amd64.zip' \
 	"$repo_root/.github/workflows/ci.yml"
 grep -Fq 'node packaging/signing-files.mjs build/windows/signing-payload --check' \
