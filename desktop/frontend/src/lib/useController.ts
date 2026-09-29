@@ -3095,7 +3095,7 @@ export function useController() {
               // persisted rows; a re-entry replays that turn BEFORE the page
               // lands with empty rows, so the content guards above miss them —
               // the page owning the turn's output counts too (bfb949b2).
-              if (pageOverlapsLiveContent(projection.items, liveItems) || pageSupersedesInFlightTurn(projection.items, liveItems)) {
+              if (pageOverlapsLiveContent(projection.items, liveItems) || pageSupersedesInFlightTurn(projection.items, liveItems, projection.totalTurns, projection.openTurnId)) {
                 const prefix = liveState?.activeTurnId ? `a:${liveState.activeTurnId}:` : undefined;
                 for (const item of liveItems) {
                   if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);

@@ -73,10 +73,10 @@ const pageEndingAtUser: Item[] = [
 const unrelatedPage: Item[] = [{ kind: "user", id: "h1-0", text: "old" } as never];
 
 // 与 useController 的 hydrate prepend 分支同构的 removeIds 复刻（保持同步：
-// 判据即 projection.items / liveItems / activeTurnId 三者的组合）。
-function hydrateRemoveIds(page: Item[], live: Item[], activeTurnId: string | undefined): string[] {
+// 判据即 projection.items / liveItems / activeTurnId / totalTurns / openTurnId 的组合）。
+function hydrateRemoveIds(page: Item[], live: Item[], activeTurnId: string | undefined, totalTurns: number, openTurnId?: string): string[] {
   const removeIds = duplicateLiveItemIds(page, live);
-  if (pageOverlapsLiveContent(page, live) || pageSupersedesInFlightTurn(page, live)) {
+  if (pageOverlapsLiveContent(page, live) || pageSupersedesInFlightTurn(page, live, totalTurns, openTurnId)) {
     const prefix = activeTurnId ? `a:${activeTurnId}:` : undefined;
     for (const item of live) {
       if ((prefix && item.id.startsWith(prefix)) || page.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
@@ -88,12 +88,28 @@ function hydrateRemoveIds(page: Item[], live: Item[], activeTurnId: string | und
 
 console.log("\nhydrate prepend: page-owned in-flight turn rows must not trail the page");
 
-// ── 判据函数本身 ─────────────────────────────────────────────────────────
-eq(pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [seg(0)]), true, "页在末条 user 行之后仍有输出行 + 重建行为空 → 判定接管");
-eq(pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [seg(0, "已流出内容")]), false, "重建行已有内容 → 不判定接管（交给内容匹配，避免误删）");
-eq(pageSupersedesInFlightTurn(pageEndingAtUser, [seg(0)]), false, "页以 user 行结尾（无该轮输出）→ 不判定接管");
-eq(pageSupersedesInFlightTurn(unrelatedPage, [seg(0)]), false, "页只有 user 行 → 不判定接管");
-eq(pageSupersedesInFlightTurn([], [seg(0)]), false, "空页 → 不判定接管");
+// ── 判据函数本身（按页的坐标系：末个 user 行 === 最新轮，其后仍有输出行）──
+const LAST_TURN = 13;
+const NO_OPEN = undefined; // 无在途 turn（现场形态：turn 已结算，openTurnId 为空）
+eq(pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [], LAST_TURN, NO_OPEN), true, "页的末个 user 行就是最新轮、其后有输出行 → 判定接管");
+eq(pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [], 12, NO_OPEN), false, "totalTurns 与末个 user 行不一致 → 不判定接管（保守）");
+eq(pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [], 0, NO_OPEN), false, "totalTurns=0 → 不判定接管（保守）");
+eq(pageSupersedesInFlightTurn(pageEndingAtUser, [], 2, NO_OPEN), false, "页以 user 行结尾（该轮无输出行）→ 不判定接管");
+eq(pageSupersedesInFlightTurn(unrelatedPage, [], 1, NO_OPEN), false, "页只有 user 行 → 不判定接管");
+eq(pageSupersedesInFlightTurn([], [], LAST_TURN, NO_OPEN), false, "空页 → 不判定接管");
+// 护栏：live 重建行携带后端仍在途的 turn id ⟹ 页尾那轮不是当前轮，不得接管
+eq(
+  pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [seg(0), seg(1)], LAST_TURN, TURN),
+  false,
+  "重建行携带在途 turn id（openTurnId）→ 不判定接管（防误删）",
+);
+
+// ── 关键：live 已流出内容时判据仍须生效（现场日志 t=4071 有 133 字符重建行）──
+eq(
+  pageSupersedesInFlightTurn(pageWithPersistedTurnOutput(), [seg(133, "x".repeat(133))], LAST_TURN, NO_OPEN),
+  true,
+  "live 已流出内容不影响页侧判据（日志实证：prepend 时重建行非空）",
+);
 
 // ── 反向保护：页尾是【上一轮】输出 + 重建行已有流式内容 → 不得误删 ────────
 {
@@ -115,7 +131,7 @@ eq(pageSupersedesInFlightTurn([], [seg(0)]), false, "空页 → 不判定接管"
     currentAssistant: `a:${TURN}:0`,
   } as never;
 
-  const removeIds = hydrateRemoveIds(prevTurnPage, state.items, TURN);
+  const removeIds = hydrateRemoveIds(prevTurnPage, state.items, TURN, 2);
   const next = reducer(state, {
     type: "history_prepend",
     items: prevTurnPage,
@@ -146,7 +162,7 @@ eq(pageSupersedesInFlightTurn([], [seg(0)]), false, "空页 → 不判定接管"
   } as never;
 
   const page = pageWithPersistedTurnOutput();
-  const removeIds = hydrateRemoveIds(page, state.items, TURN);
+  const removeIds = hydrateRemoveIds(page, state.items, TURN, LAST_TURN);
   const next = reducer(state, {
     type: "history_prepend",
     items: page,
@@ -179,7 +195,7 @@ eq(pageSupersedesInFlightTurn([], [seg(0)]), false, "空页 → 不判定接管"
     currentAssistant: `a:${TURN}:0`,
   } as never;
 
-  const removeIds = hydrateRemoveIds(unrelatedPage, state.items, TURN);
+  const removeIds = hydrateRemoveIds(unrelatedPage, state.items, TURN, 2);
   const next = reducer(state, {
     type: "history_prepend",
     items: unrelatedPage,
@@ -208,7 +224,7 @@ eq(pageSupersedesInFlightTurn([], [seg(0)]), false, "空页 → 不判定接管"
     currentAssistant: `a:${TURN}:0`,
   } as never;
 
-  const removeIds = hydrateRemoveIds(pageEndingAtUser, state.items, TURN);
+  const removeIds = hydrateRemoveIds(pageEndingAtUser, state.items, TURN, 2);
   const next = reducer(state, {
     type: "history_prepend",
     items: pageEndingAtUser,
@@ -220,6 +236,39 @@ eq(pageSupersedesInFlightTurn([], [seg(0)]), false, "空页 → 不判定接管"
   } as never);
 
   eq(next.items.some((item) => item.id === `a:${TURN}:0`), true, "页以 user 行结尾（无该轮输出）时保留重建行，不白屏");
+}
+
+// ── 场景 4（现场日志 t=4071 的真实形态）：prepend 时 live 已流出内容 ──────
+// 日志的 row 描述符 `a.a:turn_...18.133` 里的 133 是 text.length（id 被 slice(0,34)
+// 截断，ordinal 不可见）→ 重建行【非空】时判据仍须生效，否则现场不修。
+{
+  const state: ReturnType<typeof reducer> = {
+    ...initialState,
+    meta: { sessionPath: "session.jsonl", sessionRevision: 12 },
+    running: true,
+    turnActive: true,
+    activeTurnId: TURN,
+    historyTotalTurns: 0,
+    historyStartTurn: 0,
+    historyPrefixCount: 0,
+    items: [card, seg(0), seg(133, "x".repeat(133))],
+    currentAssistant: `a:${TURN}:0`,
+  } as never;
+
+  const page = pageWithPersistedTurnOutput();
+  const removeIds = hydrateRemoveIds(page, state.items, TURN, LAST_TURN);
+  const next = reducer(state, {
+    type: "history_prepend",
+    items: page,
+    removeIds,
+    startTurn: 1,
+    totalTurns: LAST_TURN,
+    hasOlder: true,
+    revision: 12,
+  } as never);
+
+  const trailing = next.items.filter((item) => item.id.startsWith(`a:${TURN}:`)).map((item) => item.id);
+  eq(trailing, [], "live 已流出内容时重建行仍被页接管（现场形态，非空行也清除）");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

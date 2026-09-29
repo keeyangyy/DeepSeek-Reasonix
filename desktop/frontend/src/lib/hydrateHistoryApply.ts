@@ -355,22 +355,34 @@ export function replaceRemoveIds(
   return [...remove];
 }
 
-// True when the page owns the in-flight turn while its replay rebuild has not
-// produced anything yet: the page must end inside a turn (rows after its last
-// user heading are that turn's durable output) AND every rebuilt live row must
-// still be empty. A rebuild that already streamed text is real visible content
-// and belongs to pageOverlapsLiveContent's content match instead.
+// True when the page carries the running turn's own heading AND its output, so
+// the replay rebuild must yield: the page's newest user row is the running turn
+// (historyTurn === totalTurns) and rows after it are that turn's durable
+// output. Judging by the page alone is deliberate — the live rebuild may have
+// already streamed text when the page lands (field log bfb949b2: a 133-char
+// rebuilt row was mounted at that instant), so requiring an empty rebuild would
+// silently disable the guard exactly when it is needed.
+// A rebuild row carrying the backend's still-open turn id proves that turn is
+// unfinished, so a page ending at a merely-persisted turn must not claim it.
 export function pageSupersedesInFlightTurn(
   pageItems: readonly SignatureItem[],
   liveItems: readonly SignatureItem[],
+  totalTurns?: number,
+  openTurnId?: string,
 ): boolean {
-  let reachesOutput = false;
+  if (typeof totalTurns !== "number" || totalTurns <= 0) return false;
+  if (openTurnId && liveItems.some((item) => liveItemTurnId(item.id) === openTurnId)) return false;
+  let heading = -1;
   for (let i = pageItems.length - 1; i >= 0; i -= 1) {
-    const kind = pageItems[i].kind;
-    if (kind === "user") break;
-    if (kind === "assistant" || kind === "tool") { reachesOutput = true; break; }
+    if (pageItems[i].kind === "user") { heading = i; break; }
   }
-  return reachesOutput && !liveItems.some((item) => liveItemTurnId(item.id) !== undefined && (item.text || item.reasoning));
+  if (heading < 0) return false;
+  if ((pageItems[heading] as { historyTurn?: number }).historyTurn !== totalTurns) return false;
+  for (let i = heading + 1; i < pageItems.length; i += 1) {
+    const kind = pageItems[i].kind;
+    if (kind === "assistant" || kind === "tool") return true;
+  }
+  return false;
 }
 
 // Rows whose content duplicates an earlier row (same kind + content) — the
