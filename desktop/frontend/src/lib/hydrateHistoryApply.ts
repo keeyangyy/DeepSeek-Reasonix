@@ -355,6 +355,24 @@ export function replaceRemoveIds(
   return [...remove];
 }
 
+// True when the page owns the in-flight turn while its replay rebuild has not
+// produced anything yet: the page must end inside a turn (rows after its last
+// user heading are that turn's durable output) AND every rebuilt live row must
+// still be empty. A rebuild that already streamed text is real visible content
+// and belongs to pageOverlapsLiveContent's content match instead.
+export function pageSupersedesInFlightTurn(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): boolean {
+  let reachesOutput = false;
+  for (let i = pageItems.length - 1; i >= 0; i -= 1) {
+    const kind = pageItems[i].kind;
+    if (kind === "user") break;
+    if (kind === "assistant" || kind === "tool") { reachesOutput = true; break; }
+  }
+  return reachesOutput && !liveItems.some((item) => liveItemTurnId(item.id) !== undefined && (item.text || item.reasoning));
+}
+
 // Rows whose content duplicates an earlier row (same kind + content) — the
 // long-term net for low-frequency double-render reports.
 export function duplicateItemRows(items: readonly SignatureItem[]): SignatureItem[] {
