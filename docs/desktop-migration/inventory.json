@@ -7077,13 +7077,6 @@
     },
     {
       "kind": "ci-job",
-      "name": "ci.yml/desktop-macos",
-      "location": ".github/workflows/ci.yml",
-      "class": "keep-business",
-      "owner": "Electron packaging smoke"
-    },
-    {
-      "kind": "ci-job",
       "name": "ci.yml/desktop-prepare",
       "location": ".github/workflows/ci.yml",
       "class": "keep-business",

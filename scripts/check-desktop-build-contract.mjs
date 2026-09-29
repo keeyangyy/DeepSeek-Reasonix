@@ -55,7 +55,8 @@ assert.ok(
   "desktop/wails.json must be retired with the Wails shell",
 );
 
-for (const jobName of ["desktop-prepare", "desktop-go", "desktop-frontend", "desktop-browser-group", "desktop-macos", "desktop-windows"]) {
+// Fork: no macOS runner, so no desktop-macos job to check.
+for (const jobName of ["desktop-prepare", "desktop-go", "desktop-frontend", "desktop-browser-group", "desktop-windows"]) {
   assert.deepEqual(nodeVersions(jobBody(ciWorkflow, jobName)), [pinnedNodeVersion]);
 }
 
