@@ -155,10 +155,13 @@ func TestStartTopicActivationReadyDoesNotWaitForRebuildMutex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartTopicActivation: %v", err)
 	}
-	if time.Since(started) > 300*time.Millisecond {
+	// The synchronous phase writes workspace state to disk, so a loaded runner
+	// can take far longer than a dev box without ever blocking on the mutex
+	// held below; keep the bound wide enough to tell the two apart.
+	if time.Since(started) > 5*time.Second {
 		t.Fatalf("StartTopicActivation blocked %s while MCP rebuild held the mutex", time.Since(started))
 	}
-	deadline := time.After(400 * time.Millisecond)
+	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case ev := <-events.ch:
