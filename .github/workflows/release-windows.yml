@@ -145,6 +145,14 @@ jobs:
       # off.
       actions: read
     steps:
+      # gh resolves the repository through the checkout's git remote, and
+      # `gh release create --generate-notes` runs git itself; without a
+      # checkout both fail with "not a git repository".
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.verify.outputs.tag }}
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: reasonix-windows-amd64
