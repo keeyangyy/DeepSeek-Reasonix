@@ -40,7 +40,12 @@ export function testArgs(packages, group) {
 function main(group) {
   const { packages, status } = listPackages();
   if (!packages) return status;
-  return runGoTest(`Windows ${group}`, selectPackages(packages, group), testArgs(packages, group));
+  // Every Windows outcome goes through the runner's known-flake retry: hosted
+  // Windows runners intermittently abort loopback sockets, crash the Go
+  // runtime in netpoll/semaphore, and lose TempDir cleanup races. Anything
+  // outside that narrow list still fails the lane on the first attempt.
+  return runGoTest(`Windows ${group}`, selectPackages(packages, group), testArgs(packages, group),
+    { retryOnFlake: true });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

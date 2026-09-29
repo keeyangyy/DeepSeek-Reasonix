@@ -2,7 +2,29 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isolatedGroups, selectPackages, testArgs } from "./windows-go-tests.mjs";
+import { isKnownRunnerFlake } from "./go-test-groups.mjs";
 import { windowsPRContractArgs, windowsPRContractGroups } from "./windows-pr-contract-tests.mjs";
+
+// Only the hosted-runner faults the retry exists for may be retried; anything
+// else has to stay red, and go test's own process timeout must never retry.
+test("only known hosted-runner flakes are retried", () => {
+  for (const output of [
+    "fatal error: runtime: netpoll failed\ngoroutine 1 [running]:",
+    "runtime: waitforsingleobject wait_failed; errno=6",
+    "TempDir RemoveAll cleanup: open C:/x is not empty",
+    "read tcp 127.0.0.1:1->127.0.0.1:2: wsarecv: An established connection was aborted by the software in your host machine",
+    "--- FAIL: TestX (0.03s)\n    transport_test.go:9: dial tcp: i/o timeout: timed out waiting for protocol",
+  ]) {
+    assert.equal(isKnownRunnerFlake(output), true, output);
+  }
+  for (const output of [
+    "panic: test timed out after 8m0s\n\ngoroutine 1 [chan receive]:",
+    "--- FAIL: TestSomething (0.01s)\n    foo_test.go:12: expected 1, got 2",
+    "FAIL\treasonix/internal/provider\t0.260s",
+  ]) {
+    assert.equal(isKnownRunnerFlake(output), false, output);
+  }
+});
 
 const packages = ["reasonix/cmd/reasonix", "reasonix/internal/agent", "reasonix/internal/agent/testutil",
   "reasonix/internal/acp", "reasonix/internal/agentpreset", "reasonix/internal/boot", "reasonix/internal/bot", "reasonix/internal/control",
