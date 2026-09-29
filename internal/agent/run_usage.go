@@ -112,10 +112,8 @@ func estimateSamplingRequestInputTokens(req provider.Request) int {
 		total += estimateTextTokens(msg.ReasoningSignature)
 		total += estimateTextTokens(msg.Name)
 		total += estimateTextTokens(msg.ToolCallID)
-		for range msg.Images {
-			// vision priced per image like the admission estimate; the base64
-			// payload's char count is not what the provider charges for.
-			total += visionTokensPerImageEstimate
+		for _, image := range msg.Images {
+			total += estimateTextTokens(image)
 		}
 		for _, call := range msg.ToolCalls {
 			total += 8 + estimateTextTokens(call.ID) + estimateTextTokens(call.Name) + estimateTextTokens(call.Arguments)

@@ -12,11 +12,7 @@ type contextUsage struct {
 	calibration        *promptTokenCalibration
 	tools              *tool.Registry
 	toolSchemaRevision uint64
-	// lineage is the session/model cache key. A model switch changes which view
-	// modelVisibleMessages returns (fold vs full history), so the memo must not
-	// outlive it — otherwise the gauge keeps reporting the old fold's size.
-	lineage string
-	tokens  int
+	tokens             int
 }
 
 // ContextUsedTokens is the number ContextManager compares against its
@@ -37,14 +33,12 @@ func (a *Agent) ContextUsedTokens() int {
 	calibration := a.sess.output.promptCalibration.Load()
 	tools := a.svc.tools
 	toolSchemaRevision := tools.SchemaRevision()
-	lineage := a.currentPromptCacheKey()
 	if cached := a.sess.output.contextUsage.Load(); cached != nil &&
 		cached.transcriptVersion == transcriptVersion &&
 		cached.projectionVersion == projectionVersion &&
 		cached.calibration == calibration &&
 		cached.tools == tools &&
-		cached.toolSchemaRevision == toolSchemaRevision &&
-		cached.lineage == lineage {
+		cached.toolSchemaRevision == toolSchemaRevision {
 		return cached.tokens
 	}
 	tokens := a.estimatedVisibleRequestTokens(a.modelVisibleMessages())
@@ -54,7 +48,6 @@ func (a *Agent) ContextUsedTokens() int {
 		calibration:        calibration,
 		tools:              tools,
 		toolSchemaRevision: toolSchemaRevision,
-		lineage:            lineage,
 		tokens:             tokens,
 	})
 	return tokens
