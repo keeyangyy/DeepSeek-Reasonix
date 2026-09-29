@@ -92,7 +92,7 @@ test("release tag mutation follows approval with an explicit identity and read-o
 
 test("cancelled CI releases workers, aggregates, and metrics without hiding live failures", () => {
   for (const name of ["test", "windows-control", "windows-isolated", "race", "sdk", "desktop-prepare",
-    "desktop-frontend", "desktop-browser-group", "desktop-go", "desktop-go-race", "desktop-macos",
+    "desktop-frontend", "desktop-browser-group", "desktop-go", "desktop-go-race",
     "desktop-windows", "desktop-windows-go-group", "desktop-windows-package", "lint-code", "coverage", "prune-go-cache"]) {
     assert.equal(condition(job(ci, name), { cancelled: () => true }), false, name);
   }
@@ -210,8 +210,8 @@ test("Windows full runs use the partitioned suite without a duplicate module swe
     });
   };
   for (const event of ["pull_request", "push", "workflow_dispatch"]) {
-    for (const os of ["Linux", "macOS", "Windows"]) {
-      assert.equal(enabled("test", os, event), os === "Linux" || (os === "macOS" && event !== "pull_request"));
+    for (const os of ["Linux", "Windows"]) {
+      assert.equal(enabled("test", os, event), os === "Linux");
       assert.equal(enabled("test (full)", os, event), os === "Windows" && event !== "pull_request");
       assert.equal(enabled("test (Windows smoke)", os, event), os === "Windows" && event === "pull_request");
       assert.equal(enabled("test", os, event, "false"), false);
@@ -273,18 +273,18 @@ test("required desktop aggregate rejects every failed, cancelled or unexpectedly
   const script = shellStep(job(ci, "desktop"), "Verify desktop validation jobs");
   const success = { CHANGES_RESULT: "success", PREPARE_REQUIRED: "true", NATIVE_REQUIRED: "true", FRONTEND_REQUIRED: "true", BROWSER_REQUIRED: "true",
     PACKAGE_REQUIRED: "true", RACE_REQUIRED: "true", PREPARE_RESULT: "success", GO_RESULT: "success", GO_RACE_RESULT: "success", FRONTEND_RESULT: "success", BROWSER_RESULT: "success",
-    MACOS_RESULT: "success", WINDOWS_RESULT: "success", WINDOWS_GO_RESULT: "success", PACKAGE_RESULT: "success" };
+    WINDOWS_RESULT: "success", WINDOWS_GO_RESULT: "success", PACKAGE_RESULT: "success" };
   const run = env => spawnSync("bash", ["-e", "-c", script], { env: { ...process.env, ...env } }).status;
   assert.equal(run(success), 0);
   for (const key of ["PREPARE_RESULT", "GO_RESULT", "GO_RACE_RESULT", "FRONTEND_RESULT", "BROWSER_RESULT", "CHANGES_RESULT",
-    "MACOS_RESULT", "WINDOWS_RESULT", "WINDOWS_GO_RESULT", "PACKAGE_RESULT"]) {
+    "WINDOWS_RESULT", "WINDOWS_GO_RESULT", "PACKAGE_RESULT"]) {
     for (const value of ["failure", "cancelled", "skipped", ""]) assert.notEqual(run({ ...success, [key]: value }), 0, `${key}=${value}`);
   }
   // A pull request that cannot affect the desktop module: every child skips
   // except the browser and Windows Go aggregates, which validate their groups.
   assert.equal(run({ ...success, PREPARE_REQUIRED: "false", NATIVE_REQUIRED: "false", FRONTEND_REQUIRED: "false", BROWSER_REQUIRED: "false",
     PACKAGE_REQUIRED: "false", RACE_REQUIRED: "false", PREPARE_RESULT: "skipped", GO_RESULT: "skipped", GO_RACE_RESULT: "skipped", FRONTEND_RESULT: "skipped",
-    BROWSER_RESULT: "success", MACOS_RESULT: "skipped", WINDOWS_RESULT: "skipped", WINDOWS_GO_RESULT: "success", PACKAGE_RESULT: "skipped" }), 0);
+    BROWSER_RESULT: "success", WINDOWS_RESULT: "skipped", WINDOWS_GO_RESULT: "success", PACKAGE_RESULT: "skipped" }), 0);
   // A pull request that touches native code runs every native child except the race sweep.
   assert.equal(run({ ...success, RACE_REQUIRED: "false", GO_RACE_RESULT: "skipped" }), 0);
   assert.notEqual(run({ ...success, RACE_REQUIRED: "false", GO_RACE_RESULT: "success" }), 0);
@@ -478,7 +478,7 @@ test("all desktop consumers verify the prepared build and reject a failed prepar
   assert.equal(ci.match(/test -n "\$\{\{ needs\.desktop-prepare\.outputs\.producer_attempt \}\}"/g)?.length, verifications);
   for (const [name, variant] of [
     ["desktop-go", "stable"], ["desktop-frontend", "stable"], ["desktop-browser-group", "stable"],
-    ["desktop-macos", "stable"], ["desktop-windows", "canary"], ["desktop-windows-go-group", "stable"],
+    ["desktop-windows", "canary"], ["desktop-windows-go-group", "stable"],
   ]) {
     const body = job(ci, name);
     if (["desktop-go", "desktop-frontend"].includes(name)) assert.ok(aggregate.includes(name));
@@ -498,8 +498,8 @@ test("all desktop consumers verify the prepared build and reject a failed prepar
     assert.match(body, /REASONIX_FRONTEND_PNPM_VERSION="\$\(pnpm --version\)"\n\s+export REASONIX_FRONTEND_PNPM_VERSION/);
     assert.match(body, /canary_artifact_name/);
   }
-  assert.match(job(ci, "desktop-macos"), /REASONIX_FRONTEND_PNPM_VERSION="\$\(pnpm --version\)"\n\s+export REASONIX_FRONTEND_PNPM_VERSION/);
-  for (const name of ["desktop-macos", "desktop-windows", "desktop-windows-package"]) {
+  assert.match(job(ci, "desktop-windows-package"), /REASONIX_FRONTEND_PNPM_VERSION="\$\(pnpm --version\)"\n\s+export REASONIX_FRONTEND_PNPM_VERSION/);
+  for (const name of ["desktop-windows", "desktop-windows-package"]) {
     assert.ok(job(ci, name).includes("REASONIX_FRONTEND_PRODUCER_ATTEMPT: ${{ needs.desktop-prepare.outputs.producer_attempt }}"));
   }
   const prepare = job(ci, "desktop-prepare");

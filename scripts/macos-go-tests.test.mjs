@@ -52,24 +52,12 @@ test("every darwin-specific package is inside the pull-request group", () => {
       `${declared} declares darwin coverage but owns no darwin source`);
 });
 
-test("CI runs the darwin group on pull requests and the full sweep on pushes", () => {
+// Fork contract: this branch publishes Windows only, so CI carries no macOS
+// runner. The darwin package inventory above still guards the selector, but
+// nothing wires it into a job any more — pin that so a future upstream merge
+// cannot quietly reintroduce a macOS leg.
+test("fork CI carries no macOS leg", () => {
   const source = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
-  assert.match(source, /run: node scripts\/macos-go-tests\.mjs darwin\n/);
-  const releaseControl = source.match(/\n  release-control:\n([\s\S]*?)(?=\n  [a-z][a-z0-9-]*:|$)/)?.[1];
-  assert.ok(releaseControl, "release-control job must still exist");
-  assert.match(releaseControl, /node --test[\s\S]*?scripts\/macos-go-tests\.test\.mjs/);
-  const enabled = (name, event, run) => {
-    const step = source.split(`      - name: ${name}\n`)[1]?.split(/\n      - /)[0];
-    assert.ok(step, `${name} must still exist`);
-    const expression = step.match(/^        if: (.+)$/m)[1];
-    return vm.runInNewContext(expression, {
-      env: { RUN_STEPS: run }, runner: { os: "macOS" }, github: { event_name: event },
-    });
-  };
-  for (const event of ["pull_request", "push", "workflow_dispatch"]) {
-    for (const run of ["true", "false"]) {
-      assert.equal(enabled("test", event, run), run === "true" && event !== "pull_request");
-      assert.equal(enabled("test (macOS platform packages)", event, run), run === "true" && event === "pull_request");
-    }
-  }
+  assert.doesNotMatch(source, /macos-latest/);
+  assert.doesNotMatch(source, /macos-go-tests\.mjs/);
 });
