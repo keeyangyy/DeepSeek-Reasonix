@@ -22,7 +22,7 @@ function Invoke-Step($name, [scriptblock]$body, [string]$dir) {
 # 改动文件：优先与远端主线比；在 main-v2 上则退化为最近提交
 $changed = @(git diff --name-only origin/main-v2...HEAD 2>$null)
 if ($changed.Count -eq 0) { $changed = @(git diff --name-only HEAD~1 2>$null) }
-$changedGo = @($changed | Where-Object { $_ -like "*.go" })
+$changedGo = @($changed | Where-Object { $_ -like "*.go" -and (Test-Path $_) })
 $changedFe = @($changed | Where-Object { $_ -like "desktop/frontend/*" -and (Test-Path $_) } | ForEach-Object { $_ -replace "^desktop/frontend/", "" })
 
 Invoke-Step "gofmt（改动 Go）" {
