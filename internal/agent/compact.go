@@ -145,7 +145,8 @@ func estimateMessagesTokens(msgs []provider.Message) int {
 		if m.LocalOnly || IsPinnedContextRevision(m) {
 			continue
 		}
-		total += 4 // chat-message framing overhead
+		total += 4                                            // chat-message framing overhead
+		total += len(m.Images) * visionTokensPerImageEstimate // vision priced per image, not per char
 		total += estimateTextTokens(m.Content)
 		total += estimateTextTokens(m.ReasoningContent)
 		total += estimateTextTokens(m.Name)
@@ -339,11 +340,14 @@ func tailStart(msgs []provider.Message, head, budgetTokens int, tokPerChar float
 // tokPerChar derives a tokens-per-character ratio from the last turn's real
 // usage so per-message estimates track the provider's tokenizer without a local
 // one. Reasoning content is excluded from the char count to match the prompt
-// actually sent (the provider strips it). Falls back to ~4 chars/token before
-// any usage is known, and ignores absurd ratios.
+// actually sent (the provider strips it), and per-image vision tokens are
+// stripped from the numerator so image attachments cannot inflate the text
+// ratio. Falls back to ~4 chars/token before any usage is known, and ignores
+// absurd ratios.
 func (a *Agent) tokPerChar() float64 {
-	if cal := a.sess.output.promptCalibration.Load(); cal != nil && cal.compactChars > 0 {
-		if r := float64(cal.promptTokens) / float64(cal.compactChars); r > 0.05 && r < 2 {
+	if cal := a.loadPromptCalibration(); cal != nil && cal.compactChars > 0 {
+		textTokens := float64(cal.promptTokens) - float64(cal.imageCount)*visionTokensPerImageEstimate
+		if r := textTokens / float64(cal.compactChars); r > 0.05 && r < 2 {
 			return r
 		}
 	}
