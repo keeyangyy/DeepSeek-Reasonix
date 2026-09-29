@@ -236,7 +236,12 @@ jobs:
             #      empty"): a background writer still touches the directory while
             #      t.TempDir() removes it. Same class: slow runners only, passes
             #      on a rerun.
-            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
+            #   4. a Windows runner netpoll crash ("runtime: SetWaitableTimer
+            #      failed; errno= 6" -> "fatal error: runtime: netpoll failed"):
+            #      an OS/runtime-level fault on hosted runners that kills the
+            #      whole test process mid-package; not reproducible from the
+            #      code under test, passes on a rerun.
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
@@ -922,17 +927,11 @@ jobs:
         timeout-minutes: 10
         run: (cd third_party/go-webview2 && go test -timeout=8m ./pkg/edge)
 
-      # Installer packaging is packaging validation, not a code gate: run it
-      # on pushes to main-v2 (the release pipeline builds installers again
-      # anyway), but let pull requests stop after the test step.
-      - name: Install NSIS
-        if: github.event_name != 'pull_request'
-        run: pwsh -NoProfile -File ../scripts/install-nsis.ps1
-
-      - name: Build Windows installer and portable archive
-        if: github.event_name != 'pull_request'
-        timeout-minutes: 20
-        run: ../scripts/desktop-build.sh windows/amd64 v0.0.0-ci canary
+      # Installer packaging is intentionally NOT re-run here: the Wails
+      # executable itself is already built and startup-smoked above, and the
+      # release pipeline builds the real installer/archive on every tag.
+      # Duplicating packaging per push cost ~6 minutes of Windows runner time
+      # while its artifacts (v0.0.0-ci canary) were never consumed.
 
   # repolint scans desktop/ and sdk/ too, so this job also runs for diffs the
   # `code` filter would otherwise skip.
