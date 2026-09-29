@@ -236,12 +236,14 @@ jobs:
             #      empty"): a background writer still touches the directory while
             #      t.TempDir() removes it. Same class: slow runners only, passes
             #      on a rerun.
-            #   4. a Windows runner netpoll crash ("runtime: SetWaitableTimer
-            #      failed; errno= 6" -> "fatal error: runtime: netpoll failed"):
-            #      an OS/runtime-level fault on hosted runners that kills the
-            #      whole test process mid-package; not reproducible from the
-            #      code under test, passes on a rerun.
-            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
+            #   4. a Windows runner runtime crash ("runtime: SetWaitableTimer
+            #      failed; errno= 6" -> "fatal error: runtime: netpoll failed",
+            #      or the semaphore siblings "runtime: waitforsingleobject
+            #      wait_failed; errno=6" -> "fatal error: runtime.semasleep
+            #      wait_failed" / ".semawakeup"): an OS/runtime-level fault on
+            #      hosted runners that kills the whole test process mid-package;
+            #      not reproducible from the code under test, passes on a rerun.
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
