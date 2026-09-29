@@ -272,8 +272,13 @@ func TestUnlockedAppendWaitsForRotationMarkerThenReappends(t *testing.T) {
 	// A rotation that already read the log publishes its replacement while the
 	// appender is waiting on the marker, then clears the marker.
 	published := make(chan struct{})
+	// begin gates the rotation's clock on the measurement's start: the 150ms
+	// sleep would otherwise run from the goroutine's launch, a few ms before
+	// `started`, and the assertion would measure 150ms minus that gap.
+	begin := make(chan struct{})
 	go func() {
 		defer close(published)
+		<-begin
 		time.Sleep(150 * time.Millisecond)
 		if err := fileutil.AtomicWriteFileStrict(store.SessionEventLog(path), data, 0o600); err != nil {
 			t.Error(err)
@@ -282,6 +287,7 @@ func TestUnlockedAppendWaitsForRotationMarkerThenReappends(t *testing.T) {
 	}()
 	entry := dagMessageEntry(t, SessionMainHead, leaf, "", dagMsg(provider.RoleUser, "appended around the rotation", "around"), time.Now().UTC())
 	started := time.Now()
+	close(begin)
 	if _, err := appendSessionDAGEntriesUnlocked(path, []sessionDAGEntry{entry}); err != nil {
 		t.Fatalf("unlocked append: %v", err)
 	}
