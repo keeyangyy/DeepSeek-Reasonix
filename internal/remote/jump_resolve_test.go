@@ -31,12 +31,9 @@ func TestResolveJumpHostsUsesConfiguredAliasesAndSSHConfig(t *testing.T) {
 		Name: "second", Host: "10.0.0.9", User: "ops",
 		PasswordEnv: "SECOND_PASSWORD", ProxyJump: "ignored-nested-hop",
 	}}
-	// Resolve through a deterministic stand-in for `ssh -G`: the real client is
-	// unavailable or non-functional on some hosts (hosted runners resolve no
-	// HOME-based config and exit 1), which would turn this into an environment
-	// check instead of a resolution check. The stand-in returns exactly what the
-	// alias's config would, so the whole ResolveHost→applySSHConfig path still
-	// runs end to end.
+	// A deterministic stand-in for `ssh -G`: the real client exits 1 on hosts
+	// that resolve no HOME-based config (hosted runners), which would make this
+	// an environment check; the whole ResolveHost→applySSHConfig path still runs.
 	sshCfg.resolveOpenSSH = func(_ context.Context, _ string, alias string) ([]byte, error) {
 		if alias != "bastion" {
 			return nil, exec.ErrNotFound
