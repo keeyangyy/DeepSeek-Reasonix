@@ -5,7 +5,7 @@
 // rows count as dispatches, that the strip never composes a label itself, and
 // that a settled run drops off.
 
-import { isSubagentDispatchItem, splitSubagentLabel, subagentDispatchName } from "../lib/subagentInventory";
+import { isSubagentDispatch, isSubagentDispatchItem, splitSubagentLabel, subagentDispatchName } from "../lib/subagentInventory";
 import { subagentRunIsRunning } from "../lib/useSubagentRuns";
 import type { Item } from "../lib/useController";
 import type { SubagentRunView } from "../lib/types";
@@ -48,8 +48,15 @@ ok(subagentDispatchName({ name: "task" }) === "task", "a direct task call is a d
 ok(subagentDispatchName({ name: "read_only_task" }) === "read_only_task", "a direct read_only_task call is a dispatch");
 ok(subagentDispatchName({ name: "fleet" }) === "fleet", "a direct fleet call is a dispatch");
 ok(subagentDispatchName({ name: "use_capability", resolvedName: "task" }) === "task", "a proxied dispatch resolves via resolvedName");
-ok(subagentDispatchName({ name: "use_capability", capabilityId: "tool:research" }) === undefined, "an agent profile is not a container dispatch");
+ok(subagentDispatchName({ name: "use_capability", capabilityId: "tool:research" }) === "research", "an agent profile resolves to its own name");
 ok(isSubagentDispatchItem(item({ name: "use_capability", capabilityId: "tool:research" })), "a proxied agent profile still triggers a re-read");
+// Counting (the fold header) is strict: naming an ordinary proxied tool as a
+// sub-agent would show "1 个子代理" for a plain bash call. Re-read triggering is
+// wide, because an author-defined profile is unknowable here.
+ok(isSubagentDispatch(item({ name: "use_capability", capabilityId: "tool:research" })), "a known agent profile counts as a sub-agent");
+ok(!isSubagentDispatch(item({ name: "use_capability", capabilityId: "tool:bash" })), "a proxied ordinary tool does not count as a sub-agent");
+ok(isSubagentDispatchItem(item({ name: "use_capability", capabilityId: "tool:bash" })), "a proxied ordinary tool still triggers a re-read");
+ok(isSubagentDispatch(item({ name: "task" })), "a direct task call counts as a sub-agent");
 ok(subagentDispatchName({ name: "use_capability", capabilityId: "tool:read_only_task" }) === "read_only_task", "a proxied read_only_task resolves via capabilityId");
 ok(subagentDispatchName({ name: "bash" }) === undefined, "an ordinary tool is not a dispatch");
 ok(isSubagentDispatchItem(item({ name: "task" })), "a tool item with a dispatch name counts");

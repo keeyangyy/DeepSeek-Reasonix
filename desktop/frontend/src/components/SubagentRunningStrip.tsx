@@ -54,7 +54,7 @@ export function SubagentRunningStrip({ runs }: { runs: readonly SubagentRunView[
         const { tool, content } = splitSubagentLabel(run.label);
         return (
           <span key={run.ref} className="subagent-strip__name" title={run.label}>
-            <span className="subagent-strip__tool">{tool}</span>
+            <span className="subagent-strip__tool">{tool || "sub-agent"}</span>
             {content && <span className="subagent-strip__subject">{content}</span>}
             <em className="subagent-strip__time">{elapsedLabel(run.createdAt, now) ?? ""}</em>
           </span>

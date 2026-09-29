@@ -110,8 +110,13 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
 
   // The sub-agent strip reads the persisted run sidecars, not the transcript.
   // The dispatch count only triggers an immediate re-read when a new dispatch
-  // lands, so the strip appears without waiting for the next poll.
-  const subagentDispatchCount = state.items.reduce((n, item) => n + (isSubagentDispatchItem(item) ? 1 : 0), 0);
+  // lands, so the strip appears without waiting for the next poll. Memoized:
+  // the scan is over every transcript item and the strip does not need it on
+  // unrelated re-renders.
+  const subagentDispatchCount = useMemo(
+    () => state.items.reduce((n, item) => n + (isSubagentDispatchItem(item) ? 1 : 0), 0),
+    [state.items],
+  );
   const subagentRuns = useSubagentRuns(activeTabId, subagentDispatchCount);
 
   // Creation keeps the classic sidebar/chat structure while gating chrome tweaks

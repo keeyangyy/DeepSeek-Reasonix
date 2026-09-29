@@ -49,10 +49,16 @@ func (a *App) ListSubagentsForTab(tabID string) []SubagentRunView {
 	}
 	for _, artifact := range artifacts {
 		meta := artifact.Meta
+		// Older sidecars predate Label; fall back so the strip never renders an
+		// empty chip for a run that is genuinely there.
+		label := strings.TrimSpace(meta.Label)
+		if label == "" {
+			label = strings.TrimSpace(meta.Name)
+		}
 		out = append(out, SubagentRunView{
 			Ref:              artifact.Ref,
 			ParentToolCallID: meta.ParentToolCallID,
-			Label:            meta.Label,
+			Label:            label,
 			Status:           string(meta.Status),
 			Outcome:          meta.Outcome,
 			ErrorCode:        meta.ErrorCode,

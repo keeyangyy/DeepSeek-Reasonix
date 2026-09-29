@@ -1,23 +1,26 @@
-// Which transcript rows may have started a sub-agent.
+// Which transcript rows are sub-agent dispatches.
 //
-// The status strip takes its labels from the persisted run sidecar (see
-// useSubagentRuns), not from the transcript, so this module answers only one
-// question: did a dispatch just happen? A change tells the strip to re-read the
-// sidecar now instead of waiting out its poll.
+// Two callers need different strictness, so this module exposes both:
+//  - subagentDispatchName: the known sub-agent targets, for counting what the
+//    fold header names ("2 sub-agents"). A wrong count is worse than a missing
+//    one, so this is a whitelist and never guesses.
+//  - isSubagentDispatchItem: a superset that also accepts any proxied
+//    capability call, for deciding when to re-read the run sidecar. There an
+//    extra read is free and a missed one delays a run's appearance, so it errs
+//    wide.
 //
 // A dispatch arrives as a direct tool call ("task", "read_only_task", "fleet",
 // "parallel_tasks") or through the stable use_capability proxy, where the real
-// target sits in resolvedName / capabilityId ("tool:task", "tool:research" for
-// an agent profile). Every proxied call counts: a capability id cannot be
-// statically classified as "spawns a sub-agent" (a profile is any name the user
-// authored), and a re-read is cheap enough that over-triggering costs nothing
-// while under-triggering would delay a run's appearance.
+// target sits in resolvedName / capabilityId ("tool:task", "tool:research").
 
 import type { Item } from "./useController";
 
 const SUBAGENT_DISPATCH_TOOLS = new Set(["task", "read_only_task", "parallel_tasks", "fleet"]);
 
-/** The sub-agent tool this call dispatches to, when the transcript names one. */
+// Built-in agent profiles that dispatch a sub-agent when proxied.
+const SUBAGENT_AGENT_PROFILES = new Set(["explore", "research", "review", "security_review", "security-review"]);
+
+/** The known sub-agent target of this call, or undefined when it is not one. */
 export function subagentDispatchName(item: {
   name?: string;
   resolvedName?: string;
@@ -26,14 +29,21 @@ export function subagentDispatchName(item: {
   if (item.name !== undefined && SUBAGENT_DISPATCH_TOOLS.has(item.name)) return item.name;
   if (item.resolvedName !== undefined && SUBAGENT_DISPATCH_TOOLS.has(item.resolvedName)) return item.resolvedName;
   const target = (item.capabilityId ?? "").replace(/^tool:/, "");
-  return SUBAGENT_DISPATCH_TOOLS.has(target) ? target : undefined;
+  if (SUBAGENT_DISPATCH_TOOLS.has(target) || SUBAGENT_AGENT_PROFILES.has(target)) return target;
+  return undefined;
 }
 
-/** True when a transcript row may have started a sub-agent run. */
+/** True when a transcript row is a known sub-agent dispatch (for counting). */
+export function isSubagentDispatch(item: Item): boolean {
+  return item.kind === "tool" && subagentDispatchName(item) !== undefined;
+}
+
+/** True when a row may have started a run, so the sidecar should be re-read. */
 export function isSubagentDispatchItem(item: Item): boolean {
   if (item.kind !== "tool") return false;
   if (subagentDispatchName(item) !== undefined) return true;
-  // A proxied capability call: the target may be an agent profile, so re-read.
+  // Any other proxied capability call: the target may be an author-defined
+  // agent profile this list cannot know, and a re-read costs nothing.
   return Boolean(item.capabilityId);
 }
 

@@ -9,7 +9,7 @@
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { stableStringHash } from "./stableStringHash";
 import { isBatchedReadOnlyTool, isSteerNoticeText, type ExtensionItem, type Item } from "./useController";
-import { isSubagentDispatchItem } from "./subagentInventory";
+import { isSubagentDispatch } from "./subagentInventory";
 import { appendTurnActionCopyText } from "./turnActionCopy";
 import { isCreationGroupableTool, toolGroupKind, type ToolGroupKind } from "../components/ToolGroup";
 import type { SessionExperience } from "./sessionExperience";
@@ -312,7 +312,7 @@ export function buildTurnModels(
         durationMs: isLastSegment ? turnWorkDurationMs(model.turnItems) : 0,
         labelStyle: isLastSegment ? "full" : "counts",
         turnActive,
-        subagentCount: segment.processItems.reduce((n, it) => n + (isSubagentDispatchItem(it) ? 1 : 0), 0),
+        subagentCount: segment.processItems.reduce((n, it) => n + (isSubagentDispatch(it) ? 1 : 0), 0),
       } satisfies SegmentModel;
     });
     let actionText = "";
