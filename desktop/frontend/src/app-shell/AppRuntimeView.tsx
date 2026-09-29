@@ -34,6 +34,9 @@ import { buildAppShellClassNames, buildSessionStatusBannerProps, buildSidebarReg
 import { buildBottomRegionsProps, buildWorkspaceDockProps } from "./dockRegionBuilders";
 import { buildOverlayHostProps } from "./overlayBuilders";
 import { buildComposerSurface, buildDecisionFooterSurface, buildFooterTodo, buildFooterUndo } from "./decisionFooterBuilders";
+import { SubagentRunningStrip } from "../components/SubagentRunningStrip";
+import { useSubagentRuns } from "../lib/useSubagentRuns";
+import { isSubagentDispatchItem } from "../lib/subagentInventory";
 
 const WindowsWindowControls = lazy(() => import("./WindowsWindowControls").then((module) => ({ default: module.WindowsWindowControls })));
 
@@ -104,6 +107,12 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
   const { chromeCommands, navigationCommands } = navigation;
   const runtimeTransitioning = core.surface.transitioning;
   const browserPreviewChrome = navigation.browserPreviewChrome;
+
+  // The sub-agent strip reads the persisted run sidecars, not the transcript.
+  // The dispatch count only triggers an immediate re-read when a new dispatch
+  // lands, so the strip appears without waiting for the next poll.
+  const subagentDispatchCount = state.items.reduce((n, item) => n + (isSubagentDispatchItem(item) ? 1 : 0), 0);
+  const subagentRuns = useSubagentRuns(activeTabId, subagentDispatchCount);
 
   // Creation keeps the classic sidebar/chat structure while gating chrome tweaks
   // behind its own style flag so classic/workbench remain unchanged.
@@ -362,6 +371,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
             className={["footer", terminalSurfaceOpen && !sidebarCreation ? "footer--compact" : "", visibleDecisionSurface ? "footer--decision" : "", runtimeTransitioning ? "footer--navigation-hidden" : ""].filter(Boolean).join(" ")}
             footerRef={footerRef}
             style={core.surface.surface?.phase === "source-retained" && footerHeight > 0 ? { height: footerHeight, minHeight: footerHeight, boxSizing: "border-box" } : undefined}
+            strip={<SubagentRunningStrip runs={subagentRuns} />}
             todo={footerTodo}
             undo={footerUndo}
             decision={decisionFooterSurface}

@@ -19,6 +19,10 @@ func preserveSubagentFailure(run *agent.SubagentRun, store *agent.SubagentStore,
 	return subErr.SubagentOutput(), errors.Join(subErr, saveErr)
 }
 
+// runReadOnlySkillSession runs a read-only skill sub-agent. It persists no
+// transcript, but when a store and parent session are available it records a
+// status-only sidecar so the desktop status strip can name the run while it
+// works and drop it when it ends — the same visibility writer skills get.
 func runReadOnlySkillSession(ctx context.Context, prov provider.Provider, reg *tool.Registry, prompt string, opts agent.Options, sink event.Sink, systemPrompt string,
 	runner func(context.Context, provider.Provider, *tool.Registry, *agent.Session, string, agent.Options, event.Sink) (string, error),
 ) (string, error) {

@@ -29,7 +29,10 @@ func (s *SubagentStore) SaveOutcome(run *SubagentRun, outcome SubagentOutcome) e
 	}
 	branchErr := s.ensureBranchCreatedAt(run)
 	var sessionErr error
-	if run.Session != nil {
+	// A status-only run records its terminal state without writing a transcript
+	// body: read-only entry points keep their "no readable transcript" promise
+	// while the status strip still sees the run end.
+	if run.Session != nil && !run.StatusOnly {
 		sessionErr = run.Session.Save(s.sessionPath(run.Ref))
 	}
 	meta := run.Meta

@@ -1369,6 +1369,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			spec := agent.SubagentSpec{
 				Kind:             "skill",
 				Name:             sk.Name,
+				Label:            agent.SubagentDispatchLabel(sk.Name, "", task),
 				WorkspaceRoot:    root,
 				ParentSession:    parentSession,
 				ParentToolCallID: parentID,
@@ -1388,6 +1389,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			if prepErr != nil {
 				return "", prepErr
 			}
+			// Mark the run running before execution: the strip reads only the
+			// sidecar. Best-effort, like the task path.
+			agent.MarkDispatchRunning(subagentStore, run, false)
 		}
 		defer run.Release()
 		steps := maxSteps

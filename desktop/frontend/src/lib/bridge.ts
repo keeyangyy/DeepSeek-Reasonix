@@ -133,6 +133,7 @@ import type {
   TaskSnapshot,
   SlashArgsResult,
   SubagentProfileInput,
+  SubagentRunView,
   TabMeta,
   TerminalSessionView,
   TerminalWorkspaceView,
@@ -471,8 +472,8 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   SetSkillEnabled(name: string, enabled: boolean): Promise<void>;
   SetSkillImplicitInvocation(enabled: boolean): Promise<void>;
   AvailableSubagentTools(): Promise<MCPToolView[]>;
-  CreateSubagentProfile(input: SubagentProfileInput): Promise<string>;
-  UpdateSubagentProfile(name: string, scope: string, input: SubagentProfileInput): Promise<void>;
+  ListSubagentsForTab(tabID: string): Promise<SubagentRunView[]>;
+  CreateSubagentProfile(input: SubagentProfileInput): Promise<string>;  UpdateSubagentProfile(name: string, scope: string, input: SubagentProfileInput): Promise<void>;
   DeleteSubagentProfile(name: string, scope: string): Promise<void>;
   SetSubagentProfileModel(name: string, ref: string): Promise<void>;
   SetSubagentProfileEffort(name: string, level: string): Promise<void>;
@@ -3579,6 +3580,8 @@ function makeMockApp(): AppBindings {
         async ActiveWorkForTab() {
           return { running: false, pendingPrompt: false, cancellable: false, jobs: [] };
         },
+        // No persisted run sidecars in the browser preview.
+        async ListSubagentsForTab() { return []; },
         async BackgroundRuntimes() {
           return [];
         },
