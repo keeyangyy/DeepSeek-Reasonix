@@ -413,10 +413,7 @@ func (a *Agent) calibratedPromptTokens(shape requestCalibrationShape) (int, bool
 	if ratio <= 0.05 || ratio >= 2 {
 		return 0, false
 	}
-	trustedChars := shape.requestChars - shape.overheadChars
-	if trustedChars < 0 {
-		trustedChars = 0
-	}
+	trustedChars := max(shape.requestChars-shape.overheadChars, 0)
 	excessCJKBytes := int64(0)
 	// A higher CJK share cannot safely reuse the aggregate ratio. Scale its
 	// represented share and price only the excess at the cold rate,
