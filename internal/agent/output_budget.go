@@ -111,6 +111,10 @@ type requestCalibrationShape struct {
 	imageCount     int
 	overheadChars  int64
 	overheadTokens int64
+	// reasoningChars is the replayed reasoning already inside requestChars: the
+	// provider replays it for cache alignment without charging, so the cold
+	// fallback prices it at zero (verified on a 2.8M-char reasoning session).
+	reasoningChars int64
 }
 
 // reset drops what belongs to the transcript being replaced. Prompt-token
@@ -298,7 +302,24 @@ func requestCalibrationShapeWithPolicy(req provider.Request, policy provider.Sha
 		imageCount:     imageCount,
 		overheadChars:  overheadChars,
 		overheadTokens: estimateTextTokensInt64(overheadChars),
+		reasoningChars: requestReasoningChars(req, policy),
 	}
+}
+
+// requestReasoningChars sums the replayed reasoning that requestCalibrationTextShape
+// counted, so the cold fallback can exclude it. Keep the inclusion condition in
+// step with requestCalibrationTextShape.
+func requestReasoningChars(req provider.Request, policy provider.SharedWindowInputPolicy) int64 {
+	var n int64
+	for _, msg := range req.Messages {
+		if msg.LocalOnly {
+			continue
+		}
+		if msg.Role == provider.RoleAssistant && (len(msg.ToolCalls) > 0 || policy.ReplaysOrdinaryReasoning) {
+			n += int64(len(msg.ReasoningContent))
+		}
+	}
+	return n
 }
 
 // requestCalibrationOverheadShape splits the fixed per-request framing (tool
@@ -448,9 +469,14 @@ func (a *Agent) estimatedShapeTokens(shape requestCalibrationShape) int {
 	if calibrated, ok := a.calibratedPromptTokens(shape); ok {
 		return calibrated
 	}
-	// Cold estimate: char ratio plus per-image pricing (image payloads never
-	// ride requestChars).
-	return int(float64(shape.requestChars)*fallbackTokPerChar) + shape.imageCount*visionTokensPerImageEstimate
+	// Cold estimate: the standard text rate over the non-reasoning text, plus
+	// per-image pricing. Replayed reasoning rides requestChars but is not
+	// charged, so pricing it as text overstates every reasoning-heavy cold start.
+	textChars := shape.requestChars - shape.reasoningChars
+	if textChars < 0 {
+		textChars = 0
+	}
+	return int(float64(textChars)*fallbackTokPerChar) + shape.imageCount*visionTokensPerImageEstimate
 }
 
 func isCJKRune(r rune) bool {
