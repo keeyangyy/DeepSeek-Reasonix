@@ -1,0 +1,201 @@
+name: Release (manual)
+
+# One-shot fork release pipeline: dispatch it with the version to publish, it
+# waits for the official CI and Studio workflows of the current studio-mine
+# commit to turn green and only then creates the annotated tag plus a DRAFT
+# GitHub Release. A tag is therefore never created for a commit whose CI is
+# red, and the Release stays invisible until release-windows.yml attaches the
+# portable archive and the installer a few minutes later.
+#
+#   gh workflow run "Release (manual)" -R keeyangyy/DeepSeek-Reasonix \
+#     -r studio-mine -f version=2.26.0-mine.1 -f notes="$(cat notes.md)"
+#
+# The version input never carries the leading v (v2.26.0-mine.1 would produce
+# tag vv2.26.0-mine.1).
+#
+# Windows-only: upstream's macOS/Linux/CLI/npm lines need signing, notarization
+# and CDN secrets this fork does not have, and only the Windows Electron
+# artifacts are produced. Studio's own release-studio.yml (tag-driven, Certum
+# signing, minisign manifest, R2 mirror) is left unused here: this fork's tags
+# are v*-mine.N, which its `studio-v*` trigger never matches.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release without the leading v, e.g. 2.26.0-mine.1"
+        required: true
+        type: string
+      title:
+        description: "Release title (optional; defaults to v<version>)"
+        required: false
+        type: string
+      notes:
+        description: "Release notes (optional; defaults to the upstream notes for this base version plus a commit summary)"
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  # Dispatches release-windows.yml at the end of the release; GITHUB_TOKEN
+  # needs actions: write for workflow_dispatch of another workflow.
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: studio-mine
+          fetch-depth: 0
+
+      - name: Resolve target commit
+        id: target
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the CI and Studio workflows of this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA="${{ steps.target.outputs.sha }}"
+          DEADLINE=$((SECONDS + 5400))
+          RETRIED=0
+          # Both workflows gate a release: ci.yml covers the kernel, studio.yml
+          # covers the SPA, the desktop module and the packaging contract.
+          # Studio's runbook requires both green before a tag, so both are
+          # waited on here rather than the kernel alone.
+          WANTED="CI Studio"
+          latest_run() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&per_page=100" \
+              --jq ".workflow_runs[] | select(.name==\"$1\") | \"\(.status) \(.conclusion) \(.id)\"" \
+              | head -1 || true
+          }
+          while true; do
+            pending=0
+            failed=""
+            for name in $WANTED; do
+              line=$(latest_run "$name")
+              if [ -z "$line" ]; then
+                echo "$name: no run yet for $SHA"
+                pending=1
+                continue
+              fi
+              status=$(echo "$line" | awk '{print $1}')
+              conclusion=$(echo "$line" | awk '{print $2}')
+              id=$(echo "$line" | awk '{print $3}')
+              echo "$name run $id: $status/$conclusion"
+              if [ "$status" != "completed" ]; then
+                pending=1
+              elif [ "$conclusion" != "success" ]; then
+                failed="$failed $id"
+              fi
+            done
+            if [ -z "$failed" ] && [ "$pending" = "0" ]; then
+              echo "CI and Studio passed; proceeding to tag."
+              break
+            fi
+            if [ -n "$failed" ]; then
+              # One automatic retry of the failed jobs: CI is occasionally red
+              # from runner flakes (Windows runtime / race timing) rather than
+              # from repo code.
+              if [ "$RETRIED" = "0" ]; then
+                echo "Red workflows, retrying their failed jobs once:$failed"
+                for id in $failed; do
+                  gh run rerun "$id" --repo "$GITHUB_REPOSITORY" --failed
+                done
+                RETRIED=1
+                sleep 30
+                continue
+              fi
+              echo "::error::workflows still red after one retry:$failed; release aborted, no tag created."
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "::error::Timed out after 90 minutes waiting for CI on $SHA."
+              exit 1
+            fi
+            sleep 60
+          done
+
+      - name: Create annotated tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          # The tag shape release-windows.yml verifies must be created here, so
+          # a typo in the dispatch fails before a tag exists rather than after.
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-mine\.[0-9]+$ ]]; then
+            echo "::error::version must be X.Y.Z-mine.N, got: $VERSION" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag v$VERSION already exists; aborting."
+            exit 1
+          fi
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+          TITLE: ${{ github.event.inputs.title }}
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          set -euo pipefail
+          RELEASE_TITLE="${TITLE:-v$VERSION}"
+          # Create the release as a draft: the Windows pipeline attaches the
+          # installer and portable archive a few minutes later, and a public
+          # release must never be visible without its assets.
+          # release-windows.yml publishes it once both assets are uploaded.
+          if [ -n "$NOTES" ]; then
+            gh release create "v$VERSION" --draft --target studio-mine --title "$RELEASE_TITLE" --notes "$NOTES"
+          else
+            # The base version's upstream Studio notes are the release's own
+            # notes; the fork's own commit summary rides under them. --merged
+            # HEAD keeps the previous tag on this branch only, so the 1.x line's
+            # -mine tags never define the range.
+            PREV="$(git tag --merged HEAD -l 'v[0-9]*-mine.[0-9]*' --sort=-version:refname | sed -n '1p' || true)"
+            if [ -z "$PREV" ]; then
+              RANGE=""
+              RANGE_NOTE="first -mine release on this branch"
+            else
+              RANGE="$PREV..HEAD"
+              RANGE_NOTE="$PREV → v$VERSION"
+            fi
+            BASE="${VERSION%-mine.*}"
+            {
+              if [ -f "release-notes/studio/$BASE.md" ]; then
+                cat "release-notes/studio/$BASE.md"
+                echo
+                echo "---"
+                echo
+              fi
+              echo "## 变更总览（$RANGE_NOTE）"
+              echo
+              git log "$RANGE" --no-merges --pretty=format:'- %s' 2>/dev/null || true
+              echo
+            } > /tmp/release-notes.md
+            gh release create "v$VERSION" --draft --target studio-mine --title "$RELEASE_TITLE" --notes-file /tmp/release-notes.md
+          fi
+
+      - name: Dispatch Windows artifact pipeline
+        # GITHUB_TOKEN pushes do not trigger tag workflows, but workflow_dispatch
+        # is an allowed exception — relay the just-created tag to
+        # release-windows.yml, which builds the portable archive + NSIS
+        # installer and uploads both to this release.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-windows.yml --repo "$GITHUB_REPOSITORY" --ref studio-mine -f "tag=v$VERSION"

@@ -1,0 +1,263 @@
+name: Release Windows
+
+# Fork-only Windows x64 release pipeline for the Studio (2.x) line.
+#
+# Upstream publishes through release-studio.yml on a studio-v* tag: four
+# platforms, Apple notarization, Certum Authenticode signing, a minisign
+# manifest and an R2 mirror — secrets this fork does not have. This file
+# produces exactly the two artifacts Windows ships, both from one bundle built
+# with signing off (upstream's own unsigned path, prompts and all):
+#
+#   ReasonixStudio-windows-amd64-<version>.zip               portable archive
+#   ReasonixStudio-windows-amd64-installer-<version>.exe     NSIS per-user installer
+#
+# Tag convention: v<upstream base>-mine.<N>, e.g. v2.26.0-mine.1. The base
+# tracks the upstream Studio release this branch was cut from and N is the
+# fork's own increment. The whole tag rides into the packaging version and the
+# kernel's own version, so an installed fork build states which fork release it
+# is rather than the upstream one it derives from.
+#
+# Normal releases go through release-manual.yml, which waits for CI before it
+# creates the tag; this workflow is the tag-driven producer it dispatches.
+# Nothing here signs: a fork build is unsigned, so SmartScreen warns on first
+# launch and Studio's own update channel (the signed manifest on R2) is absent —
+# a fork release is installed by hand.
+
+on:
+  push:
+    tags:
+      # Glob, not regex: GitHub tag filters do not support '+'. Keep this wide
+      # and enforce the exact shape — and the branch the tag sits on — in the
+      # verify job below.
+      - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v2.26.0-mine.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Validate tag shape and the branch it sits on
+        id: check
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-mine\.[0-9]+$ ]]; then
+            echo "::error::tag must be vMAJOR.MINOR.PATCH-mine.N, got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          # Only a tag on this fork's own line may publish. The glob above also
+          # matches the 1.x line's v1.39.*-mine.* tags, and a tag on some other
+          # commit would ship artifacts no CI run here ever gated.
+          if ! git merge-base --is-ancestor HEAD origin/studio-mine; then
+            echo "::error::$RELEASE_TAG is not on origin/studio-mine" >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Releasing $RELEASE_TAG"
+
+  build:
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10
+          run_install: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: |
+            desktop/frontend-next/pnpm-lock.yaml
+            desktop/electron/pnpm-lock.yaml
+
+      # Defender keeps freshly written files open and makes the packager trip
+      # over its own output; the same exclusions run in studio.yml's package job.
+      - name: Exclude build dirs from Defender scanning
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, (go env GOCACHE)) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($p in $paths) {
+            try {
+              Add-MpPreference -ExclusionPath $p -ErrorAction Stop
+              Write-Host "Defender exclusion added: $p"
+            } catch {
+              Write-Host "::warning::Defender exclusion failed for ${p}: $($_.Exception.Message)"
+            }
+          }
+
+      - name: Build the SPA
+        working-directory: desktop/frontend-next
+        shell: bash
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      # The kernel the shell spawns, into the directory electron-builder lists as
+      # an extra resource. On Windows this also builds reasonix-computer-helper
+      # through MSVC, which the runner has; without the version the kernel
+      # refuses to install a remote kernel from a release.
+      - name: Build the kernel the shell speaks to
+        working-directory: desktop/electron
+        shell: bash
+        env:
+          REASONIX_VERSION: ${{ needs.verify.outputs.version }}
+        run: pnpm install --frozen-lockfile && pnpm run build:host
+
+      # The bundle, before anything is packaged around it. The version has to be
+      # injected: app.getVersion() reads package.json, which carries 0.0.0 in
+      # the tree, and a shell that states 0.0.0 ranks behind every published
+      # release and offers itself an update on every launch.
+      - name: Build the bundle
+        working-directory: desktop/electron
+        shell: bash
+        # Nothing here signs: the runner has no Certum credentials, and letting
+        # electron-builder auto-discover an identity would let a local machine's
+        # certificate decide what CI produces.
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          pnpm exec electron-builder --dir \
+            -c.extraMetadata.version="${{ needs.verify.outputs.version }}"
+
+      # The installer and the portable archive are built at once, the zip from
+      # its own copy: NSIS writes elevate.exe into the tree it packs, and a zip
+      # read beside that would hold it or not by timing. This is upstream's
+      # unsigned path — with Certum signing on, its four signing jobs run
+      # between these two steps instead, and this fork has no such secrets.
+      - name: Package the installer and the portable archive
+        working-directory: desktop/electron
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          version="${{ needs.verify.outputs.version }}"
+          rm -rf ../../zip-src ../../dist-zip
+          cp -r ../../dist/win-unpacked ../../zip-src
+          pnpm exec electron-builder --prepackaged ../../zip-src --win zip \
+            -c.extraMetadata.version="$version" -c.directories.output=../../dist-zip &
+          zip_pid=$!
+          pnpm exec electron-builder --prepackaged ../../dist/win-unpacked --win nsis \
+            -c.extraMetadata.version="$version"
+          wait "$zip_pid"
+          mv ../../dist-zip/ReasonixStudio-windows-amd64.zip ../../dist/
+          ls -la ../../dist/ReasonixStudio-*
+
+      - name: Upload the Windows artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: reasonix-studio-windows-amd64
+          path: |
+            dist/ReasonixStudio-windows-amd64.zip
+            dist/ReasonixStudio-windows-amd64-installer.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      # download-artifact reads the producer run's artifacts through the
+      # Actions API; an explicit permissions block turns every unlisted scope
+      # off.
+      actions: read
+    steps:
+      # gh resolves the repository through the checkout's git remote, and
+      # `gh release create --generate-notes` runs git itself; without a
+      # checkout both fail with "not a git repository".
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.verify.outputs.tag }}
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: reasonix-studio-windows-amd64
+          path: dist
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          zip_asset="ReasonixStudio-windows-amd64-${VERSION}.zip"
+          exe_asset="ReasonixStudio-windows-amd64-installer-${VERSION}.exe"
+          mv dist/ReasonixStudio-windows-amd64.zip "dist/${zip_asset}"
+          mv dist/ReasonixStudio-windows-amd64-installer.exe "dist/${exe_asset}"
+          # release-manual.yml creates the release as a draft before this
+          # pipeline starts, so a public release is never visible without its
+          # assets. Create the draft here too when this workflow is dispatched
+          # on its own.
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG absent; creating it as a draft."
+            gh release create "$RELEASE_TAG" --draft \
+              --target studio-mine \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          else
+            echo "Release $RELEASE_TAG already exists; uploading/overwriting assets."
+          fi
+          # Drop the unversioned asset names from earlier runs so re-running the
+          # same tag never leaves both old and new names behind.
+          gh release delete-asset "$RELEASE_TAG" ReasonixStudio-windows-amd64.zip --yes >/dev/null 2>&1 || true
+          gh release delete-asset "$RELEASE_TAG" ReasonixStudio-windows-amd64-installer.exe --yes >/dev/null 2>&1 || true
+          gh release upload "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" --clobber
+          # Publish only now that both assets are attached.
+          gh release edit "$RELEASE_TAG" --draft=false
+
+      - name: Summarize release
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          {
+            echo "### Windows release $RELEASE_TAG"
+            echo ""
+            echo "| Asset | Size |"
+            echo "|---|---|"
+            for f in dist/*; do
+              echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

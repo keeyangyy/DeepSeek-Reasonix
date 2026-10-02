@@ -1,15 +1,17 @@
 name: Studio
 
 # Studio's own surface — desktop/frontend-next (the SPA) and the Electron shell
-# that serves it — exists only on the studio branch, so it cannot live in ci.yml
-# without failing on main-v2 where neither directory is present. ci.yml covers
-# the kernel; this file covers the frontend build, the desktop module's Go side,
+# that serves it — exists only on the studio-mine branch, so it cannot live in
+# ci.yml without failing where neither directory is present. ci.yml covers the
+# kernel; this file covers the frontend build, the desktop module's Go side,
 # and the packaging contract on real artifacts.
 on:
+  # Fork: studio-mine is this repository's release line; upstream's studio is
+  # never pushed here.
   push:
-    branches: [studio]
+    branches: [studio-mine]
   pull_request:
-    branches: [studio]
+    branches: [studio-mine]
 
 permissions:
   contents: read
@@ -87,7 +89,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        # Fork: no macOS runner.
+        os: [ubuntu-22.04, windows-latest]
     defaults:
       run:
         working-directory: desktop
@@ -133,9 +136,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            arch: arm64
-            platform: darwin
+          # Fork: the macOS leg is dropped — this fork has no macOS runner.
           - os: ubuntu-22.04
             arch: amd64
             platform: linux
@@ -274,17 +275,6 @@ jobs:
           host=$(find "$RUNNER_TEMP/deb" -type f -path '*/resources/bin/reasonix-studio-host')
           test -n "$host"
           node desktop/electron/packaging/elf.js "$host" "$RUNNER_TEMP/deb/usr/lib/reasonix-studio/reasonix-studio-update-helper"
-
-      # Recorded, not asserted: the real bundle layout, so later work argues
-      # from what electron-builder produced rather than from its documentation.
-      - name: Record the macOS bundle layout
-        if: runner.os == 'macOS'
-        run: |
-          app=$(find dist -maxdepth 2 -name '*.app' | head -1)
-          echo "app: $app"
-          ls "$app/Contents"
-          ls "$app/Contents/Resources" | head -20
-          ls "$app/Contents/Frameworks" | head -20
 
       # The end of the contract: not that the name parses, but that the manifest
       # keys the artifact under the platform this runner actually is. The tool

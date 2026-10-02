@@ -5,10 +5,12 @@ name: CI
 # has. Studio's own surface (desktop/next, desktop/frontend-next) exists only
 # there and is covered by studio.yml.
 on:
+  # Fork: studio-mine is this repository's release line. Upstream's studio and
+  # main-v2 are never pushed here, so CI would never run without this.
   push:
-    branches: [main-v2, studio]
+    branches: [studio-mine]
   pull_request:
-    branches: [main-v2, studio]
+    branches: [studio-mine]
 
 permissions:
   contents: read
@@ -26,7 +28,7 @@ jobs:
   # merges. Gated jobs skip only on an explicit `false` output: wrapped in
   # `always()`, a failed `changes` job (or a missing output) makes them run
   # the full matrix instead of silently passing required checks as skipped.
-  # Pushes to main-v2 always run everything.
+  # Pushes to studio-mine always run everything.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -95,7 +97,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Fork: no macOS runner. macOS left the matrix rather than being kept
+        # as a leg that queues forever.
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.code != 'false' }}
@@ -171,7 +175,8 @@ jobs:
       # Pull requests run a Windows smoke suite: the packages that actually
       # carry *_windows.go code, the startup/checkpoint packages with portable
       # filesystem contracts, plus cmd/. The full ./... sweep stays on pushes
-      # to main-v2; the Unix legs always run the full suite. Keep the job-level
+      # to studio-mine; the Unix legs always run the full suite. Keep the
+      # job-level
       # budget above normal 7-9 minute runner variance; each package test binary
       # remains independently bounded by Go's per-package timeout below.
       #
@@ -261,7 +266,7 @@ jobs:
       # (plugin fan-out, background phase B, jobs Kill/Wait) would otherwise
       # ship without race coverage. Pull requests sweep only the
       # concurrency-heavy packages so this required check stays fast; pushes
-      # to main-v2 keep the full ./... sweep as the safety net.
+      # to studio-mine keep the full ./... sweep as the safety net.
       - name: test -race (concurrency packages)
         if: github.event_name == 'pull_request'
         env:
@@ -277,14 +282,14 @@ jobs:
   # sdk/go is a nested stdlib-only module invisible to root `go test ./...`.
   # Its DTOs are generated from internal/ext/extension/protocol, and the
   # host-side conformance tests spawn the SDK example, so the job runs the
-  # same three-OS matrix as the root tests.
+  # same OS matrix as the root tests.
   sdk:
     needs: changes
     if: always()
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.sdk != 'false' }}
@@ -388,34 +393,6 @@ jobs:
       - name: test -race
         run: go test -race ./...
 
-  # desktop/ is a separate module, so the root macOS matrix above does not
-  # compile it against a real macOS toolchain.
-  desktop-macos:
-    needs: changes
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: desktop
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: desktop/go.mod
-          cache: true
-          cache-dependency-path: desktop/go.sum
-
-      - name: test
-        run: go test -race ./...
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          version: v2.12.2
-          working-directory: desktop
-          args: --timeout=5m
-
   # The update helper's versioned-install and uninstall paths are Windows-only
   # (//go:build windows), so the ubuntu leg above never compiles them.
   desktop-windows:
@@ -475,7 +452,8 @@ jobs:
       # The step above only type-checks the linux/amd64 build, so every
       # //go:build windows and //go:build darwin file in the tree went unlinted.
       # Both modules cross-check without a toolchain; desktop under darwin does
-      # not, because its watchdog is cgo, so that leg lives in desktop-macos.
+      # not, because its watchdog is cgo — this fork has no macOS runner, so
+      # that leg is dropped rather than moved into a job of its own.
       - name: golangci-lint (cross-platform build tags)
         run: |
           set -euo pipefail
@@ -493,6 +471,8 @@ jobs:
             -ignore 'label "windows-11-arm" is unknown' \
             .github/workflows/release-studio.yml \
             .github/workflows/studio-certum-signing-smoke.yml \
+            .github/workflows/release-manual.yml \
+            .github/workflows/release-windows.yml \
             .github/workflows/ci.yml
 
   govulncheck:
