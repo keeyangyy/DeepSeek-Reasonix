@@ -1112,8 +1112,8 @@ func (a *App) repriceTabUsageForCurrentCurrency(tab *WorkspaceTab) {
 	if !tab.selectDisplayCurrency(display) {
 		return
 	}
-	if path := tab.currentSessionPath(); path != "" {
-		_ = saveTelemetry(path+".telemetry.json", tab.telemetrySnapshot())
+	if identity := tab.currentSessionIdentity(); identity != "" {
+		_ = saveTelemetryFor(identity, tab.telemetrySnapshot())
 	}
 }
 
@@ -1202,7 +1202,7 @@ func (t *WorkspaceTab) syncTelemetryToSession(sessionPath string) {
 	}
 	// File I/O stays outside telemMu; re-check the key after reacquiring in
 	// case a concurrent sync or reset re-keyed the tab first.
-	snapshot := loadTelemetry(sessionPath + ".telemetry.json")
+	snapshot := loadTelemetryFor(sessionPath)
 	t.telemMu.Lock()
 	if t.telemetrySessionKey != key {
 		t.readTelemetry = snapshot.ReadFiles
@@ -1900,10 +1900,7 @@ func (s *tabEventSink) recordReadTelemetry(e event.Event) {
 	truncated := e.Tool.Truncated || strings.Contains(e.Tool.Output, "truncated") ||
 		strings.Contains(e.Tool.Output, "File truncated")
 
-	sp := ""
-	if ctrl != nil {
-		sp = ctrl.SessionPath()
-	}
+	_, sp := s.telemetryTab()
 	if sp != "" {
 		tab.syncTelemetryToSession(sp)
 	}
@@ -1916,7 +1913,7 @@ func (s *tabEventSink) recordReadTelemetry(e event.Event) {
 		Truncated: truncated,
 	})
 	if sp != "" {
-		_ = saveTelemetry(sp+".telemetry.json", tab.telemetrySnapshot())
+		_ = saveTelemetryFor(sp, tab.telemetrySnapshot())
 	}
 }
 
@@ -1930,7 +1927,7 @@ func (s *tabEventSink) recordTurnStarted() int64 {
 	}
 	startedAt := tab.recordTurnStarted(time.Now().UnixMilli())
 	if sp != "" {
-		_ = saveTelemetry(sp+".telemetry.json", tab.telemetrySnapshot())
+		_ = saveTelemetryFor(sp, tab.telemetrySnapshot())
 	}
 	return startedAt
 }
@@ -1945,7 +1942,7 @@ func (s *tabEventSink) recordTurnDone() {
 	}
 	tab.recordTurnDone(time.Now().UnixMilli())
 	if sp != "" {
-		_ = saveTelemetry(sp+".telemetry.json", tab.telemetrySnapshot())
+		_ = saveTelemetryFor(sp, tab.telemetrySnapshot())
 	}
 }
 
@@ -1959,7 +1956,7 @@ func (s *tabEventSink) recordUsageTelemetry(e event.Event) {
 	}
 	tab.recordUsage(e)
 	if sp != "" {
-		_ = saveTelemetry(sp+".telemetry.json", tab.telemetrySnapshot())
+		_ = saveTelemetryFor(sp, tab.telemetrySnapshot())
 	}
 }
 
@@ -2088,11 +2085,15 @@ func (s *tabEventSink) telemetryTab() (*WorkspaceTab, string) {
 	if ctrl == nil {
 		return tab, ""
 	}
-	sp := ctrl.SessionPath()
-	if sp == "" {
-		return tab, ""
+	if sp := ctrl.SessionPath(); sp != "" {
+		return tab, sp
 	}
-	return tab, sp
+	if lifecycle, ok := ctrl.(control.IdentityLifecycle); ok {
+		if ref, ok := lifecycle.SessionRef(); ok {
+			return tab, sessionRoute(ref.SessionID)
+		}
+	}
+	return tab, ""
 }
 
 // wire event with tab
@@ -2486,6 +2487,22 @@ func (a *App) openTopicSession(scope, workspaceRoot, topicID, sessionPath string
 func (a *App) openTopicSessionWithNavigation(scope, workspaceRoot, topicID, sessionPath string, navigation uint64) (TabMeta, error) {
 	if a.desktopSessions.navigationSeq.Load() != navigation {
 		return TabMeta{}, errSessionNavigationSuperseded
+	}
+	if strings.HasPrefix(sessionPath, "bot-session:") {
+		if !strings.HasPrefix(sessionPath, embeddedBotSessionPrefix) {
+			return TabMeta{}, fmt.Errorf("invalid bot session identity")
+		}
+		path, err := a.embeddedBotSessionPath(scope, workspaceRoot, sessionPath)
+		if err != nil {
+			return TabMeta{}, err
+		}
+		meta, err := a.openTopicTabWithActivation(scope, workspaceRoot, topicID, path, true, navigation)
+		if err != nil {
+			return TabMeta{}, err
+		}
+		a.setTabReadOnly(meta.ID, true)
+		meta.ReadOnly = true
+		return meta, nil
 	}
 	validatedSource := false
 	headID := ""
@@ -3757,7 +3774,11 @@ func (a *App) buildTabControllerWithContextCore(tab *WorkspaceTab, loadedSession
 		}
 		bound.applyLocked(tab)
 		a.mu.Unlock()
-		tab.replaceTelemetry(tabTelemetrySnapshot{}, sessionRuntimeKey(remoteSessionIDRoutePrefix+bound.ref.SessionID))
+		// Local Desktop restores its canonical session choice from the Desktop
+		// preset store. OpenSession publishes the session default, so restore the
+		// selected preset after binding the target identity.
+		applyTabToolApprovalModeToController(ctrl, buildRuntime.toolApprovalMode)
+		tab.replaceTelemetry(loadTelemetryFor(sessionRoute(bound.ref.SessionID)), sessionRuntimeKey(remoteSessionIDRoutePrefix+bound.ref.SessionID))
 	} else if dir := ctrl.SessionDir(); dir != "" {
 		// Refresh the topic/session locals under the lock: a rebind or the
 		// recovery callback may have rewritten them since the early snapshot.

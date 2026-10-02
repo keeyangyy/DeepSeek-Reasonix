@@ -30,7 +30,7 @@ import type { MessageActionScope, MessageActionState } from "./messageActions";
 import { mergeRateBand, type AggregatedRateBand } from "./costRateBand";
 import { requestSessionCancel, type CancelOutcome } from "./inboxCancel";
 import { normalizeTurnSubmit, resolveActiveTurnId } from "./inboxSubmit";
-import { findTabAfterSubmitFailure, reduceManagementConfirmation, reduceSubmitFailure } from "./turnSubmissionFailure";
+import { findTabAfterSubmitFailure, reduceManagementConfirmation, reduceSubmitFailure, reduceSubmitQueued, reduceSubmitUnknown } from "./turnSubmissionFailure";
 import {
   checkpointLocalSubmission,
   settleLocalSubmissions,
@@ -85,7 +85,7 @@ import {
 } from "./controllerNotices";
 import { applyReadStatusEvent, type ReadStatusHost } from "./readStatus";
 import { upsertReadPause } from "./readPause";
-import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
+import { applyHydrateErrorState, hydrateFailureDetail, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { canAdoptUnboundLiveSurface, hasCachedLiveTurn, hasReusableCachedTranscript, sameSessionHydrateIdentity, sameSessionPlaceholderItems, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { useSessionCatalogActions } from "./useSessionCatalogActions";
 import { hydrateIdentityCurrent, sessionIdentityFields, sessionIdentityRoute, sessionIdentityStableKey, type SessionHydrationOptions } from "./sessionIdentity";
@@ -809,6 +809,7 @@ export type Action =
   | { type: "turn_submit_rejected"; submissionId: string; error: string }
   | { type: "turn_submit_unknown"; submissionId: string; error: string }
   | { type: "send_failed"; submissionId: string; error: string }
+  | { type: "send_queued"; submissionId: string }
   | { type: "turn_interrupted" }
   | { type: "backend_status"; running: boolean; turnStartedAt?: number; pendingPrompt?: boolean; backgroundJobs?: number; cancelRequested?: boolean; cancellable?: boolean; turnId?: string; turnStatus?: string; snapshotAt?: number; runtimeEpoch?: string; turnEventSeq?: number }
   | { type: "cancel_requested" }
@@ -1948,15 +1949,8 @@ function reduceState(s: State, a: Action): State {
         : s;
     case "turn_submit_rejected":
     case "send_failed": return reduceSubmitFailure(s, a.submissionId, a.error, a.type === "turn_submit_rejected", promptEventClock());
-    case "turn_submit_unknown": {
-      const local = s.localSubmissions[a.submissionId];
-      if (!local || local.settled || local.status === "failed") return s;
-      const ownsRequest = s.pendingSubmissionId === a.submissionId;
-      const ownsTurn = !s.pendingSubmissionId && s.activeTurnId && local.turnId === s.activeTurnId;
-      return updateLocalSubmission(ownsRequest || ownsTurn ? {
-        ...s, transcriptConnection: "disconnected", transcriptConnectionError: a.error,
-      } : s, a.submissionId, { status: "unknown" });
-    }
+    case "send_queued": return reduceSubmitQueued(s, a.submissionId, promptEventClock());
+    case "turn_submit_unknown": return reduceSubmitUnknown(s, a.submissionId, a.error);
     case "turn_interrupted": {
       return withRemoteTurnInterrupted(s);
     }
@@ -2758,13 +2752,12 @@ export function useController() {
       };
 
       const modern = !skipHistory;
-      const snapshotLoaded = modern ? await loadTimed("transcript follow", async () => {
-        await startTranscriptFollow(tabId, sessionPath);
-        return true;
-      }) : false;
+      let followFailure: unknown;
+      const snapshotLoaded = modern ? await loadTimed("transcript follow", () => startTranscriptFollow(tabId, sessionPath)
+        .then(() => true, (err: unknown) => { followFailure = err; throw err; })) : false;
       if (!stillCurrent()) return;
       if (!skipHistory && snapshotLoaded !== true) {
-        const error = t("history.failedLoadHistory");
+        const error = hydrateFailureDetail(t("history.failedLoadHistory"), followFailure);
         dispatchTo(tabId, { type: "hydrate_error", reason, error });
         // SessionRecoveryBanner owns recovery; chat notices survive successful snapshots.
         return;
@@ -2918,7 +2911,7 @@ export function useController() {
           durationMs: Date.now() - startedAt,
         });
         if (!stillCurrent()) return "miss";
-        dispatchTo(tabId, { type: "hydrate_error", reason, error: t("history.failedLoadHistory") });
+        dispatchTo(tabId, { type: "hydrate_error", reason, error: hydrateFailureDetail(t("history.failedLoadHistory"), error) });
         return "failed";
       }
     })();

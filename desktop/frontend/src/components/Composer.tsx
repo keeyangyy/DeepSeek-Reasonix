@@ -1,9 +1,10 @@
-import { emptyComposerDraft, persistentComposerDraft, persistentSnapshot } from "./composerDraftState";
+import { clipboardFiles, clipboardHasImageHint, isPasteShortcut, dataURLHash } from "../lib/composerClipboard";
+import { composerDraftFingerprint, emptyComposerDraft, persistentComposerDraft, persistentSnapshot } from "./composerDraftState";
 import { SessionInputRecovery } from "./SessionInputRecovery";
 import { recoveryStatusText, type RecoveryRetry } from "../lib/recoveryStatus";
 import { useRuntimeSession } from "../lib/useRuntimeState";
 import { isCompactCommand } from "../lib/sessionMaintenanceOperation";
-import { pendingFollowups, confirmFollowup, followupNotSubmitted, followupSessionKey, type PendingFollowup } from "../lib/pendingFollowup";
+import { pendingFollowups, confirmFollowup, followupNotSubmitted, followupSessionKey, queuedFollowupOutcome, type PendingFollowup } from "../lib/pendingFollowup";
 import { useAppNavigationStore } from "../store/appNavigation";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ClipboardEvent, DragEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
@@ -23,6 +24,7 @@ import type { ComposerTarget } from "../generated/desktopContract.generated";
 import { desktopHost } from "../lib/desktopHost";
 import { steerInboxItemForActiveTurn } from "../lib/inboxSubmit";
 import { formatInboxError, isInboxItemMissing } from "../lib/inboxError";
+import { captureStableInboxTarget, createTransientGuidance } from "../lib/transientComposerGuidance";
 import { inboxScopeKey } from "../lib/composerInboxQueue";
 import { useComposerInboxRefresh } from "../lib/useComposerInboxRefresh";
 import { useComposerImeGuard } from "../lib/useComposerImeGuard";
@@ -286,46 +288,6 @@ function attachmentDedupFromKeys(keys: Record<string, AttachmentDedupKey>): Dedu
 
 function draftHasAttachmentDedupKey(draft: ComposerDraft, key: AttachmentDedupKey): boolean {
   return Object.values(draft.attachmentDedupKeys).some((existing) => existing.hash === key.hash && existing.source === key.source);
-}
-
-function fileKey(file: File): string {
-  return `${file.name}:${file.type}:${file.size}:${file.lastModified}`;
-}
-
-function clipboardFiles(data: DataTransfer): File[] {
-  const files = Array.from(data.files);
-  const seen = new Set(files.map(fileKey));
-  for (const item of Array.from(data.items)) {
-    if (item.kind !== "file") continue;
-    const file = item.getAsFile();
-    if (!file) continue;
-    const key = fileKey(file);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    files.push(file);
-  }
-  return files;
-}
-
-function clipboardHasImageHint(data: DataTransfer): boolean {
-  const imageType = (value: string) => {
-    const type = value.toLowerCase();
-    return type.startsWith("image/") || type.includes("png") || type.includes("jpeg") || type.includes("jpg") || type.includes("tiff");
-  };
-  return Array.from(data.items).some((item) => imageType(item.type)) || Array.from(data.types).some(imageType);
-}
-
-function isPasteShortcut(e: KeyboardEvent<HTMLElement>): boolean {
-  return e.key.toLowerCase() === "v" && (e.metaKey || e.ctrlKey) && !e.altKey;
-}
-
-async function dataURLHash(dataUrl: string): Promise<string> {
-  try {
-    const res = await fetch(dataUrl);
-    return sha256(await res.blob());
-  } catch {
-    return "";
-  }
 }
 
 function composerMaxHeight(): number {
@@ -833,6 +795,9 @@ export function Composer({
   );
   const guidanceReceiptTrackerRef = useRef<GuidanceReceiptTracker | null>(null);
   guidanceReceiptTrackerRef.current ??= createGuidanceReceiptTracker();
+  // Messages held behind a transient target fence, keyed by follow-up key so a
+  // dismissal or a second send can cancel the pending retry loop.
+  const transientRetriesRef = useRef(new Map<string, { cancelled: boolean }>());
   const selfDispatchedGuidanceByDraftRef = useRef<Record<string, string[]>>({});
   const submittingRef = useRef<false | "message" | "compact">(false);
   const nativeClipboardPasteTimerRef = useRef<number | null>(null);
@@ -2073,15 +2038,9 @@ export function Composer({
     showToast(text, "warn");
   }, [showToast, t]);
 
-  const followupDraftFingerprint = (key: string): string => {
-    const draft = key === activeDraftKeyRef.current ? {
-      text: textRef.current, invocations: invocationsRef.current, attachments: attachmentsRef.current,
-      workspaceRefs: workspaceRefsRef.current, sessionRefs: sessionRefsRef.current,
-      selectedTextRefs: selectedTextRefsRef.current, pastedBlocks: pastedBlocksRef.current,
-    } : draftsBySessionRef.current[key] ?? emptyComposerDraft();
-    return JSON.stringify([draft.text, draft.invocations, draft.attachments, draft.workspaceRefs,
-      draft.sessionRefs, draft.selectedTextRefs, draft.pastedBlocks]);
-  };
+  const followupDraftFingerprint = (key: string): string => composerDraftFingerprint(
+    key === activeDraftKeyRef.current ? snapshotComposerDraft() : draftsBySessionRef.current[key] ?? emptyComposerDraft(),
+  );
 
   const submit = (guideCurrent = false) => trackPersistentTask(activeDraftKeyRef.current, performSubmit(guideCurrent));
   const performSubmit = async (guideCurrent = false, modelChoice?:ModelApplicationChoice) => {
@@ -2153,6 +2112,16 @@ export function Composer({
 		let submissionAttachmentTarget: string | undefined;
 		let attachmentSubmissionId: string | undefined;
 		let attachmentSubmit: Awaited<ReturnType<typeof loadAttachmentSubmit>> | undefined;
+    // Captured for the outer catch: a transient submit failure still holds the
+    // exact message (display and submit text) the user typed.
+    let submittedDisplayText = "";
+    let submittedSubmitText = "";
+    let submittedStructured: StructuredInvocationSubmit | undefined;
+    const holdTransientGuidance = createTransientGuidance({
+      app, transientRetriesRef, pendingKeyRef, submitPendingKey, submitDraftKey, submitTabId,
+      inboxSessionPath, submittedDraft, queueOnly, followupDraftFingerprint, clearSubmittedDraft,
+      setGuidanceRetryNonce, showToast, t, locale,
+    });
     try {
       submissionCapture = onCaptureSubmit?.(persistentSnapshot(snapshotComposerDraft()));
       if (onCaptureSubmit && !submissionCapture) return;
@@ -2162,8 +2131,7 @@ export function Composer({
         await restoreExternalFolderReferences(app, bridgeTarget, currentWorkspaceRefs);
       }
       if (queueOnly && !submitPendingKey) throw new Error("reasonix_error:inbox_not_submitted");
-      const target = running && app.CaptureInboxTarget
-        ? await app.CaptureInboxTarget(submitTabId || "", inboxSessionPath || "") : undefined;
+      const target = running ? await captureStableInboxTarget(app, submitTabId || "", inboxSessionPath || "") : undefined;
       const orderedAttachments = sortComposerAttachments(currentAttachments);
       const refs = [
         ...currentWorkspaceRefs.map((ref) => formatWorkspaceReference(ref.path, ref.isDir)),
@@ -2175,6 +2143,7 @@ export function Composer({
         ...currentSelectedTextRefs.map(formatSelectionLabel),
       ].join(" ");
       const displayText = [trimmedText, displayRefs].filter(Boolean).join(trimmedText && displayRefs ? " " : "");
+      submittedDisplayText = displayText;
       // PR-B: when past:chats refs are attached, prepend their formatted transcript
       // to submitText only (displayText stays unchanged so the user still sees their
       // original prompt in the input preview). With no refs we keep the original
@@ -2185,6 +2154,7 @@ export function Composer({
       const baseSubmitText = [expandPastedBlocks(invocationText, currentPastedBlocks), refs].filter(Boolean).join(" ");
       const submitBase = sessionContext ? `${sessionContext}${baseSubmitText}` : baseSubmitText;
       const submitText = [submitBase, selectedTextContext].filter(Boolean).join("\n\n");
+      submittedSubmitText = submitText;
       const structuredInput = [expandPastedBlocks(trimmedText, currentPastedBlocks), refs].filter(Boolean).join(" ");
 				let structured: StructuredInvocationSubmit | undefined = trimmedDraft.invocations.length > 0 ? {
 				display: [invocationText, displayRefs].filter(Boolean).join(invocationText && displayRefs ? " " : ""),
@@ -2199,6 +2169,7 @@ export function Composer({
 				attachmentSubmissionId = prepared.submissionId;
 				structured = prepared.structured;
 			}
+      submittedStructured = structured;
       // Repeated compaction asks the owner for its current operation receipt;
       // queueing it would unexpectedly start another compaction after this one.
       if (running && !(maintenanceActive && !structured && isCompactCommand(submitText))) {
@@ -2265,6 +2236,10 @@ export function Composer({
             }
             if (queueOnly || receipt.disposition === "queued_followup") showToast(t("runtime.queued"), "info");
           } catch (error) {
+            // A transient fence keeps the pending request and retries it
+            // briefly: the message stays visibly pending instead of surfacing
+            // an error the user cannot act on.
+            if (holdTransientGuidance(error, { display: guidanceText, submit: guidanceSubmitText, structured, turnId })) return;
             if (followupNotSubmitted(error)) attachmentSubmit?.settleImageSubmission(submitDraftKey, attachmentSubmissionId);
             // Registration still needs reconciliation, but no inbox receipt exists before enqueue starts.
             if (unresolvedRequest && (!enqueueAttempted || followupNotSubmitted(error))) pendingFollowups.clear(submitPendingKey, unresolvedRequest);
@@ -2285,6 +2260,33 @@ export function Composer({
 			attachmentSubmit?.settleImageSubmission(submitDraftKey, attachmentSubmissionId);
 			if (!persistentDraft && followupDraftFingerprint(submitDraftKey) === submittedDraft) clearSubmittedDraft(submitDraftKey);
     } catch (error) {
+      // A submit that raced a session switch is refused by the serve's
+      // expected-session fence. Hold it visibly and retry once the route
+      // settles instead of reporting a failure the user cannot act on.
+      if (holdTransientGuidance(error, {
+        display: submittedDisplayText || trimmedText,
+        submit: submittedSubmitText || trimmedText,
+        structured: submittedStructured,
+      })) return;
+      // A busy-window submit was durably queued instead of starting a turn:
+      // show the queue entry immediately and confirm the message left the
+      // composer, rather than reporting a conflict.
+      const queued = queuedFollowupOutcome(error);
+      if (queued) {
+        updatePendingGuidanceForDraft(submitDraftKey, (items) => items.some((item) => item.id === queued.itemId) ? items : [...items, {
+          id: queued.itemId,
+          text: trimmedText.slice(0, 120),
+          submitText: "",
+          intent: "followup",
+          state: "queued",
+          source: "desktop",
+          paused: queued.paused,
+        }]);
+        if (ownsDraft() && followupDraftFingerprint(submitDraftKey) === submittedDraft) clearSubmittedDraft(submitDraftKey);
+        setGuidanceRetryNonce((value) => value + 1);
+        showToast(t("runtime.queued"), "info");
+        return;
+      }
       if (definitelyNotAccepted(error) || followupNotSubmitted(error)) attachmentSubmit?.settleImageSubmission(submitDraftKey, attachmentSubmissionId);
       if (savedInput.target && modelApplicationError(error)) savedInput.reportSubmissionError(error);
       else if (savedInput.target) showToast(formatInboxError(error, locale), "warn");
