@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, SandboxSettings } from "./port";
 import type { ProgressWatchSettings } from "./boundary";
 import { MockShell } from "./mock_shell";
 
@@ -60,6 +60,8 @@ export class MockBoundary extends MockShell {
 
   private browser: BrowserToolsSettings = { enabled: true, effective: true, path: "/Users/you/.reasonix/config.toml" };
 
+  private opaque: OpaqueWriterSerializationSettings = { enabled: true, effective: true, path: "/Users/you/.reasonix/config.toml" };
+
   async permissions(): Promise<PermissionRules> {
     return { ...this.rules };
   }
@@ -102,6 +104,15 @@ export class MockBoundary extends MockShell {
   async saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings> {
     this.browser = { ...this.browser, enabled, effective: enabled };
     return { ...this.browser };
+  }
+
+  async opaqueWriters(): Promise<OpaqueWriterSerializationSettings> {
+    return { ...this.opaque };
+  }
+
+  async saveOpaqueWriters(enabled: boolean): Promise<OpaqueWriterSerializationSettings> {
+    this.opaque = { ...this.opaque, enabled, effective: enabled };
+    return { ...this.opaque };
   }
 
   private watch: ProgressWatchSettings = {
