@@ -80,8 +80,10 @@ jobs:
     if: always()
     # Backstop against a wedged step holding the workflow's concurrency group:
     # the Windows full-suite step has outlived its own timeout and kept the job
-    # alive. Normal full-suite wall time is 8-12 minutes per platform.
-    timeout-minutes: 45
+    # alive. Normal wall time is ~15-20 minutes now that the flake-prone
+    # packages run first; the two step budgets (25 + 25) cap the worst case at
+    # 50, so 60 keeps a wedged step from holding the concurrency group.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -183,14 +185,63 @@ jobs:
         timeout-minutes: 5
         run: go test -timeout=3m -run '^TestBashPowerShellExecuteDetailedContract$|^TestBashPowerShell51PreflightRejectsAndAndDetailed$|^TestBashPowerShellOutputIsUTF8$|^TestBashPowerShellSurfacesNonZeroExit$|^TestBashPowerShellRejectsChaining$' ./internal/tool/builtin
 
+      # The packages below carry this lane's flake history: internal/bot dies in
+      # a Windows runtime crash (register dump, rip=0x0, stack top
+      # bot.(*BotGateway).runTurnItem), internal/plugin has blown the 8m package
+      # budget, and internal/agent is the heaviest package on the lane. Run them
+      # one at a time so a crash costs one package retry (~seconds) instead of
+      # failing the whole sweep. internal/control already has its own Windows job.
+      - name: test (flake-prone packages)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name != 'pull_request'
+        timeout-minutes: 25
+        shell: bash
+        env:
+          # Run the prompt-cache prefix-stability guard (TestCacheHit*) in CI: a
+          # regression there silently tanks the cache hit rate the project is
+          # built around.
+          REASONIX_RELEASE_CACHE_GUARD: "1"
+          # Bound sandbox helper children in Windows tests so a failed OS-level
+          # launch cannot pin the Actions step after Go's package timeout fires.
+          WINDOWS_SANDBOX_WAIT_MS: "20000"
+        run: |
+          set -o pipefail
+          status=0
+          for pkg in ./internal/bot ./internal/plugin ./internal/agent; do
+            for attempt in 1 2; do
+              if output="$(go test -p 1 -timeout=8m "$pkg" 2>&1)"; then
+                printf '%s\n' "$output"
+                break
+              fi
+              status=$?
+              # Only the known Windows runtime/OS-level faults and the package
+              # timeout retry here. A package timeout is retried *only* in this
+              # step: it costs one package (~8m) rather than a whole sweep, and
+              # these three are exactly the packages that blow the budget on a
+              # loaded runner. Anything else stays red immediately.
+              if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|panic: test timed out after|: timed out|timed out waiting for|timed out after [0-9]+"; then
+                printf '%s\n' "$output"
+                exit "$status"
+              fi
+              if [ "$attempt" = "2" ]; then
+                printf '%s\n' "$output"
+                exit "$status"
+              fi
+              echo "::warning::$pkg matched a known Windows flake; retrying once"
+              sleep 5
+            done
+          done
+
       # Full push suite still uses the same 8m package budget as Windows smoke:
       # agent/boot/control already hit 180s package timeouts under runner load,
       # so 3m fails on slow machines without a code regression. Keep the step
       # above normal full-suite wall time (~8-12m) so a hang still dies on the
-      # job budget rather than a false package timeout.
+      # job budget rather than a false package timeout — and high enough to fit
+      # the whitelisted-flake retry: one full sweep plus a targeted re-run of
+      # the failed packages. The old 20-minute budget could not fit that, which
+      # is why a single whitelisted flake used to turn this step red.
       - name: test (full)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name != 'pull_request'
-        timeout-minutes: 20
+        timeout-minutes: 25
         shell: bash
         env:
           # Run the prompt-cache prefix-stability guard (TestCacheHit*) in CI: a
@@ -205,7 +256,25 @@ jobs:
           output=""
           status=0
           for attempt in 1 2; do
-            if output="$(go test -p 4 -timeout=8m ./... 2>&1)"; then
+            # The first pass sweeps everything except the flake-prone packages
+            # covered above; the retry targets only the packages that failed,
+            # one at a time.
+            if [ "$attempt" = 1 ]; then
+              packages="$(go list ./... | grep -Ev '^reasonix/internal/(bot|plugin|agent)$' | paste -sd' ' -)"
+              parallel=4
+            else
+              packages="$(printf '%s\n' "$output" | awk -F'\t' '/^FAIL[[:space:]]+reasonix/{print $2}' | sort -u | paste -sd' ' -)"
+              if [ -z "$packages" ]; then
+                packages="./..."
+              fi
+              parallel=1
+              # No GOMAXPROCS override: setting it starts the runtime's
+              # GOMAXPROCS-updater goroutine, which is itself a crash site on
+              # these runners. -p 1 is enough.
+              echo "::warning::retrying only the failed packages: $packages (-p 1)"
+            fi
+            # shellcheck disable=SC2086  # $packages is intentionally word-split
+            if output="$(go test -p "$parallel" -timeout=8m $packages 2>&1)"; then
               printf '%s\n' "$output"
               exit 0
             else
