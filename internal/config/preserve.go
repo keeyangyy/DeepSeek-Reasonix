@@ -257,6 +257,7 @@ func sortedUserConfigNames(table map[string]any) []string {
 // gives it. A table is replaced whole; a scalar is written at its key, leaving
 // the rest of its table — comments included — untouched.
 func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (string, bool) {
+	body = dropInlinePathSection(body, nextRender, entry.key)
 	if entry.table {
 		block := userConfigRenderTableBlock(nextRender, entry.key.section)
 		if block == "" {
@@ -274,6 +275,22 @@ func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (stri
 	return upsertTOMLSectionKey(body, entry.key.section, entry.key.name, line), true
 }
 
+// dropInlinePathSection removes a section that names a path the render writes
+// inside its parent table — [agent.subagent_models] when the render emits
+// subagent_models = {…} in [agent]. Writing the new form while the old section
+// survives defines the same key twice, which makes the file invalid TOML and
+// every later load fall back to defaults.
+func dropInlinePathSection(body, nextRender string, key userConfigKey) string {
+	if key.section == "" || key.name == "" {
+		return body
+	}
+	path := key.section + "." + key.name
+	if tomlBodyHasSection(nextRender, path) || !tomlBodyHasSection(body, path) {
+		return body
+	}
+	return removeTOMLSection(body, path)
+}
+
 // removeUserConfigEntry drops one entry from body. Removing a top-level key is
 // not supported: a save that wants one gone takes the whole-render path.
 func removeUserConfigEntry(body string, key userConfigKey) (string, bool) {
@@ -282,6 +299,10 @@ func removeUserConfigEntry(body string, key userConfigKey) (string, bool) {
 		return removeTOMLSection(body, key.section), true
 	case key.section == "":
 		return "", false
+	case key.name != "" && tomlBodyHasSection(body, key.section+"."+key.name):
+		// The entry is spelled as its own table here rather than a key inside
+		// the parent, so removing it means dropping that whole table.
+		return removeTOMLSection(body, key.section+"."+key.name), true
 	case key.name == "" && !tomlBodyHasSection(body, key.section):
 		return body, true
 	case key.name == "":
@@ -354,9 +375,10 @@ func carryUnknownUserTables(text, render string) string {
 	for _, block := range userConfigTopLevelBlocks(render) {
 		known[block.name] = true
 	}
+	represented := representedUserConfigPaths(render)
 	out := render
 	for _, block := range userConfigTopLevelBlocks(text) {
-		if known[block.name] {
+		if known[block.name] || represented[block.name] {
 			continue
 		}
 		if !strings.HasSuffix(out, "\n") {
@@ -370,6 +392,24 @@ func carryUnknownUserTables(text, render string) string {
 type userConfigBlock struct {
 	name string
 	text string
+}
+
+// representedUserConfigPaths lists the table paths the render already defines,
+// including a table it writes inside its parent (subagent_models as an inline
+// table under [agent]). A table carried from the original with one of these
+// names would define the same key twice and make the file invalid TOML.
+func representedUserConfigPaths(render string) map[string]bool {
+	entries, ok := flattenUserConfigKeys(render)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if entry.key.section != "" {
+			out[entry.key.section] = true
+		}
+	}
+	return out
 }
 
 // userConfigTopLevelBlocks splits body into its top-level table blocks, each
