@@ -59,7 +59,11 @@ func TestDAGSaveWithValidAuthorityDoesNotForkAfterForeignAdvance(t *testing.T) {
 	if err := s.SaveSnapshot(path); err != nil {
 		t.Fatalf("authority save: %v", err)
 	}
+	// 正确的观察点：DAG 分叉不写 recovery 文件，只排一个 head 事件。
+	if events := s.DrainHeadEvents(); len(events) != 0 {
+		t.Fatalf("持有效写入权却被判成另一写者：%+v", events)
+	}
 	if got := recoveryJSONL(dir); len(got) != 0 {
-		t.Fatalf("持有效写入权却被判成另一写者，分叉出 %v", got)
+		t.Fatalf("持有效写入权却分叉出 recovery 文件 %v", got)
 	}
 }
