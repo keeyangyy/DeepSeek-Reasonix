@@ -33,18 +33,18 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 			CoveredPrefixHash: coveredPrefixHash(msgs, 3),
 		},
 	}
-	if !projectionValid(st, msgs, "ws|sess|model") {
+	if !projectionValid(st, msgs) {
 		t.Fatal("expected valid projection for matching prefix")
 	}
 	// Append-only growth still valid.
 	grown := append(append([]provider.Message(nil), msgs...), provider.Message{Role: provider.RoleAssistant, Content: "more"})
-	if !projectionValid(st, grown, "ws|sess|model") {
+	if !projectionValid(st, grown) {
 		t.Fatal("append-only growth should keep projection valid")
 	}
 	// Prefix edit invalidates.
 	edited := append([]provider.Message(nil), msgs...)
 	edited[1].Content = "task-EDITED"
-	if projectionValid(st, edited, "ws|sess|model") {
+	if projectionValid(st, edited) {
 		t.Fatal("edited covered prefix must invalidate projection")
 	}
 }
@@ -71,13 +71,13 @@ func TestProjectionSurvivesDynamicSystemRefresh(t *testing.T) {
 		},
 	}
 
-	if !projectionValid(st, canonical, key) {
+	if !projectionValid(st, canonical) {
 		t.Fatal("matching projection should be valid")
 	}
 
 	refreshed := append([]provider.Message(nil), canonical...)
 	refreshed[0].Content = "system-v2"
-	if !projectionValid(st, refreshed, key) {
+	if !projectionValid(st, refreshed) {
 		t.Fatal("dynamic system-only refresh invalidated the projection")
 	}
 	visible := modelVisibleFromProjection(st.Projection, refreshed)
@@ -90,7 +90,7 @@ func TestProjectionSurvivesDynamicSystemRefresh(t *testing.T) {
 
 	edited := append([]provider.Message(nil), refreshed...)
 	edited[1].Content = "different task"
-	if projectionValid(st, edited, key) {
+	if projectionValid(st, edited) {
 		t.Fatal("covered user edit was mistaken for a system-only refresh")
 	}
 }
@@ -138,7 +138,9 @@ func TestLoadProjectionSidecarRestoresAfterDynamicSystemRefresh(t *testing.T) {
 	}
 }
 
-func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
+// 判据只看投影覆盖的那段历史：模型/工作区等身份变化不再让投影失效（摘要内容
+// 与“用哪个模型总结”无关；窗口不够由发送前的体积检查兜底，而不是丢投影）。
+func TestProjectionValidIgnoresLineageChange(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "task"},
@@ -154,22 +156,30 @@ func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
 			TranscriptVersion: 1,
 		},
 	}
-	if projectionValid(st, msgs, "ws|sess|model-b") {
-		t.Fatal("model/lineage key mismatch must invalidate projection")
+	if !projectionValid(st, msgs) {
+		t.Fatal("内容匹配时投影应有效")
 	}
-	if !projectionValid(st, msgs, "ws|sess|model-a") {
-		t.Fatal("matching key should be valid")
+	// 换模型 / 换工作区：身份不同不影响投影可用性。
+	st.PromptCacheKey = "ws-other|sess|model-b"
+	if !projectionValid(st, msgs) {
+		t.Fatal("身份变化不应让投影失效")
 	}
-	// Fail closed: blank stored key is rejected when current key is known.
+	// 旧 sidecar 缺身份字段同理：只按内容判定。
 	st.PromptCacheKey = ""
-	if projectionValid(st, msgs, "ws|sess|model-a") {
-		t.Fatal("missing sidecar cache key must invalidate when lineage is known")
+	if !projectionValid(st, msgs) {
+		t.Fatal("缺身份字段不应让投影失效")
 	}
-	// Missing prefix hash is always rejected.
+	// 内容本身有问题才失效。
 	st.PromptCacheKey = "ws|sess|model-a"
 	st.Projection.CoveredPrefixHash = ""
-	if projectionValid(st, msgs, "ws|sess|model-a") {
-		t.Fatal("missing CoveredPrefixHash must invalidate projection")
+	if projectionValid(st, msgs) {
+		t.Fatal("缺 CoveredPrefixHash 必须失效")
+	}
+	st.Projection.CoveredPrefixHash = coveredPrefixHash(msgs, 2)
+	edited := append([]provider.Message(nil), msgs...)
+	edited[1].Content = "task-changed"
+	if projectionValid(st, edited) {
+		t.Fatal("覆盖的那段历史被改必须失效")
 	}
 }
 
@@ -405,7 +415,7 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 		t.Fatalf("PromptCacheKey = %q", st.PromptCacheKey)
 	}
 	msgs, _ := sess.snapshotMessagesVersion()
-	if !projectionValid(st, msgs, st.PromptCacheKey) {
+	if !projectionValid(st, msgs) {
 		t.Fatal("fresh projection should validate")
 	}
 }

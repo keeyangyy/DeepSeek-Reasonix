@@ -83,9 +83,10 @@ func (s *Session) planDAGWrite(path string, st *sessionDAGState, msgs []provider
 	view.persisted, _ = st.materialize(head)
 	view.chain = st.chainIDs(head)
 	view.prepended = len(view.persisted) == len(view.chain)+1
-	// owned: this session's baseline is exactly the head's leaf, so anything
-	// shorter or different in memory is this session's own rewrite.
-	owned := ref.HeadID == head && ref.LeafID == view.head.leaf
+	// owned: this session's baseline is the head's leaf, or a live write authority
+	// proves no other writer can be mid-save here (the lease is exclusive across
+	// processes) — either way a shorter or divergent transcript is this own rewrite.
+	owned := (ref.HeadID == head && ref.LeafID == view.head.leaf) || s.hasValidWriteAuthority(path)
 
 	diff := diffDAGTranscript(view.persisted, msgs, mode)
 	plan := &dagWritePlan{head: head, appendFrom: -1, renames: diff.adopted}

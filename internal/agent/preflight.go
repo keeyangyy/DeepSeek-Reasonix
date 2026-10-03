@@ -24,19 +24,12 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
-	if projectionValid(st, msgs, a.currentPromptCacheKey()) {
+	if projectionValid(st, msgs) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
 	}
-	// A mid-run lineage change (model/workspace switch) invalidates the key but
-	// not the fold: re-stamp a still-matching projection instead of sending the
-	// full canonical history (measured 1092 msgs / 5.6MB → upstream 400).
-	if st, rebound := a.rebindProjectionLineage(msgs); rebound {
-		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
-			return visible
-		}
-	}
+	a.reportProjectionFallback(msgs)
 	return msgs
 }
 
@@ -55,38 +48,6 @@ func (a *Agent) projectionStaleForRebuild() bool {
 		return false
 	}
 	return !projectionContentValid(st, msgs)
-}
-
-// rebindProjectionLineage re-stamps a projection whose covered prefix still
-// matches the canonical transcript onto the current session/model lineage key,
-// so a mid-run model switch keeps the fold. It reports whether a rebound
-// happened; a stale key on a content-mismatched fold fails closed.
-func (a *Agent) rebindProjectionLineage(msgs []provider.Message) (CompactionState, bool) {
-	if a == nil {
-		return CompactionState{}, false
-	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
-	st := a.sess.compactionState
-	if len(st.Projection.Messages) == 0 {
-		return st, false
-	}
-	key := a.currentPromptCacheKeyLocked()
-	if key == "" {
-		return st, false
-	}
-	if _, ok := lineageKeyCompatible(st.PromptCacheKey, key); ok {
-		return st, false
-	}
-	if !projectionContentValid(st, msgs) {
-		return st, false
-	}
-	st.PromptCacheKey = key
-	a.sess.compactionState = st
-	if err := a.persistCompactionStateLocked(); err != nil {
-		slog.Warn("agent: persist rebound projection lineage", "err", err)
-	}
-	return st, true
 }
 
 func (a *Agent) currentProjectionVersion() uint64 {
@@ -153,7 +114,7 @@ func (a *Agent) InvalidateProjectionIfStale() {
 	st := a.sess.compactionState
 	if len(st.Projection.Messages) > 0 && a.sess.conversation != nil {
 		msgs, _ := a.sess.conversation.snapshotMessagesVersion()
-		if projectionValid(st, msgs, a.currentPromptCacheKeyLocked()) {
+		if projectionValid(st, msgs) {
 			a.sess.compactionMu.Unlock()
 			return
 		}
@@ -231,7 +192,7 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	if !projectionContentValid(st, msgs) && migrateLegacyCoveredPrefixHash(&st, msgs, preRepair) {
 		needsNormalization = true
 	}
-	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
+	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs)
 	if !valid && len(st.Projection.Messages) > 0 {
 		// Keep blocked receipts / telemetry; drop unusable projection body.
 		st.Projection = ContextProjection{}

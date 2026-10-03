@@ -70,6 +70,7 @@ type Messages struct {
 	ReadRestrictedStrategyFmt        string // %d = estimated tokens, %d = token budget
 	ContextRecoveryAdjustBudget      string
 	ContextRecoveryCompacted         string
+	AgentProjectionFallback          string // a request fell back to the full transcript
 	PlannerFallback                  string
 	PlannerSafetyFallback            string
 	PlannerPlanAwaitingApproval      string
