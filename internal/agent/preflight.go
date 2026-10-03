@@ -37,6 +37,7 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 			return visible
 		}
 	}
+	a.reportProjectionFallback(msgs)
 	return msgs
 }
 
