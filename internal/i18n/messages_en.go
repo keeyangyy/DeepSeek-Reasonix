@@ -45,6 +45,7 @@ var English = Messages{
 	ReadRestrictedStrategyFmt:        "read_file switched to restricted strategy: estimated_tokens=%d budget_tokens=%d",
 	ContextRecoveryAdjustBudget:      "Adjusted the output budget to fit the shared context window.",
 	ContextRecoveryCompacted:         "Compacted context after a shared-window overflow and retried.",
+	AgentProjectionFallback:          "Projection was unusable; this request sent the full transcript instead.",
 	PlannerFallback:                  "Planner failed; continuing this turn with the executor only.",
 	PlannerSafetyFallback:            "Planner stopped at a safety boundary without a final plan; continuing this turn with the executor.",
 	PlannerPlanAwaitingApproval:      "Plan ready; execution was not started without approval.",

@@ -355,6 +355,9 @@ func (gs *Session) normalizeAlternation() {
 		return
 	}
 	gs.sess.Rewrite(out, "guardian_merge")
+	// The merge changes what the provider sees, so a fold computed over the
+	// pre-merge transcript must not be trusted for the next review.
+	gs.agent.InvalidateProjectionIfStale()
 }
 
 // Load replaces the guardian's internal agent session with the one at path,
