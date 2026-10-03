@@ -159,9 +159,12 @@ jobs:
           pnpm exec electron-builder --dir \
             -c.extraMetadata.version="${{ needs.verify.outputs.version }}"
 
-      # The installer and the portable archive are built at once, the zip from
-      # its own copy: NSIS writes elevate.exe into the tree it packs, and a zip
-      # read beside that would hold it or not by timing. This is upstream's
+      # The portable archive is built from its own copy of the bundle: NSIS writes
+      # elevate.exe into the tree it packs, and a zip read beside that would
+      # hold it or not by timing. The two targets run one after the other rather
+      # than at once: on a cold cache both extract the same 7-Zip archive into
+      # $LOCALAPPDATA/electron-builder/Cache at the same moment and one loses the
+      # rename to EPERM, which is where windows-latest failed. This is upstream's
       # unsigned path — with Certum signing on, its four signing jobs run
       # between these two steps instead, and this fork has no such secrets.
       - name: Package the installer and the portable archive
@@ -174,11 +177,9 @@ jobs:
           rm -rf ../../zip-src ../../dist-zip
           cp -r ../../dist/win-unpacked ../../zip-src
           pnpm exec electron-builder --prepackaged ../../zip-src --win zip \
-            -c.extraMetadata.version="$version" -c.directories.output=../../dist-zip &
-          zip_pid=$!
+            -c.extraMetadata.version="$version" -c.directories.output=../../dist-zip
           pnpm exec electron-builder --prepackaged ../../dist/win-unpacked --win nsis \
             -c.extraMetadata.version="$version"
-          wait "$zip_pid"
           mv ../../dist-zip/ReasonixStudio-windows-amd64.zip ../../dist/
           ls -la ../../dist/ReasonixStudio-*
 
