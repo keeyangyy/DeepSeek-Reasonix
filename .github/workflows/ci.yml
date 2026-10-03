@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    # Fork: main-mine is this repository's release line. Upstream's main-v2 is
+    # Fork: main-v2-mine is this repository's release line. Upstream's main-v2 is
     # no longer pushed here, so CI would never run for a -mine tag without it.
-    branches: [main-mine]
+    branches: [main-v2-mine]
   pull_request:
-    branches: [main-mine]
+    branches: [main-v2-mine]
 
 permissions:
   contents: read

@@ -1,14 +1,14 @@
 name: Release (manual)
 
 # One-shot fork release pipeline: dispatch it with the version to publish, it
-# waits for the official CI of the current main-mine commit to turn green and
+# waits for the official CI of the current main-v2-mine commit to turn green and
 # only then creates the annotated tag plus a DRAFT GitHub Release. A tag is
 # therefore never created for a commit whose CI is red, and the Release stays
 # invisible until release-windows.yml attaches the portable archive and the
 # installer a few minutes later.
 #
 #   gh workflow run "Release (manual)" -R keeyangyy/DeepSeek-Reasonix \
-#     -r main-mine -f version=1.39.5-mine.1 -f notes="$(cat notes.md)"
+#     -r main-v2-mine -f version=1.39.5-mine.1 -f notes="$(cat notes.md)"
 #
 # The version input never carries the leading v (v1.39.5-mine.1 would produce
 # tag vv1.39.5-mine.1). Windows-only: the upstream macOS/Linux/CLI/npm lines
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: main-mine
+          ref: main-v2-mine
           fetch-depth: 0
 
       - name: Resolve target commit
@@ -126,7 +126,7 @@ jobs:
           # release must never be visible without its assets.
           # release-windows.yml publishes it once both assets are uploaded.
           if [ -n "$NOTES" ]; then
-            gh release create "v$VERSION" --draft --target main-mine --title "$RELEASE_TITLE" --notes "$NOTES"
+            gh release create "v$VERSION" --draft --target main-v2-mine --title "$RELEASE_TITLE" --notes "$NOTES"
           else
             # Auto-summary over the fork's own release line only: the branch is
             # hundreds of upstream commits ahead of the first -mine tag, so
@@ -145,7 +145,7 @@ jobs:
               git log "$RANGE" --no-merges --pretty=format:'- %s' 2>/dev/null || true
               echo
             } > /tmp/release-notes.md
-            gh release create "v$VERSION" --draft --target main-mine --title "$RELEASE_TITLE" --notes-file /tmp/release-notes.md
+            gh release create "v$VERSION" --draft --target main-v2-mine --title "$RELEASE_TITLE" --notes-file /tmp/release-notes.md
           fi
 
       - name: Dispatch Windows artifact pipeline
@@ -158,4 +158,4 @@ jobs:
           VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
-          gh workflow run release-windows.yml --repo "$GITHUB_REPOSITORY" --ref main-mine -f "tag=v$VERSION"
+          gh workflow run release-windows.yml --repo "$GITHUB_REPOSITORY" --ref main-v2-mine -f "tag=v$VERSION"
