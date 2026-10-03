@@ -326,7 +326,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [acp, agent, boot, bot, serve, session, worktree]
+        group: [acp, agent, boot, bot, plugin, serve, session, worktree]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7

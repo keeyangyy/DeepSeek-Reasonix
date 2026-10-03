@@ -4,7 +4,10 @@ import { beneath, internalRoots, listPackages, runGoTest } from "./go-test-group
 
 // Start the long filesystem suites immediately on independent runners instead
 // of leaving them behind hundreds of short packages in the residual queue.
-export const isolatedGroups = ["acp", "agent", "boot", "bot", "control", "serve", "session", "worktree"];
+// `plugin` joined the list after its MCP authorization test hung inside the
+// shared `full` lane and took the whole package into go test's 8m process
+// timeout (which the retry deliberately does not cover).
+export const isolatedGroups = ["acp", "agent", "boot", "bot", "control", "plugin", "serve", "session", "worktree"];
 const smokeRoots = internalRoots(
   "appidentity", "checkpoint", "cli", "desktoplauncher", "extension/sidecar",
   "desktopinstance", "filelock", "fileops", "fileutil", "hook", "identitylock", "instruction", "mcplaunch", "notify",

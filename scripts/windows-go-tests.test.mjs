@@ -28,7 +28,7 @@ test("only known hosted-runner flakes are retried", () => {
 
 const packages = ["reasonix/cmd/reasonix", "reasonix/internal/agent", "reasonix/internal/agent/testutil",
   "reasonix/internal/acp", "reasonix/internal/agentpreset", "reasonix/internal/boot", "reasonix/internal/bot", "reasonix/internal/control",
-  "reasonix/internal/control/child", "reasonix/internal/extension/sidecar", "reasonix/internal/proc",
+  "reasonix/internal/control/child", "reasonix/internal/plugin", "reasonix/internal/extension/sidecar", "reasonix/internal/proc",
   "reasonix/internal/serve", "reasonix/internal/session", "reasonix/internal/worktree",
   "reasonix/internal/lsp", "reasonix/internal/fileops", "reasonix/internal/newpackage", "reasonix/internal/projectiondb",
   "reasonix/internal/sessioncatalog", "reasonix/internal/sqliteuri", "reasonix/internal/topicstate",
