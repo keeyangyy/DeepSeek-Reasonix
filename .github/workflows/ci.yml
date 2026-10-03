@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main-v2]
+    branches: [wails-mine]
   pull_request:
-    branches: [main-v2]
+    branches: [wails-mine]
 
 # Windows runners sporadically hit Go runtime preemption failures
 # (runtime.preemptM: duplicatehandle failed) unrelated to repo code;
@@ -28,7 +28,7 @@ jobs:
   # merges. Gated jobs skip only on an explicit `false` output: wrapped in
   # `always()`, a failed `changes` job (or a missing output) makes them run
   # the full matrix instead of silently passing required checks as skipped.
-  # Pushes to main-v2 always run everything.
+  # Pushes to wails-mine always run everything.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -147,7 +147,7 @@ jobs:
       # Pull requests run a Windows smoke suite: the packages that actually
       # carry *_windows.go code, the startup/checkpoint packages with portable
       # filesystem contracts, plus cmd/. The full ./... sweep stays on pushes
-      # to main-v2; the Unix legs always run the full suite. Keep the job-level
+      # to wails-mine; the Unix legs always run the full suite. Keep the job-level
       # budget above normal 7-9 minute runner variance; each package test binary
       # remains independently bounded by Go's per-package timeout below.
       #
@@ -312,7 +312,7 @@ jobs:
       # (plugin fan-out, background phase B, jobs Kill/Wait) would otherwise
       # ship without race coverage. Pull requests sweep only the
       # concurrency-heavy packages so this required check stays fast; pushes
-      # to main-v2 keep the full ./... sweep as the safety net.
+      # to wails-mine keep the full ./... sweep as the safety net.
       - name: test -race (concurrency packages)
         if: github.event_name == 'pull_request'
         env:
