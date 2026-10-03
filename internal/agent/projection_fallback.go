@@ -13,41 +13,37 @@ import (
 // projection. Named so the fallback is diagnosable rather than silent: it is the
 // path that can exceed the provider window (measured 1092 messages / 5.6MB).
 const (
-	projectionFallbackNoProjection  = "no_projection"
 	projectionFallbackCoveredPrefix = "covered_prefix_mismatch"
-	projectionFallbackLineage       = "lineage_mismatch"
 	projectionFallbackEmptyView     = "empty_projection_view"
 )
 
-// projectionFallbackReason names the check that stopped the bound projection from
-// being sent, in the order the fallback path fails: the first one reported is the
-// root cause, and the rest only follow from it.
+// projectionFallbackReason names the check that stopped a bound projection from
+// being sent. Only the covered transcript decides that, so the reason is always
+// about content; anything else means the spliced view simply came out empty.
 func (a *Agent) projectionFallbackReason(st CompactionState, msgs []provider.Message) string {
-	switch {
-	case len(st.Projection.Messages) == 0:
-		return projectionFallbackNoProjection
-	case !projectionContentValid(st, msgs):
+	if !projectionContentValid(st, msgs) {
 		return projectionFallbackCoveredPrefix
-	}
-	if key := a.currentPromptCacheKey(); key != "" {
-		if _, ok := lineageKeyCompatible(st.PromptCacheKey, key); !ok {
-			return projectionFallbackLineage
-		}
 	}
 	return projectionFallbackEmptyView
 }
 
 // reportProjectionFallback records that this request sends the whole transcript.
-// The fold was either never built, no longer matches the transcript, or belongs
-// to another lineage and could not be re-stamped — none of which said anything
-// before, leaving the 400 that follows impossible to attribute.
+// The fold was either never built, or no longer matches the transcript — which
+// said nothing before, leaving the 400 that follows impossible to attribute.
 func (a *Agent) reportProjectionFallback(msgs []provider.Message) {
-	if a == nil || a.sess.conversation == nil {
+	// An empty transcript cannot overflow anything, so there is nothing to report
+	// and saying so on every probe turn would be pure noise.
+	if a == nil || a.sess.conversation == nil || len(msgs) == 0 {
 		return
 	}
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
+	// A session that was never folded is not an incident: nothing has been lost,
+	// and reporting it every turn before the first fold drowns the real signal.
+	if len(st.Projection.Messages) == 0 {
+		return
+	}
 	reason := a.projectionFallbackReason(st, msgs)
 	slog.Warn("agent: sending the full transcript, projection unusable",
 		"reason", reason, "messages", len(msgs), "cache_key", a.currentPromptCacheKey())

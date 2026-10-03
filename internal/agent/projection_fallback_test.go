@@ -93,21 +93,18 @@ func TestFreshProjectionDoesNotEmitFallbackNotice(t *testing.T) {
 	}
 }
 
-// 没有投影可用的原因要说清是「还没有投影」，而不是笼统的内容失配。
-func TestProjectionFallbackReasonDistinguishesMissingFold(t *testing.T) {
+// 从未折叠过的会话不算事故：什么都没丢，报出来只会淹没真信号。
+func TestProjectionFallbackStaysQuietBeforeFirstFold(t *testing.T) {
 	sink := &recordSink{}
 	a := fallbackFixture(t, sink)
+	before := len(fallbackNotices(sink))
 
 	a.sess.compactionMu.Lock()
 	a.sess.compactionState.Projection.Messages = nil
 	a.sess.compactionMu.Unlock()
 
 	a.modelVisibleMessages()
-	notices := fallbackNotices(sink)
-	if len(notices) == 0 {
-		t.Fatal("无投影时回退全量也未发 notice")
-	}
-	if got := notices[len(notices)-1].Detail; !strings.Contains(got, "projection=no_projection") {
-		t.Errorf("原因应为 no_projection，实际 detail=%q", got)
+	if after := len(fallbackNotices(sink)); after != before {
+		t.Fatalf("未折叠的会话不该发回退通知，新增 %d 条", after-before)
 	}
 }
