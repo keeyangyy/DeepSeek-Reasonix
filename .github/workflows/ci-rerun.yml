@@ -1,16 +1,14 @@
 name: CI rerun
 
 # A run cannot rerun itself ("This workflow is already running"), so the retry
-# lives in its own workflow triggered by CI's completion. Hosted Windows runners
-# fail these kernel lanes intermittently (runtime-level faults and package
-# timeouts that pass on a rerun); this retries the failed jobs exactly once.
+# lives in its own workflow triggered by CI's completion. It reruns the failed
+# jobs exactly once, and only when every failed job's log carries a known flake
+# signature (runtime-level faults, package timeouts, cleanup races). A
+# deterministic failure — lint, contract, compile error, assertion — is left red:
+# rerunning it burns a runner without changing the outcome, and hides a real
+# regression behind a higher attempt number.
 # run_attempt 2 and later never re-enter, so it cannot loop, and --failed keeps
 # the retry scoped to what actually broke.
-#
-# Note: GitHub only honours a `workflow_run` trigger from the *default* branch
-# (currently `wails-mine`), so the copy on the default branch is the one that
-# actually fires — it watches every branch's "CI". This file rides each release
-# line so that whichever branch becomes the default already carries it.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -26,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - env:
+      - shell: bash
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET: ${{ github.event.workflow_run.id }}
         run: |
@@ -41,5 +40,39 @@ jobs:
           if [ -z "$TARGET" ] || [ "$TARGET" = "null" ]; then
             echo "No failed run to retry"; exit 0
           fi
-          echo "Retrying failed jobs of run $TARGET"
+
+          # Signatures of the environment-level flakes these hosted runners
+          # produce; keep in sync with the in-step retry list in ci.yml.
+          flake_re='found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime\.semasleep|runtime\.semawakeup|waitforsingleobject wait_failed|setevent failed|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+'
+
+          jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion=="failure") | "\(.id)\t\(.name)"')"
+          if [ -z "$jobs" ]; then
+            echo "Run $TARGET has no failed job to classify"; exit 0
+          fi
+
+          # Any failing job without a flake signature means the run is a genuine
+          # regression: leave it red instead of retrying.
+          while IFS="$(printf '\t')" read -r id name; do
+            [ -n "$id" ] || continue
+            log="$(gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" 2>/dev/null || true)"
+            if ! printf '%s' "$log" | grep -Eq "$flake_re"; then
+              echo "::warning::$name failed without a known flake signature; leaving the run red"
+              {
+                echo "### 未重跑（确定性失败）"
+                echo ""
+                echo "失败的 job \`$name\` 的日志里没有已知 flake 特征 —— 这是真的错误，不是环境抖动。"
+                echo "请按「push 前预检」在本地复现并修复，不要靠重跑掩盖。"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$name: known flake signature found"
+          done <<< "$jobs"
+
+          echo "All failed jobs match known flakes; retrying run $TARGET"
+          {
+            echo "### 已重跑（环境性 flake）"
+            echo ""
+            echo "失败的 job 全部命中已知 flake 特征，只重跑失败的 job。"
+          } >> "$GITHUB_STEP_SUMMARY"
           gh run rerun "$TARGET" --failed --repo "$GITHUB_REPOSITORY"
