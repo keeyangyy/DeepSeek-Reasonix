@@ -980,11 +980,45 @@ jobs:
           $output
           exit $code
 
+      # The desktop Go suite lives in its own job (`desktop-windows-go`) so the
+      # Windows rebuild of the cgo packages overlaps the WebView2 smoke work
+      # here instead of extending it.
+
+      # Installer packaging is intentionally NOT re-run here: the Wails
+      # executable itself is already built and startup-smoked above, and the
+      # release pipeline builds the real installer/archive on every tag.
+      # Duplicating packaging per push cost ~6 minutes of Windows runner time
+      # while its artifacts (v0.0.0-ci canary) were never consumed.
+
+  # The desktop Go suite is the longest single thing on this lane (~23 minutes:
+  # a Windows rebuild of the cgo/Wails packages plus ~6 minutes of tests). Its
+  # own job lets that rebuild overlap the WebView2 smoke work in
+  # `desktop-windows` instead of extending it, and it needs neither pnpm nor a
+  # built frontend.
+  desktop-windows-go:
+    needs: changes
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
       - name: test (Windows desktop and update helper)
-        # Normal wall time is 6-7 minutes; a loaded runner has exceeded 15 with
-        # every package still passing. Keep the budget above that load spike so
-        # the job-level timeout, not this step, ends a real hang.
-        timeout-minutes: 25
+        # Normal wall time is ~6-7 minutes of tests plus a Windows rebuild of
+        # the cgo packages; a loaded runner has exceeded 15 minutes with every
+        # package still passing. Keep the budget above that load spike so the
+        # job-level timeout, not this step, ends a real hang.
+        timeout-minutes: 30
         run: go test ./...
 
       - name: test (vendored systray identity)
@@ -993,16 +1027,10 @@ jobs:
 
       # A cold nested-module cache can spend several minutes compiling the
       # real WebView2 cookie integration test. Keep its budget independent of
-      # the already-complete desktop suite and retain a Go timeout stack dump.
+      # the desktop suite and retain a Go timeout stack dump.
       - name: test (vendored WebView2 edge)
         timeout-minutes: 10
         run: (cd third_party/go-webview2 && go test -timeout=8m ./pkg/edge)
-
-      # Installer packaging is intentionally NOT re-run here: the Wails
-      # executable itself is already built and startup-smoked above, and the
-      # release pipeline builds the real installer/archive on every tag.
-      # Duplicating packaging per push cost ~6 minutes of Windows runner time
-      # while its artifacts (v0.0.0-ci canary) were never consumed.
 
   # repolint scans desktop/ and sdk/ too, so this job also runs for diffs the
   # `code` filter would otherwise skip.
