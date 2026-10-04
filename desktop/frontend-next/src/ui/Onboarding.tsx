@@ -139,7 +139,7 @@ export function Onboarding({ port, setup, onDone }: Props) {
         vision: found.vision,
         replace: true,
       });
-      await port.setModel(`${name}/${model}`);
+      await port.setModel(`${name}/${model}`, true);
       onDone();
     } catch (e) {
       setErr(failed(e));

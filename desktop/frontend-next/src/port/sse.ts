@@ -752,8 +752,8 @@ export class SsePort extends SseFeedback implements AgentPort {
   setPreset(preset: Preset) {
     return this.post("/preset", { preset });
   }
-  setModel(ref: string) {
-    return this.post("/model", { ref });
+  setModel(ref: string, asDefault = false) {
+    return this.post("/model", asDefault ? { ref, default: true } : { ref });
   }
   setEffort(effort: string) {
     return this.post("/effort", { effort });

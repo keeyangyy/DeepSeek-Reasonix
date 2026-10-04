@@ -546,7 +546,8 @@ export interface AgentPort {
   // The person's answer to "trust this folder?" for the session's workspace.
   decideWorkspaceTrust(trust: "trusted" | "declined"): Promise<void>;
   setPreset(preset: Preset): Promise<void>;
-  setModel(ref: string): Promise<void>;
+  // Switches this session only; asDefault also records it as the model new sessions start on.
+  setModel(ref: string, asDefault?: boolean): Promise<void>;
   setEffort(effort: string): Promise<void>;
   // "" turns the session's model mode off.
   setModelMode(mode: string): Promise<void>;
