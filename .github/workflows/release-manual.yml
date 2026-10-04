@@ -164,7 +164,7 @@ jobs:
             # notes; the fork's own commit summary rides under them. --merged
             # HEAD keeps the previous tag on this branch only, so the 1.x line's
             # -mine tags never define the range.
-            PREV="$(git tag --merged HEAD -l 'v[0-9]*-mine.[0-9]*' --sort=-version:refname | sed -n '1p' || true)"
+            PREV="$(git tag --merged HEAD -l 'v[0-9]*-mine.[0-9]*' --sort=-creatordate | grep -vx "v$VERSION" | sed -n '1p' || true)"
             if [ -z "$PREV" ]; then
               RANGE=""
               RANGE_NOTE="first -mine release on this branch"
