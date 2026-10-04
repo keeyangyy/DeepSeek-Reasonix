@@ -8,6 +8,7 @@ import { AccountRow } from "./AccountRow";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts } from "./RemoteHosts";
 import { StudioIcon } from "./StudioIcon";
+import { useHiddenHosts } from "../state/remotehide";
 import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
@@ -101,6 +102,13 @@ export function Sidebar({
   const [palette, setPalette] = useState(false);
   const [folded, setFolded] = useState<Set<string>>(new Set());
   const hideAmounts = useHidesAmounts();
+  const hiddenHosts = useHiddenHosts();
+  // The rail shows the machines this window was not asked to keep out; a hidden
+  // one is still in the book and still listed in settings.
+  const shownRemotes = useMemo(
+    () => (remotes ?? []).filter((host) => !hiddenHosts.includes(host.name)),
+    [remotes, hiddenHosts],
+  );
   const newSessionRoot = activeWorkspace?.root;
 
   // The shortcut the button prints. It was drawn and never bound, so the one
@@ -240,10 +248,10 @@ export function Sidebar({
         onError={onError}
         adder={adder}
       >
-        {remotes ? (
+        {shownRemotes.length ? (
           <RemoteHosts
             hub={hub}
-            hosts={remotes}
+            hosts={shownRemotes}
             runtimes={runtimes}
             active={active}
             onOpen={onOpenRemote}

@@ -466,6 +466,8 @@ export const ACTIONS: UIAction[] = [
   { id: "sandbox.remove-write-root", kind: "destructive", target: "entity", proof: "authority-effect" },
   { id: "browser-tools.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
     { id: "opaque-writers.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "remember-approval.project", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "remember-approval.global", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
   { id: "progress-watch.pause", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
