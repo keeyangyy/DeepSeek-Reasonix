@@ -185,19 +185,32 @@ func (s *DeviceShare) Open(ip string) (ShareStatus, error) {
 	return s.Status(), nil
 }
 
-// Close stops listening and unpairs every device.
+// Close stops listening and unpairs every device — the user closing the share.
 func (s *DeviceShare) Close() {
 	s.turn.Lock()
 	defer s.turn.Unlock()
 	s.closeLocked()
 }
 
+// Shutdown stops listening without forgetting the paired devices. It is what the
+// host calls when the process is going away: nobody withdrew the share, and the
+// next process should adopt the same phones rather than ask for a new code.
+func (s *DeviceShare) Shutdown() {
+	s.turn.Lock()
+	defer s.turn.Unlock()
+	s.stopListeningLocked()
+}
+
 func (s *DeviceShare) closeLocked() {
+	s.stopListeningLocked()
+	s.registry.RevokeAll()
+}
+
+func (s *DeviceShare) stopListeningLocked() {
 	s.mu.Lock()
 	live := s.live
 	s.live = nil
 	s.mu.Unlock()
-	s.registry.RevokeAll()
 	if live != nil {
 		live.stop()
 		<-live.done

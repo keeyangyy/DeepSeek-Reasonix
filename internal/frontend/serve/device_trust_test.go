@@ -90,3 +90,36 @@ func TestMissingTrustFileReadsAsNoDevices(t *testing.T) {
 		t.Fatalf("a missing file produced devices: %+v", got)
 	}
 }
+
+// TestShutdownKeepsTheDevicesCloseForgets holds the two exits apart: the process
+// going away keeps the phones this machine adopted, while the user closing the
+// share withdraws them.
+func TestShutdownKeepsTheDevicesCloseForgets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "device-trust.json")
+	share := NewDeviceShare(nil)
+	share.registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(path, devices) }
+
+	code, _ := share.registry.Offer()
+	credential, _, err := share.registry.Redeem(code, "phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("pairing did not write the trust file: %v", err)
+	}
+
+	share.Shutdown()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("shutdown forgot the paired devices: %v", err)
+	}
+	next := newDeviceRegistryAt(time.Now)
+	next.Restore(loadDeviceTrust(path))
+	if _, ok := next.Authenticate(credential); !ok {
+		t.Fatal("the next process did not accept the credential a shutdown left behind")
+	}
+
+	share.Close()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("closing the share left the file behind (stat err = %v)", err)
+	}
+}

@@ -350,14 +350,14 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	browserHost := serve.NewBrowserHost()
 	boot.SetBrowserHost(browserHost.Dial)
 	hubCfg := hostServeConfig(cfg.Serve)
-	// Shut until the person at the window opens it; the context ending closes
-	// it with the rest of the kernel, unpairing every device.
+	// Shut until the person at the window opens it; the context ending stops it
+	// with the rest of the kernel, keeping the phones this machine already adopted.
 	share := serve.NewDeviceShare(page)
 	share.RestoreDevices()
 	share.RestorePort(cfg.SharePort())
 	go func() {
 		<-ctx.Done()
-		share.Close()
+		share.Shutdown()
 	}()
 	hub := serve.NewHub(serve.HubOptions{
 		Serve:         hubCfg,
