@@ -25,6 +25,9 @@ func saveLineageSession(t *testing.T, path string, messages ...string) {
 	if err := s.Save(path); err != nil {
 		t.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestClassifyRecoveryLineageUsesParentDirectory(t *testing.T) {
@@ -34,7 +37,7 @@ func TestClassifyRecoveryLineageUsesParentDirectory(t *testing.T) {
 	branchSession := agent.NewSession("sys")
 	branchSession.Add(provider.Message{Role: provider.RoleUser, Content: "q"})
 	branchSession.Add(provider.Message{Role: provider.RoleAssistant, Content: "a"})
-	info, err := branchSession.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root})
+	info, err := branchSession.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root, BranchMeta: agent.BranchMeta{Scope: "global"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +247,7 @@ func TestReconcilePersistsContentProvenCanonicalLeaf(t *testing.T) {
 	continued.Add(provider.Message{Role: provider.RoleAssistant, Content: "a"})
 	continued.Add(provider.Message{Role: provider.RoleUser, Content: "next"})
 	continued.Add(provider.Message{Role: provider.RoleAssistant, Content: "answer"})
-	info, err := continued.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root})
+	info, err := continued.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root, BranchMeta: agent.BranchMeta{Scope: "global"}})
 	if err != nil {
 		t.Fatal(err)
 	}

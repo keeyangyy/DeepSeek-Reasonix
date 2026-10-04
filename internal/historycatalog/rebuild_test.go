@@ -15,7 +15,7 @@ func TestReconcileRootDetectsMetaOnlyChange(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "meta.jsonl")
 	saveMessages(t, path, provider.Message{Role: provider.RoleUser, Content: "stable content"})
-	if err := agent.SaveBranchMeta(path, agent.BranchMeta{CustomTitle: "old"}); err != nil {
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{CustomTitle: "old", Scope: "global"}); err != nil {
 		t.Fatal(err)
 	}
 	catalog, err := Open(ctx, Options{Path: filepath.Join(t.TempDir(), "history.sqlite")})
@@ -27,7 +27,7 @@ func TestReconcileRootDetectsMetaOnlyChange(t *testing.T) {
 	if err := catalog.ReconcileRoot(ctx, target); err != nil {
 		t.Fatal(err)
 	}
-	if err := agent.SaveBranchMeta(path, agent.BranchMeta{CustomTitle: "replacement title with a different size"}); err != nil {
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{CustomTitle: "replacement title with a different size", Scope: "global"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := catalog.ReconcileRoot(ctx, target); err != nil {
