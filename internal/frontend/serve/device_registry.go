@@ -132,10 +132,11 @@ func (d *DeviceRegistry) Redeem(code, name string) (credential string, view Devi
 		streams: map[*deviceStream]struct{}{},
 	}
 	d.devices[dev.id] = dev
+	view = dev.view()
 	saved := d.snapshotLocked()
 	d.mu.Unlock()
 	d.flush(saved)
-	return credential, dev.view(), nil
+	return credential, view, nil
 }
 
 // Authenticate names the device a credential belongs to, and records that it
@@ -183,9 +184,9 @@ func (d *DeviceRegistry) Revoke(id string) bool {
 		return false
 	}
 	delete(d.devices, id)
+	dev.cut()
 	saved := d.snapshotLocked()
 	d.mu.Unlock()
-	dev.cut()
 	d.flush(saved)
 	return true
 }

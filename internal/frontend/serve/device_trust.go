@@ -94,10 +94,14 @@ func (d *DeviceRegistry) snapshotLocked() []persistedDevice {
 }
 
 // flush hands the persisted set to the hook, outside the lock so a disk write
-// never holds up a request.
+// never holds up a request. The hook itself is read under the lock — it is set
+// once, but the race detector cannot know that.
 func (d *DeviceRegistry) flush(snapshot []persistedDevice) {
-	if d.persist != nil {
-		d.persist(snapshot)
+	d.mu.Lock()
+	persist := d.persist
+	d.mu.Unlock()
+	if persist != nil {
+		persist(snapshot)
 	}
 }
 
