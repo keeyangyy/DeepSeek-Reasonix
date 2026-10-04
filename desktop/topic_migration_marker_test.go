@@ -50,7 +50,7 @@ func TestForcedTopicMigrationBypassesMatchingMarker(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir sessions: %v", err)
 	}
-	path := writeLegacySession(t, dir, "forced.jsonl", "force legacy migration", time.Now().Add(-time.Hour))
+	path := writeUnownedLegacySession(t, dir, "forced.jsonl", "force legacy migration", time.Now().Add(-time.Hour))
 	markTopicMigrationDone(dir)
 	markTopicIndexRepairDone(dir)
 	if migrated := migrateLegacySessionsIntoGlobalTopics(dir); len(migrated) != 0 {
@@ -60,6 +60,11 @@ func TestForcedTopicMigrationBypassesMatchingMarker(t *testing.T) {
 		t.Fatalf("load legacy meta before forced migration: %v", err)
 	} else if ok {
 		t.Fatal("matching marker should have kept ordinary migration from creating meta")
+	}
+	// The forced pass reclaims this line's own history, so it needs ownership
+	// before migration will take it over (unowned sessions are left to the other line).
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global", WorkspaceRoot: globalWorkspaceRoot()}); err != nil {
+		t.Fatalf("SaveBranchMeta before forced migration: %v", err)
 	}
 
 	migrated, migratedPaths := forceMigrateLegacySessionsIntoGlobalTopicsWithPaths(dir)
@@ -110,7 +115,7 @@ func TestRepairIndexedTopicDecodesStaleListingProjection(t *testing.T) {
 	wantTitle := topicTitleFromText(preview)
 	topicID := "legacy_stale_projection"
 	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, agent.BranchMeta{
-		ID: agent.BranchID(sessionPath), Scope: "global", TopicID: topicID,
+		ID: agent.BranchID(sessionPath), Scope: "global", WorkspaceRoot: globalWorkspaceRoot(), TopicID: topicID,
 		Revision: 7, ContentDigest: "pre-upgrade-digest", SchemaVersion: agent.BranchMetaCountsVersion,
 	}); err != nil {
 		t.Fatal(err)
@@ -133,7 +138,7 @@ func TestRepairIndexedTopicDefersUnreadableTranscriptWithoutPersistingFallback(t
 	sessionPath := writeLegacySession(t, dir, "temporarily-unreadable.jsonl", "original prompt", time.Now())
 	topicID := "legacy_temporarily_unreadable"
 	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, agent.BranchMeta{
-		ID: agent.BranchID(sessionPath), Scope: "global", TopicID: topicID,
+		ID: agent.BranchID(sessionPath), Scope: "global", WorkspaceRoot: globalWorkspaceRoot(), TopicID: topicID,
 		Revision: 7, ContentDigest: "pre-upgrade-digest", SchemaVersion: agent.BranchMetaCountsVersion,
 	}); err != nil {
 		t.Fatal(err)
@@ -183,7 +188,7 @@ func TestRepairIndexedTopicDefersUnreadableTitleSidecar(t *testing.T) {
 	sessionPath := writeLegacySession(t, dir, "custom-title.jsonl", "transcript fallback", time.Now())
 	topicID := "legacy_custom_title"
 	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, agent.BranchMeta{
-		ID: agent.BranchID(sessionPath), Scope: "global", TopicID: topicID,
+		ID: agent.BranchID(sessionPath), Scope: "global", WorkspaceRoot: globalWorkspaceRoot(), TopicID: topicID,
 		Revision: 7, ContentDigest: "pre-upgrade-digest", SchemaVersion: agent.BranchMetaCountsVersion,
 	}); err != nil {
 		t.Fatal(err)
