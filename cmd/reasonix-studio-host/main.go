@@ -353,6 +353,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// Shut until the person at the window opens it; the context ending closes
 	// it with the rest of the kernel, unpairing every device.
 	share := serve.NewDeviceShare(page)
+	share.RestoreDevices()
 	share.RestorePort(cfg.SharePort())
 	go func() {
 		<-ctx.Done()
