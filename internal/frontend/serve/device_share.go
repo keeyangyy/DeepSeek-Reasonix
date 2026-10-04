@@ -53,6 +53,10 @@ type DeviceShare struct {
 	cloudStatus     func() CloudRemoteStatus
 	port            int
 	persistPort     func(int) error
+	// persistState records whether the share is open and on what address, so the
+	// next process can reopen it. Nil leaves the share in memory only, which is
+	// what every test builds.
+	persistState func(persistedShareState) error
 }
 
 type shareListener struct {
@@ -83,7 +87,7 @@ const (
 	AddressVirtual AddressKind = "virtual"
 )
 
-var addressRank = map[AddressKind]int{AddressLAN: 0, AddressTailnet: 1, AddressVirtual: 2}
+var addressRank = map[AddressKind]int{AddressTailnet: 0, AddressLAN: 1, AddressVirtual: 2}
 
 // ShareStatus is the whole state a window draws its sharing panel from.
 type ShareStatus struct {
@@ -178,6 +182,9 @@ func (s *DeviceShare) Open(ip string) (ShareStatus, error) {
 	s.mu.Lock()
 	s.live = live
 	s.mu.Unlock()
+	// Recorded only after the listener is real: the next process should reopen an
+	// address that worked, never one that failed to bind.
+	s.recordState(true, ip)
 	go func() {
 		defer close(live.done)
 		if err := runGracefulListener(ctx, ln, gate); err != nil {
@@ -185,6 +192,50 @@ func (s *DeviceShare) Open(ip string) (ShareStatus, error) {
 		}
 	}()
 	return s.Status(), nil
+}
+
+// Reopen reopens the share where it last listened. When that address is gone —
+// another network, another adapter — it falls back to the first address this
+// machine now offers, because a share that cannot reopen where it was is still
+// better off open than silently shut. Phones paired on the old origin have to
+// scan again in that case; one that kept its address does not.
+func (s *DeviceShare) Reopen(address string) (ShareStatus, error) {
+	if strings.TrimSpace(address) != "" {
+		if st, err := s.Open(address); err == nil {
+			return st, nil
+		}
+	}
+	list := s.addresses()
+	if len(list) == 0 {
+		return s.Status(), ErrShareAddress
+	}
+	return s.Open(list[0].IP)
+}
+
+// RestoreState adopts what the previous process remembered — whether the share
+// was open, and where — and wires the hook that records every later change. A
+// share with no state file starts closed, which is the shipping default.
+func (s *DeviceShare) RestoreState() persistedShareState {
+	path := shareStatePath()
+	if path == "" {
+		return persistedShareState{}
+	}
+	s.mu.Lock()
+	s.persistState = func(st persistedShareState) error { return saveShareState(path, st) }
+	s.mu.Unlock()
+	return loadShareState(path)
+}
+
+// recordState hands the current state to the hook, outside the lock so a disk
+// write never holds up a request. The hook itself is read under the lock — it is
+// set once, but the race detector cannot know that.
+func (s *DeviceShare) recordState(open bool, address string) {
+	s.mu.Lock()
+	persist := s.persistState
+	s.mu.Unlock()
+	if persist != nil {
+		persist(persistedShareState{Open: open, Address: address})
+	}
 }
 
 // Close stops listening and unpairs every device — the user closing the share.
@@ -206,6 +257,7 @@ func (s *DeviceShare) Shutdown() {
 func (s *DeviceShare) closeLocked() {
 	s.stopListeningLocked()
 	s.registry.RevokeAll()
+	s.recordState(false, "")
 }
 
 func (s *DeviceShare) stopListeningLocked() {
