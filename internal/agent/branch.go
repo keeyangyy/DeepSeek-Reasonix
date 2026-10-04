@@ -327,6 +327,10 @@ func saveBranchMetaContext(ctx context.Context, sessionPath string, m BranchMeta
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = now
 	}
+	// 归属字段：本线的任何保存都带上它（另一线从不写），这是两线会话得以区分的依据。
+	if m.Scope == "" {
+		m.Scope = "global"
+	}
 	if touchUpdated {
 		m.UpdatedAt = now
 	} else if m.UpdatedAt.IsZero() {
