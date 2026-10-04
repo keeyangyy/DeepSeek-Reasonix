@@ -242,6 +242,7 @@ const SAID: Record<string, string> = {
   "remote.name_required": "请为该机器填写名称",
   "remote.host_required": "请填写要连接的地址",
   "remote.bad_port": "这不是有效的端口号",
+  "remote.disabled": "该主机已停用，启用后才能连接",
   "remote.has_open_panes": "该机器仍有 {n} 个打开的面板，请先关闭再移除",
   // 主机密钥变了没有「仍然连接」这条路：能绕过的警告等于没有警告。
   "remote.host_key_changed": "{host} 的主机密钥已变更。可能是该机器重装，也可能存在中间人。记录位于 {file} 第 {line} 行，核实前请勿连接。",

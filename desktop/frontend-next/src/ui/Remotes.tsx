@@ -45,6 +45,7 @@ function draftOf(host: RemoteHost | null): RemoteHostEdit {
     useSSHConfig: host?.useSSHConfig ?? false,
     passphraseEnv: host?.passphraseEnv ?? "",
     passwordEnv: host?.passwordEnv ?? "",
+    disabled: host?.disabled ?? false,
   };
 }
 
@@ -166,6 +167,15 @@ export function Remotes({ hub, onError }: Props) {
             >
               {t("编辑")}
             </button>
+            <span className="st">{t(host.disabled ? "已停用" : "启用")}</span>
+            <Switch
+              data-action="remote.enable"
+              data-target={host.name}
+              on={!host.disabled}
+              busy={busy === host.name}
+              label={t(host.disabled ? "启用这台主机" : "停用这台主机")}
+              onClick={() => void save({ ...draftOf(host), disabled: !host.disabled })}
+            />
             <span className="st">{t("在侧栏显示")}</span>
             <Switch
               data-action="remote.hide"
