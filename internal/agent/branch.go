@@ -30,13 +30,17 @@ type BranchMeta struct {
 	ForkTurn         int       `json:"fork_turn,omitempty"`
 	ForkMessageIndex int       `json:"fork_message_index,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	Scope            string    `json:"scope,omitempty"`
-	WorkspaceRoot    string    `json:"workspace_root,omitempty"`
-	TopicID          string    `json:"topic_id,omitempty"`
-	TopicTitle       string    `json:"topic_title,omitempty"`
-	CustomTitle      string    `json:"custom_title,omitempty"`
-	Model            string    `json:"model,omitempty"`
+	// CreatedBy names the build that created the session (this line stamps
+	// itself). It is what lets a listing tell its own conversations from the
+	// other line's without guessing from shape.
+	CreatedBy     string    `json:"created_by,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Scope         string    `json:"scope,omitempty"`
+	WorkspaceRoot string    `json:"workspace_root,omitempty"`
+	TopicID       string    `json:"topic_id,omitempty"`
+	TopicTitle    string    `json:"topic_title,omitempty"`
+	CustomTitle   string    `json:"custom_title,omitempty"`
+	Model         string    `json:"model,omitempty"`
 	// Effort is the session-scoped reasoning effort override (/effort level).
 	// Empty means "auto" (the provider default). Session ownership is what keeps
 	// a conversation switch from reviving a stale tab-level selection.
@@ -326,6 +330,12 @@ func saveBranchMetaContext(ctx context.Context, sessionPath string, m BranchMeta
 	}
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = now
+	}
+	// Stamp the line that wrote this sidecar. A listing then tells its own
+	// conversations from the other line's by construction, and an existing
+	// stamp is left alone so a session keeps the identity it was created with.
+	if m.CreatedBy == "" {
+		m.CreatedBy = SessionCreatedByLine
 	}
 	if touchUpdated {
 		m.UpdatedAt = now
