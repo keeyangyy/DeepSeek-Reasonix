@@ -376,6 +376,15 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 		Share:         share,
 	})
 	share.Attach(hub.Handler())
+	// A share the person had open reopens where it was: the phone that paired
+	// against that address keeps its cookie. An address that is gone falls back
+	// to one this machine now offers, at the cost of one fresh scan.
+	state := share.RestoreState()
+	if state.Open {
+		if _, err := share.Reopen(state.Address); err != nil {
+			fmt.Fprintln(logs, "reasonix-studio-host: could not reopen phone access:", err)
+		}
+	}
 	srv := serve.New(built.Controller, bc, hubCfg)
 	srv.SetPaneSink(paneSink)
 	srv.AdoptRuntime(built)

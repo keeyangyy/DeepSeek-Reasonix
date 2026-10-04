@@ -32,6 +32,7 @@ type RemoteHostEdit struct {
 	UseSSHConfig  bool     `json:"useSSHConfig"`
 	PassphraseEnv string   `json:"passphraseEnv"`
 	PasswordEnv   string   `json:"passwordEnv"`
+	Disabled      bool     `json:"disabled"`
 }
 
 func (h *Hub) saveRemoteHost(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +75,7 @@ func (h *Hub) saveRemoteHost(w http.ResponseWriter, r *http.Request) {
 		UseSSHConfig:  body.UseSSHConfig,
 		PassphraseEnv: strings.TrimSpace(body.PassphraseEnv),
 		PasswordEnv:   strings.TrimSpace(body.PasswordEnv),
+		Disabled:      body.Disabled,
 	}
 	if host == "" {
 		entry.Host = name

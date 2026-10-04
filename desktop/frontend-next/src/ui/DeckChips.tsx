@@ -49,7 +49,7 @@ export function DeckChips({ tasks, jobs, open, onOpen, onCancelJob }: { tasks: T
             onClick={() => onOpen((was) => (was === "agents" ? "" : "agents"))}
           >
             <StudioIcon name="branch" />
-            <b>{agentsIn(tasks)}</b>
+            <b>{liveAgents}</b>
             <span>{t("子代理")}</span>
           </button>
           <div className="studio-deck-pop" role="dialog" aria-label={t("子代理")}>

@@ -280,6 +280,8 @@ export const EN_SETTINGS: Record<string, string> = {
 
   "在侧栏隐藏": "Hide from the rail",
   "在侧栏显示": "Show in the rail",
+  "启用这台主机": "Turn this machine on",
+  "停用这台主机": "Turn this machine off",
 
   "宣告做完": "Claims it is done",
   "还在做": "Still working",
