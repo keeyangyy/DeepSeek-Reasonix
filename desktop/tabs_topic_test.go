@@ -156,6 +156,16 @@ func writeTopicSessionWithPrompt(t *testing.T, dir, name, topicID, topicTitle, w
 
 func writeLegacySession(t *testing.T, dir, name, prompt string, modTime time.Time) string {
 	t.Helper()
+	path := writeUnownedLegacySession(t, dir, name, prompt, modTime)
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global", WorkspaceRoot: globalWorkspaceRoot()}); err != nil {
+		t.Fatalf("save legacy session meta: %v", err)
+	}
+	return path
+}
+
+// writeUnownedLegacySession writes a legacy session without branch-meta ownership.
+func writeUnownedLegacySession(t *testing.T, dir, name, prompt string, modTime time.Time) string {
+	t.Helper()
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(`{"role":"user","content":`+strconv.Quote(prompt)+`}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write legacy session: %v", err)
@@ -431,9 +441,7 @@ func TestDeleteTopicRetryAfterPartialFailureCompletesCleanup(t *testing.T) {
 		t.Fatalf("failed attempt must keep the title as the root locator, got %q", got)
 	}
 
-	// Heal the fault and retry: the retry must finish the remaining cleanup
-	// instead of treating a partially-deleted topic as an already-finished
-	// deletion.
+	// Heal the fault and retry: it must finish the remaining cleanup, not skip it.
 	if err := os.Remove(sourcesPath); err != nil {
 		t.Fatalf("unblock title sources: %v", err)
 	}
@@ -463,8 +471,7 @@ func TestDeleteTopicWithoutTitleEntryStillRemovesIndexAndTombstones(t *testing.T
 	if err := prependTopicInProjectsFile(projectRoot, topicID, false); err != nil {
 		t.Fatalf("index topic: %v", err)
 	}
-	// Strip just the title entry to mimic an interrupted earlier deletion:
-	// sources, created-at, and the sidebar index survived it.
+	// Strip just the title entry to mimic an interrupted earlier deletion.
 	titles, err := loadTopicTitlesForUpdate(projectRoot)
 	if err != nil {
 		t.Fatalf("load titles: %v", err)
@@ -591,8 +598,7 @@ func TestDeleteTopicTitleOnlyRetryAfterSecondaryMetadataFailureCompletesCleanup(
 func TestDeleteTopicIgnoresUnrelatedProjectMetadataDamage(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
-	// The broken project is added first so the cleanup sweep meets it before
-	// reaching the target root.
+	// The broken project is added first so the sweep meets it before the target.
 	brokenRoot := t.TempDir()
 	targetRoot := t.TempDir()
 	seedLegacyTopicBridge(t, brokenRoot)
@@ -755,15 +761,13 @@ func TestAmbiguousLegacyRecoverySessionsMigrateIntoTopics(t *testing.T) {
 	}
 	normal := writeLegacySession(t, dir, "normal.jsonl", "normal imported prompt", time.Now().Add(-2*time.Hour))
 	recovery := writeLegacySession(t, dir, "normal-recovery-0123456789abcdef.jsonl", "legacy recovery prompt", time.Now().Add(-time.Hour))
-	// Simulate an upgrade from the filename-only classifier: the v1 marker
-	// must not prevent the new conservative pass from recovering this history.
+	// Simulate an upgrade from the filename-only classifier; the marker must not block recovery.
 	if err := os.WriteFile(filepath.Join(dir, ".topics-migrated"), nil, 0o644); err != nil {
 		t.Fatalf("write v1 migration marker: %v", err)
 	}
 
 	app := NewApp()
-	// Filename recovery folds into the root ordinary row; History keeps the
-	// physical recovery file reachable as another saved version.
+	// Filename recovery folds into the root row; History keeps the physical file reachable.
 	app.startSessionCatalog()
 	t.Cleanup(func() { app.stopSessionCatalog(time.Second) })
 	nodes := waitForCatalogTreeCondition(t, app, "filename recovery folded into one ordinary row", func(nodes []ProjectNode) bool {
@@ -927,10 +931,10 @@ func TestProjectTreeKeepsAmbiguousMigratedRecoveryTopicVisible(t *testing.T) {
 	recovery := writeLegacySession(t, dir, "desktop-recovery-0123456789abcdef.jsonl", "legacy recovery prompt", time.Now().Add(-time.Hour))
 	topicID := legacySessionTopicID(recovery)
 	if err := agent.SaveBranchMetaPreserveUpdated(recovery, agent.BranchMeta{
-		ID:         agent.BranchID(recovery),
-		CreatedAt:  time.Now().Add(-2 * time.Hour),
-		UpdatedAt:  time.Now().Add(-time.Hour),
-		Scope:      "global",
+		ID:        agent.BranchID(recovery),
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().Add(-time.Hour),
+		Scope:     "global", WorkspaceRoot: globalWorkspaceRoot(),
 		TopicID:    topicID,
 		TopicTitle: "恢复分支",
 		Turns:      1,
@@ -938,8 +942,7 @@ func TestProjectTreeKeepsAmbiguousMigratedRecoveryTopicVisible(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save migrated recovery meta: %v", err)
 	}
-	// A v1 repair pass skipped this recovery-named record. The v2 pass must
-	// revisit it and restore its existing topic to the sidebar index.
+	// A v1 repair pass skipped this recovery-named record; v2 must restore its topic.
 	if err := os.WriteFile(filepath.Join(dir, ".topic-indexes-repaired"), nil, 0o644); err != nil {
 		t.Fatalf("write v1 repair marker: %v", err)
 	}
@@ -979,14 +982,11 @@ func TestTopicMigrationMarkerRescansWhenSessionFileChanges(t *testing.T) {
 	}
 	writeLegacySession(t, dir, "first.jsonl", "first legacy prompt", time.Now().Add(-time.Hour))
 
-	// Background catalog reconciliation migrates the legacy session and, with
-	// nothing deferred, stamps the one-shot marker. Tree reads never do this I/O.
+	// Background reconciliation migrates the legacy session, stamps the marker; tree reads never do this I/O.
 	app := NewApp()
 	firstTopicID := legacySessionTopicID(filepath.Join(dir, "first.jsonl"))
 	waitForCatalogTopic(t, app, "global", "", firstTopicID)
-	// Catalog publication and the migration marker are written on the same
-	// background path but not under one fsync barrier. Wait for the marker
-	// explicitly so Windows CI does not observe the topic before the stamp.
+	// Catalog publication and the migration marker share one background path; wait for the marker.
 	markerPath := filepath.Join(dir, topicMigrationMarker)
 	deadline := time.Now().Add(5 * time.Second)
 	var lastMarkerErr error
@@ -1000,8 +1000,7 @@ func TestTopicMigrationMarkerRescansWhenSessionFileChanges(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// A CLI-created session added after the marker invalidates the lightweight
-	// gate and gets a fresh migration pass.
+	// A CLI-created session added after the marker gets a fresh migration pass.
 	time.Sleep(10 * time.Millisecond)
 	second := writeLegacySession(t, dir, "second.jsonl", "second legacy prompt", time.Now())
 	app.requestSessionCatalogReconcile(dir)
@@ -1028,10 +1027,10 @@ func TestProjectTreeRepairsIndexedGlobalTopicsAfterMigrationMarker(t *testing.T)
 	sessionPath := writeLegacySession(t, dir, "desktop-legacy.jsonl", "who are you", time.Now().Add(-time.Hour))
 	topicID := "legacy_desktop-legacy_1234"
 	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, agent.BranchMeta{
-		ID:         agent.BranchID(sessionPath),
-		CreatedAt:  time.Now().Add(-2 * time.Hour),
-		UpdatedAt:  time.Now().Add(-time.Hour),
-		Scope:      "global",
+		ID:        agent.BranchID(sessionPath),
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().Add(-time.Hour),
+		Scope:     "global", WorkspaceRoot: globalWorkspaceRoot(),
 		TopicID:    topicID,
 		TopicTitle: "你是谁",
 		Turns:      1,
@@ -1082,10 +1081,10 @@ func TestDeletedRepairedGlobalTopicIsNotAutoRestored(t *testing.T) {
 	sessionPath := writeLegacySession(t, dir, "desktop-delete.jsonl", "delete repaired topic", time.Now().Add(-time.Hour))
 	topicID := "legacy_desktop-delete_1234"
 	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, agent.BranchMeta{
-		ID:         agent.BranchID(sessionPath),
-		CreatedAt:  time.Now().Add(-2 * time.Hour),
-		UpdatedAt:  time.Now().Add(-time.Hour),
-		Scope:      "global",
+		ID:        agent.BranchID(sessionPath),
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().Add(-time.Hour),
+		Scope:     "global", WorkspaceRoot: globalWorkspaceRoot(),
 		TopicID:    topicID,
 		TopicTitle: "临时 Global",
 		Turns:      1,
@@ -1134,10 +1133,10 @@ func TestRepairRescanKeepsIndexedTopicsUntouched(t *testing.T) {
 	writeIndexedSession := func(name, topicID, title string, at time.Time) string {
 		p := writeLegacySession(t, dir, name, "prompt "+title, at)
 		if err := agent.SaveBranchMetaPreserveUpdated(p, agent.BranchMeta{
-			ID:         agent.BranchID(p),
-			CreatedAt:  at.Add(-time.Hour),
-			UpdatedAt:  at,
-			Scope:      "global",
+			ID:        agent.BranchID(p),
+			CreatedAt: at.Add(-time.Hour),
+			UpdatedAt: at,
+			Scope:     "global", WorkspaceRoot: globalWorkspaceRoot(),
 			TopicID:    topicID,
 			TopicTitle: title,
 			Turns:      1,
@@ -1167,9 +1166,8 @@ func TestRepairRescanKeepsIndexedTopicsUntouched(t *testing.T) {
 	}
 
 	// Ordinary session activity invalidates the repair marker; the rescan must
-	// not reorder the indexed topics, rewrite the projects file, or report the
-	// already-visible topics as repaired (the callers bind blank Global tabs
-	// to repaired[0]).
+	// not reorder the indexed topics or report already-visible ones as repaired
+	// (the callers bind blank Global tabs to repaired[0]).
 	time.Sleep(10 * time.Millisecond)
 	later := time.Now()
 	if err := os.Chtimes(olderPath, later, later); err != nil {
@@ -1195,9 +1193,7 @@ func TestBatchPrependRespectsTombstoneWrittenAfterScanSnapshot(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	topicID := "legacy_race_000000000001"
-	// Simulate a DeleteTopic landing between a repair scan's DeletedTopics
-	// snapshot and its batch write: the tombstone exists by the time the
-	// prepend runs, so the batch must drop the topic instead of resurrecting it.
+	// Simulate a DeleteTopic landing between a repair scan's snapshot and batch write.
 	if err := updateProjectsFile(func(f *desktopProjectFile) (bool, error) {
 		f.DeletedTopics = prependUniqueString(f.DeletedTopics, topicID)
 		return true, nil
@@ -1218,8 +1214,7 @@ func TestBatchPrependRespectsTombstoneWrittenAfterScanSnapshot(t *testing.T) {
 		t.Fatalf("deletedTopics = %#v, tombstone should survive a batch prepend", f.DeletedTopics)
 	}
 
-	// Intentional single-topic writes (create/restore/tab indexing) clear the
-	// tombstone and bring the topic back in the same projects-file transaction.
+	// Single-topic writes (create/restore/tab indexing) clear the tombstone in the same transaction.
 	if err := prependTopicInProjectsFile("", topicID, false); err != nil {
 		t.Fatalf("single prepend: %v", err)
 	}
@@ -1242,8 +1237,7 @@ func TestTombstonedTitleOnlyTopicStaysHiddenInProjectTree(t *testing.T) {
 		t.Fatalf("add project: %v", err)
 	}
 
-	// Control: a legitimate title-only topic (not in GlobalTopics) must keep
-	// rendering through the orderedTopicIDs title-map fallback.
+	// Control: a title-only topic (not in GlobalTopics) renders via the title-map fallback.
 	controlID := "topic_control_visible"
 	if err := setTopicTitle("", controlID, "正常话题"); err != nil {
 		t.Fatalf("set control title: %v", err)
@@ -1294,9 +1288,7 @@ func TestRepairPassPrunesStaleTitleOfDeletedTopic(t *testing.T) {
 		t.Fatalf("add project: %v", err)
 	}
 
-	// Stale race product on disk: tombstoned topic whose title lingers in the
-	// global title map. The next repair pass that saves the whole map must
-	// prune it instead of persisting it again.
+	// Stale race product on disk: tombstoned topic with lingering title; the next save must prune it.
 	tombstonedID := "legacy_raced_000000000010"
 	if err := setTopicTitle("", tombstonedID, "被删除的话题"); err != nil {
 		t.Fatalf("set stale title: %v", err)
@@ -1311,10 +1303,10 @@ func TestRepairPassPrunesStaleTitleOfDeletedTopic(t *testing.T) {
 	sessionPath := writeLegacySession(t, dir, "desktop-prune.jsonl", "needs repair", time.Now().Add(-time.Hour))
 	repairID := "legacy_desktop-prune_1234"
 	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, agent.BranchMeta{
-		ID:         agent.BranchID(sessionPath),
-		CreatedAt:  time.Now().Add(-2 * time.Hour),
-		UpdatedAt:  time.Now().Add(-time.Hour),
-		Scope:      "global",
+		ID:        agent.BranchID(sessionPath),
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().Add(-time.Hour),
+		Scope:     "global", WorkspaceRoot: globalWorkspaceRoot(),
 		TopicID:    repairID,
 		TopicTitle: "待修复话题",
 		Turns:      1,
@@ -1348,9 +1340,7 @@ func TestTopicMigrationDefersEmptyLegacySession(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir sessions: %v", err)
 	}
-	// An empty legacy session (no user turns) is not migratable yet but could gain
-	// content later, so the pass must NOT mark the dir done — otherwise the gate
-	// would hide it forever.
+	// An empty legacy session may gain content later, so the pass must NOT mark the dir done.
 	if err := os.WriteFile(filepath.Join(dir, "empty.jsonl"), nil, 0o644); err != nil {
 		t.Fatalf("write empty session: %v", err)
 	}
@@ -1378,6 +1368,9 @@ func TestV05LegacyEventSessionsImportIntoGlobalTopic(t *testing.T) {
 	migratedSession := filepath.Join(destDir, "v053-chat.jsonl")
 	if _, err := os.Stat(migratedSession); err != nil {
 		t.Fatalf("legacy v0.5 session was not imported to %s: %v", migratedSession, err)
+	}
+	if err := agent.SaveBranchMeta(migratedSession, agent.BranchMeta{Scope: "global", WorkspaceRoot: globalWorkspaceRoot()}); err != nil {
+		t.Fatalf("SaveBranchMeta imported session: %v", err)
 	}
 
 	wantTopicID := legacySessionTopicID(migratedSession)
@@ -2445,9 +2438,8 @@ func TestOpenProjectTabAutoTitlesAfterExplicitDefaultReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create topic: %v", err)
 	}
-	// 显式把标题重置回默认：默认标题没有信息量，语义是交还自动命名接管
-	// （default+manual 会永久锁死"新的会话"）。真实手动名的保护只针对
-	// 非默认标题（isDefaultTopicTitle 门）。
+	// 显式把标题重置回默认：交还自动命名接管（default+manual 会永久锁死
+	// "新的会话"）；真实手动名的保护只针对非默认标题。
 	if err := app.RenameTopic(topic.ID, defaultTopicTitle); err != nil {
 		t.Fatalf("rename topic: %v", err)
 	}
@@ -3740,7 +3732,10 @@ func TestProjectTreeMigratesCLISessionFromProjectDir(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sessionPath := writeLegacySession(t, dir, "cli-project.jsonl", "cli project prompt", time.Now())
+	sessionPath := writeUnownedLegacySession(t, dir, "cli-project.jsonl", "cli project prompt", time.Now())
+	if err := agent.SaveBranchMeta(sessionPath, agent.BranchMeta{Scope: "project", WorkspaceRoot: projectRoot}); err != nil {
+		t.Fatalf("SaveBranchMeta project session: %v", err)
+	}
 	wantTopicID := legacySessionTopicID(sessionPath)
 
 	app := NewApp()
@@ -3761,7 +3756,10 @@ func TestProjectTreeMigratesNewCLISessionAfterProjectDirMarker(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	first := writeLegacySession(t, dir, "first-cli-project.jsonl", "first cli project prompt", time.Now().Add(-time.Hour))
+	first := writeUnownedLegacySession(t, dir, "first-cli-project.jsonl", "first cli project prompt", time.Now().Add(-time.Hour))
+	if err := agent.SaveBranchMeta(first, agent.BranchMeta{Scope: "project", WorkspaceRoot: projectRoot}); err != nil {
+		t.Fatalf("SaveBranchMeta first project session: %v", err)
+	}
 	firstTopicID := legacySessionTopicID(first)
 
 	app := NewApp()
@@ -3772,7 +3770,10 @@ func TestProjectTreeMigratesNewCLISessionAfterProjectDirMarker(t *testing.T) {
 	waitForTopicDirMarker(t, dir, topicMigrationMarker)
 
 	time.Sleep(10 * time.Millisecond)
-	second := writeLegacySession(t, dir, "second-cli-project.jsonl", "second cli project prompt", time.Now())
+	second := writeUnownedLegacySession(t, dir, "second-cli-project.jsonl", "second cli project prompt", time.Now())
+	if err := agent.SaveBranchMeta(second, agent.BranchMeta{Scope: "project", WorkspaceRoot: projectRoot}); err != nil {
+		t.Fatalf("SaveBranchMeta second project session: %v", err)
+	}
 	secondTopicID := legacySessionTopicID(second)
 
 	app.requestSessionCatalogReconcile(dir)
@@ -4030,9 +4031,8 @@ func TestEnsureTopicIndexedConcurrentRunsHaveNoLostProjectUpdates(t *testing.T) 
 	}
 }
 
-// A freshly created empty session must not hijack the topic from the
-// conversation the user actually had: content-bearing sessions outrank
-// content-free ones regardless of updatedAt (#7305).
+// A freshly created empty session must not hijack the user's actual topic:
+// content-bearing sessions outrank content-free ones regardless of updatedAt.
 func TestFindTopicSessionPrefersContentOverNewerEmpty(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
