@@ -24,6 +24,9 @@ func saveSnapshotTurns(t *testing.T, path string, turns int) *agent.Session {
 			t.Fatalf("SaveSnapshot turn %d: %v", i, err)
 		}
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta: %v", err)
+	}
 	return s
 }
 
@@ -37,11 +40,14 @@ func forkDesktopRecoveryBranch(t *testing.T, dir, name string) (parentPath, bran
 	if err := parent.Save(parentPath); err != nil {
 		t.Fatalf("Save recovery parent: %v", err)
 	}
+	if err := agent.SaveBranchMeta(parentPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta parent: %v", err)
+	}
 	branch := agent.NewSession("sys")
 	branch.Add(provider.Message{Role: provider.RoleUser, Content: "first"})
 	branch.Add(provider.Message{Role: provider.RoleAssistant, Content: "one"})
 	branch.Add(provider.Message{Role: provider.RoleUser, Content: "local " + name})
-	info, err := branch.SaveRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: parentPath})
+	info, err := branch.SaveRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: parentPath, BranchMeta: agent.BranchMeta{Scope: "global"}})
 	if err != nil {
 		t.Fatalf("SaveRecoveryBranch: %v", err)
 	}

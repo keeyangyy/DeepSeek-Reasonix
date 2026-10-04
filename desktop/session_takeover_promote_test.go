@@ -47,6 +47,9 @@ func TestTakeoverSessionPromotesLocalSpectatorFromFreshDiskState(t *testing.T) {
 	if err := session.Save(path); err != nil {
 		t.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatal(err)
+	}
 	sourceLease, err := agent.TryAcquireSessionLease(path)
 	if err != nil {
 		t.Fatal(err)
@@ -162,6 +165,9 @@ func TestTakeoverSessionBuildFailureKeepsLocalSpectatorAndReturnsLease(t *testin
 	path := filepath.Join(dir, "failed-round-trip.jsonl")
 	session := agent.NewSession("system")
 	if err := session.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
 		t.Fatal(err)
 	}
 	sourceLease, err := agent.TryAcquireSessionLease(path)

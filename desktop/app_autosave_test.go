@@ -306,6 +306,9 @@ func TestDesktopSnapshotConflictRecoveryRequiresRecoveryLease(t *testing.T) {
 	if err := current.Save(originalPath); err != nil {
 		t.Fatalf("Save current: %v", err)
 	}
+	if err := agent.SaveBranchMeta(originalPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta current: %v", err)
+	}
 
 	staleSess := agent.NewSession("sys")
 	staleSess.Add(provider.Message{Role: provider.RoleUser, Content: "first"})
@@ -446,6 +449,9 @@ func TestRebindSessionBlocksWhenCurrentSessionCannotPersist(t *testing.T) {
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: "target prompt"})
 	if err := sess.Save(target); err != nil {
 		t.Fatalf("save target: %v", err)
+	}
+	if err := agent.SaveBranchMeta(target, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("save branch meta target: %v", err)
 	}
 	loaded, err := agent.LoadSession(target)
 	if err != nil {

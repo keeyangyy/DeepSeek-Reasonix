@@ -459,8 +459,7 @@ func TestContextGaugeMeasuresLiveViewAfterRebind(t *testing.T) {
 
 // TestContextFallbackUsesLatestAttemptAfterMultiAttemptUsage locks the stream-
 // recovery telemetry contract: billable Prompt/Completion may be 2×30K, but
-// Last* fields and the panel breakdown must use Context* from the latest
-// attempt. The gauge itself measures the live view instead.
+// Last* fields must use Context* from the latest attempt.
 func TestContextFallbackUsesLatestAttemptAfterMultiAttemptUsage(t *testing.T) {
 	ag := agent.New(
 		usageProvider{usage: nil},
@@ -518,8 +517,7 @@ func TestContextFallbackUsesLatestAttemptAfterMultiAttemptUsage(t *testing.T) {
 }
 
 // Providers that omit cache split report ContextCache 0/0 with a valid Context
-// prompt/completion shape. Last* cache must stay 0/0 — not fall back to the
-// multi-attempt billable cache aggregate.
+// prompt/completion shape; Last* cache must stay 0/0.
 func TestContextTelemetryKeepsZeroCacheWhenContextShapePresent(t *testing.T) {
 	tab := &WorkspaceTab{ID: "tab", Scope: "global", Ready: true}
 	tab.recordUsage(event.Event{
@@ -737,6 +735,9 @@ func TestSnapshotConflictRecoveryCarriesTelemetryToFork(t *testing.T) {
 	current.Add(provider.Message{Role: provider.RoleUser, Content: "disk second"})
 	if err := current.Save(originalPath); err != nil {
 		t.Fatalf("Save current: %v", err)
+	}
+	if err := agent.SaveBranchMeta(originalPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta current: %v", err)
 	}
 
 	staleSess := agent.NewSession("sys")
