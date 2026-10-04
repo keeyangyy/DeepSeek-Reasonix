@@ -22,6 +22,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
 	mux.HandleFunc("GET /opaque-writers", s.opaqueWriterSettings)
 	mux.HandleFunc("POST /opaque-writers", s.saveOpaqueWriterSettings)
+	mux.HandleFunc("GET /remember-approval", s.rememberApprovalSettings)
+	mux.HandleFunc("POST /remember-approval", s.saveRememberApprovalSettings)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.
@@ -208,4 +210,39 @@ func (s *Server) saveOpaqueWriterSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, s.ctl().OpaqueWriterSerializationSettings())
+}
+
+func (s *Server) rememberApprovalSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.ctl().RememberApprovalSettings())
+}
+
+// saveRememberApprovalSettings rides the provider-edit grant: turning either key
+// on lets the agent save memory of that scope without asking first, and the
+// global key reaches every project on this machine.
+func (s *Server) saveRememberApprovalSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.at(r).providerEdit {
+		refuse(w, http.StatusForbidden, "remember_approval.editing_disabled", "remember approval editing is not enabled on this server", nil)
+		return
+	}
+	var body struct {
+		ProjectAutoConfirm *bool `json:"projectAutoConfirm"`
+		GlobalAutoConfirm  *bool `json:"globalAutoConfirm"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
+		badBody(w)
+		return
+	}
+	if body.ProjectAutoConfirm == nil || body.GlobalAutoConfirm == nil {
+		refuse(w, http.StatusBadRequest, "remember_approval.no_scope", "projectAutoConfirm and globalAutoConfirm are required", nil)
+		return
+	}
+	if err := s.ctl().SaveRememberApproval(*body.ProjectAutoConfirm, *body.GlobalAutoConfirm); err != nil {
+		saveFailed(w, http.StatusInternalServerError, "remember_approval.save_failed", err)
+		return
+	}
+	if err := s.rebuildInPlace(r.Context()); err != nil {
+		rebuildFailed(w, err)
+		return
+	}
+	writeJSON(w, s.ctl().RememberApprovalSettings())
 }

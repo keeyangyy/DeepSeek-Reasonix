@@ -209,7 +209,7 @@ func combineApprovalReasons(reasons ...string) string {
 }
 
 func (g gateApprover) approveWithPolicyReason(ctx context.Context, tool, subject string, args json.RawMessage, policyReason string) (bool, bool, string, error) {
-	if tool == memoryRememberTool && g.c.allowLowRiskRemember(args) {
+	if tool == memoryRememberTool && (g.c.allowLowRiskRemember(args) || g.c.allowRememberByScope(args)) {
 		return true, false, "", nil
 	}
 	subject = approvalDisplaySubject(tool, subject, args)

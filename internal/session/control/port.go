@@ -266,6 +266,8 @@ type RuntimeSettings interface {
 	SaveBrowserToolsSettings(enabled bool) error
 	OpaqueWriterSerializationSettings() OpaqueWriterSerialization
 	SaveOpaqueWriterSerialization(enabled bool) error
+	RememberApprovalSettings() RememberApproval
+	SaveRememberApproval(projectAutoConfirm, globalAutoConfirm bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
 	ProgressWatchSettings() ProgressWatchSettings

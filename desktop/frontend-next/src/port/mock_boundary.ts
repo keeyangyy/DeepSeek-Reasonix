@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings } from "./port";
 import type { ProgressWatchSettings } from "./boundary";
 import { MockShell } from "./mock_shell";
 
@@ -113,6 +113,27 @@ export class MockBoundary extends MockShell {
   async saveOpaqueWriters(enabled: boolean): Promise<OpaqueWriterSerializationSettings> {
     this.opaque = { ...this.opaque, enabled, effective: enabled };
     return { ...this.opaque };
+  }
+
+  private remember: RememberApprovalSettings = {
+    projectAutoConfirm: false, projectEffective: false,
+    globalAutoConfirm: false, globalEffective: false,
+    path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async rememberApproval(): Promise<RememberApprovalSettings> {
+    return { ...this.remember };
+  }
+
+  async saveRememberApproval(
+    s: Pick<RememberApprovalSettings, "projectAutoConfirm" | "globalAutoConfirm">,
+  ): Promise<RememberApprovalSettings> {
+    this.remember = {
+      ...this.remember,
+      projectAutoConfirm: s.projectAutoConfirm, projectEffective: s.projectAutoConfirm,
+      globalAutoConfirm: s.globalAutoConfirm, globalEffective: s.globalAutoConfirm,
+    };
+    return { ...this.remember };
   }
 
   private watch: ProgressWatchSettings = {

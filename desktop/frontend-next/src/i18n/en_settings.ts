@@ -270,6 +270,14 @@ export const EN_SETTINGS: Record<string, string> = {
     "当前项目的配置文件开启了它，此工作区仍会串行这类工具。": "This project's config file turns it on, so this workspace still serializes these tools.",
     "当前项目的配置文件关闭了它，此工作区不会串行这类工具。": "This project's config file turns it off, so this workspace does not serialize these tools.",
 
+  "记忆写入免确认": "Save memories without asking",
+  "开启后，agent 保存该范围的记忆时不再逐次询问。项目记忆只影响当前项目；全局记忆会进入每个项目。忘记（forget）仍然每次询问。修改会重建运行时，任务运行期间无法变更。": "When on, the agent saves memories of that scope without asking each time. Project memories affect this project only; global memories reach every project. Forgetting still asks. Changing it rebuilds the runtime and cannot be done while a task is running.",
+  "项目记忆": "Project memories",
+  "全局记忆": "Global memories",
+  "项目记忆写入免确认": "Save project memories without asking",
+  "全局记忆写入免确认": "Save global memories without asking",
+  "无法读取记忆写入设置。": "Could not read the memory-write setting.",
+
   "宣告做完": "Claims it is done",
   "还在做": "Still working",
   "卡住了，要你介入": "Stuck — needs you",
