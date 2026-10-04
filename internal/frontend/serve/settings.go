@@ -32,7 +32,8 @@ func (s *Server) preset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Ref string `json:"ref"`
+		Ref     string `json:"ref"`
+		Default bool   `json:"default"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Ref) == "" {
 		missingField(w, "ref")
@@ -43,13 +44,10 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// A pane resolving through the hub's resolver takes its default from there;
+	// A switch is the session's own; default_model changes only on request. A
+	// pane resolving through the hub's resolver takes its default from there, so
 	// this machine's default_model is one it never reads.
-	if s.resolver == nil {
-		// The switch only rebuilt the running controller. Without this the next
-		// launch boots from default_model and lands back on whatever was there
-		// before, which reads as the choice not having been saved at all — the CLI
-		// and the old desktop have both persisted it since they had a picker.
+	if body.Default && s.resolver == nil {
 		persistDefaultModel(ref, s.ctl().ProviderCatalog())
 	}
 	w.WriteHeader(http.StatusNoContent)

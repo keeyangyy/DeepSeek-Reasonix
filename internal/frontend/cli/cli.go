@@ -287,20 +287,7 @@ func chdirTo(dir string) int {
 }
 
 func modelForResumePath(modelName, resumePath string, cfg *config.Config) string {
-	if strings.TrimSpace(modelName) != "" || strings.TrimSpace(resumePath) == "" {
-		return modelName
-	}
-	sessionModel, ok := sessionstore.LoadSessionModel(resumePath)
-	if !ok {
-		return modelName
-	}
-	if cfg == nil {
-		return sessionModel
-	}
-	if _, ok := cfg.ResolveModel(sessionModel); !ok {
-		return modelName
-	}
-	return sessionModel
+	return boot.ModelForResume(modelName, resumePath, cfg)
 }
 
 func loadResumableSession(path string) (*sessionstore.Session, error) {
