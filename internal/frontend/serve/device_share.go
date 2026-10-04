@@ -54,9 +54,8 @@ type DeviceShare struct {
 	port            int
 	persistPort     func(int) error
 	// persistState records whether the share is open and on what address, so the
-	// next process can reopen it. Nil leaves the share in memory only, which is
-	// what every test builds. A write failure is the hook's own to log: the
-	// share already did what the person asked.
+	// next process can reopen it. Nil leaves the share in memory only; a write
+	// failure is the hook's own to log, since the share already did as asked.
 	persistState func(persistedShareState)
 }
 
