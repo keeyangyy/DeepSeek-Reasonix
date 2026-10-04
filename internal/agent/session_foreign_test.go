@@ -6,10 +6,9 @@ import (
 	"testing"
 )
 
-// The filter decides by stamp first, then by trace: a session this line created
-// carries the stamp; a session written here before the stamp existed carries a
-// native field; a session with neither was never touched here.
-func TestIsForeignSessionPrefersStampThenTrace(t *testing.T) {
+// 判据：本线给每个经手的会话都写归属（scope / workspace_root / topic_id），
+// 另一线一个都不写。所以"归属全无"就是另一线，不必自造标记。
+func TestIsForeignSessionReadsOwnership(t *testing.T) {
 	dir := t.TempDir()
 	withMeta := func(name, meta string) string {
 		path := filepath.Join(dir, name+".jsonl")
@@ -21,66 +20,33 @@ func TestIsForeignSessionPrefersStampThenTrace(t *testing.T) {
 		}
 		return path
 	}
-	stamped := withMeta("stamped", `{"id":"s","created_by":"reasonix-1x","topic_title":"t"}`)
-	otherLine := withMeta("other", `{"id":"o","created_by":"reasonix-2x"}`)
-	legacyOurs := withMeta("legacy", `{"id":"l","head_id":"main","log_schema":2}`)
-	untouched := withMeta("untouched", `{"id":"u","topic_title":"t","preview":"hello"}`)
-	archived := withMeta("archived", `{"id":"a","archived":true}`)
+	// 本线新建：pin 会写 scope + workspace_root，话题层会写 topic
+	oursNew := withMeta("ours-new", `{"id":"a","scope":"project","workspace_root":"D:\\p","topic_id":"topic_1","topic_title":"标题"}`)
+	// 本线早期会话：可能只有 scope
+	oursScopeOnly := withMeta("ours-scope", `{"id":"b","scope":"global"}`)
+	// 另一线的原始形态（实测样本：只有这 10 个字段）
+	theirs := withMeta("theirs", `{"id":"c","created_at":"2026-10-04T11:48:29Z","model":"m","revision":2,`+
+		`"content_digest":"9b","writer_id":"w","schema_version":2,"turns":1,"preview":"这是一个测试会话"}`)
+	// 另一线分叉/归档过的会话
+	theirsArchived := withMeta("theirs-archived", `{"id":"d","archived":true,"superseded":false}`)
 	noSidecar := filepath.Join(dir, "bare.jsonl")
 	if err := os.WriteFile(noSidecar, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if IsForeignSession(stamped) {
-		t.Fatal("a session stamped by this line was claimed as the other line's")
+	if IsForeignSession(oursNew) {
+		t.Fatal("本线会话（有归属）被判成了另一线")
 	}
-	if !IsForeignSession(otherLine) {
-		t.Fatal("another line's stamp was not detected")
+	if IsForeignSession(oursScopeOnly) {
+		t.Fatal("本线会话（只有 scope）被判成了另一线")
 	}
-	if IsForeignSession(legacyOurs) {
-		t.Fatal("an older session of ours (native field, no stamp) was claimed")
+	if !IsForeignSession(theirs) {
+		t.Fatal("另一线的原始会话（无任何归属）没被判出来")
 	}
-	if !IsForeignSession(untouched) {
-		t.Fatal("a sidecar with no trace of this line was not claimed")
-	}
-	if !IsForeignSession(archived) {
-		t.Fatal("the other line's archived sidecar was not detected")
+	if !IsForeignSession(theirsArchived) {
+		t.Fatal("带 archived 的会话没被判出来")
 	}
 	if IsForeignSession(noSidecar) {
-		t.Fatal("a session without a sidecar must not be claimed")
-	}
-}
-
-// The stamp is what makes the filter self-sufficient going forward: a session
-// saved by this build is never mistaken for the other line's, and a session
-// that already carries an identity keeps it.
-func TestSaveBranchMetaStampsThisLineOnce(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "s.jsonl")
-	if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := SaveBranchMetaPreserveUpdated(path, BranchMeta{ID: "s", Scope: "global"}); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	meta, ok, err := LoadBranchMeta(path)
-	if err != nil || !ok {
-		t.Fatalf("load: ok=%v err=%v", ok, err)
-	}
-	if meta.CreatedBy != SessionCreatedByLine {
-		t.Fatalf("created_by = %q, want %q", meta.CreatedBy, SessionCreatedByLine)
-	}
-	if IsForeignSession(path) {
-		t.Fatal("a session this build just saved was claimed as the other line's")
-	}
-	if err := SaveBranchMetaPreserveUpdated(path, BranchMeta{ID: "s", Scope: "global", CreatedBy: "other-line"}); err != nil {
-		t.Fatalf("re-save: %v", err)
-	}
-	again, _, err := LoadBranchMeta(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.CreatedBy != "other-line" {
-		t.Fatalf("existing stamp was overwritten: %q", again.CreatedBy)
+		t.Fatal("没有 sidecar 的会话不该被判成另一线")
 	}
 }

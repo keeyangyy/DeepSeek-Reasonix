@@ -18,7 +18,7 @@ func recoveryHeavyDirectory(t *testing.T, branches int) (string, DirectoryTarget
 		session := agent.NewSession("sys")
 		session.Add(provider.Message{Role: provider.RoleUser, Content: "question"})
 		session.Add(provider.Message{Role: provider.RoleAssistant, Content: "answer"})
-		if _, err := session.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root}); err != nil {
+		if _, err := session.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root, BranchMeta: agent.BranchMeta{Scope: "global"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,10 +83,13 @@ func BenchmarkRecoveryDirectoryVerifiedIdleReconcile(b *testing.B) {
 	if err := s.Save(root); err != nil {
 		b.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(root, agent.BranchMeta{Scope: "global"}); err != nil {
+		b.Fatal(err)
+	}
 	for range 128 {
 		branch := agent.NewSession("sys")
 		branch.Add(provider.Message{Role: provider.RoleUser, Content: "question"})
-		if _, err := branch.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root}); err != nil {
+		if _, err := branch.SaveConflictRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: root, BranchMeta: agent.BranchMeta{Scope: "global"}}); err != nil {
 			b.Fatal(err)
 		}
 	}

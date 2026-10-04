@@ -6494,10 +6494,8 @@ func normalizeTopicStatus(status string) string {
 }
 
 func legacySessionMetaMatchesMigrationTarget(meta agent.BranchMeta, scope, workspaceRoot string) bool {
-	if strings.TrimSpace(meta.TopicID) != "" {
-		return false
-	}
-	return legacySessionScopeMatchesMigrationTarget(meta, scope, workspaceRoot)
+	return strings.TrimSpace(meta.TopicID) == "" &&
+		legacySessionScopeMatchesMigrationTarget(meta, scope, workspaceRoot)
 }
 
 func legacySessionScopeMatchesMigrationTarget(meta agent.BranchMeta, scope, workspaceRoot string) bool {
@@ -6507,9 +6505,9 @@ func legacySessionScopeMatchesMigrationTarget(meta agent.BranchMeta, scope, work
 	}
 	metaRoot := normalizeProjectRoot(meta.WorkspaceRoot)
 	if scope == "project" {
-		return metaRoot == "" || sameProjectRoot(workspaceRoot, metaRoot)
+		return metaRoot != "" && sameProjectRoot(workspaceRoot, metaRoot)
 	}
-	return metaRoot == "" || sameProjectRoot(globalWorkspaceRoot(), metaRoot)
+	return metaRoot != "" && sameProjectRoot(globalWorkspaceRoot(), metaRoot)
 }
 
 func cleanDesktopPath(path string) string {
