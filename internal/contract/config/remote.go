@@ -48,7 +48,7 @@ type RemoteHostEntry struct {
 }
 
 // IsEnabled reports whether this machine may be dialed. The zero value is on.
-func (r RemoteHostEntry) IsEnabled() bool { return !r.Disabled }
+func (e RemoteHostEntry) IsEnabled() bool { return !e.Disabled }
 
 // RemoteForwardEntry is a persisted port-forward rule applied on connect.
 type RemoteForwardEntry struct {
