@@ -385,9 +385,9 @@ func compactionInstructionWithFocus(instructions string) string {
 
 // compactionSnapshotRule is appended only when the fold actually carries a
 // host session-context snapshot; the summarizer must not restate it.
-const compactionSnapshotRule = "\n\nNever restate host-generated session-context snapshots " +
-	"(runtime, workspace, memory, or skills indexes): they are re-injected on every turn, " +
-	"so copying them here would duplicate stale state."
+const compactionSnapshotRule = "\n\nSkip every message wrapped in <session-context> tags: that " +
+	"host-generated snapshot, its section-lengths manifest, and its preamble are re-injected on every " +
+	"turn. Do not copy their contents, not even in summary form - restating them would freeze stale state."
 
 // carriesSessionContext reports whether a fold replays a host session-context
 // snapshot. Matching on content keeps the check valid after provenance stripping.

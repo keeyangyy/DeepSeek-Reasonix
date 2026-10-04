@@ -57,7 +57,7 @@ func newStrictRecoveryContentCache(onLoad func(string)) *recoveryContentCache {
 }
 
 func listSessionOrderWithContent(dir string, content *recoveryContentCache) ([]agent.SessionOrderInfo, error) {
-	return agent.ListSessionOrderWithRecoveryPreferenceResolver(dir, func(path string, meta agent.BranchMeta) bool {
+	ordered, err := agent.ListSessionOrderWithRecoveryPreferenceResolver(dir, func(path string, meta agent.BranchMeta) bool {
 		digest := strings.TrimSpace(meta.RecoveryPreferredDigest)
 		if !meta.RecoveryPreferred || digest == "" {
 			return false
@@ -65,6 +65,23 @@ func listSessionOrderWithContent(dir string, content *recoveryContentCache) ([]a
 		_, ok := content.load(path, digest)
 		return ok
 	})
+	if err != nil {
+		return nil, err
+	}
+	return dropForeignSessions(ordered), nil
+}
+
+// dropForeignSessions removes conversations whose sidecar was written by the
+// other line, so this build's catalog only lists what it can safely edit.
+func dropForeignSessions(ordered []agent.SessionOrderInfo) []agent.SessionOrderInfo {
+	kept := ordered[:0]
+	for _, info := range ordered {
+		if agent.IsForeignSession(info.Path) {
+			continue
+		}
+		kept = append(kept, info)
+	}
+	return kept
 }
 
 func (c *recoveryContentCache) load(path, digest string) (agent.SessionContentSnapshot, bool) {
