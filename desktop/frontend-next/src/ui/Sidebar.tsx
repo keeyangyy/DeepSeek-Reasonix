@@ -248,7 +248,7 @@ export function Sidebar({
         onError={onError}
         adder={adder}
       >
-        {shownRemotes.length ? (
+        {remotes ? (
           <RemoteHosts
             hub={hub}
             hosts={shownRemotes}
