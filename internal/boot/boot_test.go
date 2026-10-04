@@ -193,8 +193,13 @@ model = "x"
 	past := agent.NewSession("")
 	past.Add(provider.Message{Role: provider.RoleUser, Content: "Should the history layer use vector embeddings?"})
 	past.Add(provider.Message{Role: provider.RoleAssistant, Content: "Decision: port lightweight BM25 history retrieval without a vector database."})
-	if err := past.Save(filepath.Join(sessionDir, "past.jsonl")); err != nil {
+	pastPath := filepath.Join(sessionDir, "past.jsonl")
+	if err := past.Save(pastPath); err != nil {
 		t.Fatalf("save past session: %v", err)
+	}
+	// 本线新建的会话都带归属；缺了会被会话筛选当成另一线的会话而不再被索引。
+	if err := agent.SaveBranchMeta(pastPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("pin past session meta: %v", err)
 	}
 
 	store := memory.StoreFor(config.MemoryUserDir(), dir)
@@ -1337,14 +1342,9 @@ func TestRecoveryHeadlessModeUsesExplicitFrontendCapability(t *testing.T) {
 }
 
 // TestBuildInteractiveApprovalModeSwitchPropagatesToTaskSubagentGate pins the
-// interactive counterpart of TestBuildHeadlessApprovalModePropagatesToTaskSubagentGate:
-// boot.Build with no HeadlessApprovalMode — the interactive REPL's boot path,
-// which always starts a session at the default Ask posture and switches modes
-// later at runtime via Shift+Tab (Controller.SetToolApprovalMode) — followed
-// by a runtime switch to auto must also reach the task sub-agent's gate.
-// Before this fix, the sub-agent gate was captured once at boot with the
-// mode-unaware default and had no rebuild hook, so a
-// later SetToolApprovalMode(auto) call updated only the parent executor.
+// interactive counterpart: boot with no HeadlessApprovalMode, then a runtime
+// Shift+Tab switch to auto, must also reach the task sub-agent's gate (before
+// the fix the gate was captured once at boot with a mode-unaware default).
 func TestBuildInteractiveApprovalModeSwitchPropagatesToTaskSubagentGate(t *testing.T) {
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
