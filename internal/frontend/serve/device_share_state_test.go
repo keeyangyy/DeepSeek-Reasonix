@@ -48,7 +48,7 @@ func TestOpeningTheShareRecordsItsAddress(t *testing.T) {
 	share := NewDeviceShare(nil)
 	lanOnly(t, share)
 	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	share.persistState = func(st persistedShareState) error { saved = append(saved, st); return nil }
+	share.persistState = func(st persistedShareState) { saved = append(saved, st) }
 	t.Cleanup(share.Close)
 
 	if _, err := share.Open("127.0.0.1"); err != nil {
@@ -65,7 +65,7 @@ func TestClosingTheShareRecordsItShut(t *testing.T) {
 	share := NewDeviceShare(nil)
 	lanOnly(t, share)
 	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	share.persistState = func(st persistedShareState) error { saved = append(saved, st); return nil }
+	share.persistState = func(st persistedShareState) { saved = append(saved, st) }
 
 	if _, err := share.Open("127.0.0.1"); err != nil {
 		t.Fatalf("open: %v", err)
