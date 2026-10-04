@@ -549,7 +549,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       // pair used to be one line that stayed on screen saying "waiting" long
       // after the wait was over.
       if (ev.code === "workspace_lease") {
-        const waiting: Item = { t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code };
+        const waiting: Item = { t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code, workspaceLease: ev.workspaceLease };
         return { ...s, doing: WAITING_WORKSPACE, items: [...s.items, waiting] };
       }
       if (ev.code === "workspace_lease_resumed" || ev.code === "workspace_lease_abandoned") {
@@ -558,13 +558,13 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         for (let i = items.length - 1; i >= 0; i--) {
           const it = items[i];
           if (it.t === "notice" && it.code === "workspace_lease") {
-            items[i] = { t: "notice", id: it.id, level, text: ev.text ?? "", detail: ev.detail, code: ev.code };
+            items[i] = { t: "notice", id: it.id, level, text: ev.text ?? "", detail: ev.detail, code: ev.code, workspaceLease: ev.workspaceLease };
             closed = true;
             break;
           }
         }
         if (!closed) {
-          items.push({ t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code });
+          items.push({ t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code, workspaceLease: ev.workspaceLease });
         }
         return { ...s, doing: s.doing === WAITING_WORKSPACE ? RUNNING : s.doing, items };
       }
@@ -581,7 +581,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         ...s,
         items: [
           ...s.items,
-          { t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code },
+          { t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code, workspaceLease: ev.workspaceLease },
         ],
       };
     }

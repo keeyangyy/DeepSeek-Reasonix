@@ -1,6 +1,6 @@
 // What a session is made of, apart from the reducer that maintains it: the
 // rows the transcript draws and the state one turn hands the next.
-import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, Tool, Via } from "../port/wire";
+import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, Tool, Via, WorkspaceLease } from "../port/wire";
 import type { Sample } from "../port/tokens";
 import type { Executions } from "./executions";
 
@@ -46,7 +46,7 @@ export type Item =
   | { t: "extension"; id: string; ext: ExtensionSurface }
   // code identifies what the kernel is reporting. text is its own English,
   // kept as the fallback for a code this build has no wording for.
-  | { t: "notice"; id: string; level: string; text: string; detail?: string; code?: string; count?: number };
+  | { t: "notice"; id: string; level: string; text: string; detail?: string; code?: string; count?: number; workspaceLease?: WorkspaceLease };
 
 // What a remember call wrote, read off its own arguments. Saving a fact changes
 // what the agent will do in later sessions, which no other tool call does — so it

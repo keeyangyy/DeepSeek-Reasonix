@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
+import { Group } from "./Group";
 import type { AgentPort, OpaqueWriterSerializationSettings } from "../port/port";
 import { Switch } from "./Switch";
 
@@ -59,5 +60,20 @@ export function OpaqueWriters({ port, onChanged }: { port: AgentPort; onChanged:
       )}
       {error && <div className="why">{error}</div>}
     </div>
+  );
+}
+
+// The settings block ships whole so the settings page keeps one line for it
+// instead of a frame plus its wording; that also keeps that upstream file from
+// growing past its line ceiling for a fork-only row.
+export function OpaqueWritersGroup({ port, onChanged }: { port: AgentPort; onChanged: () => void }) {
+  return (
+    <Group
+      id="opaque-writers"
+      title={t("写锁串行")}
+      hint={t("无法声明写入范围的工具会占用整个工作区，同一项目的会话因此排队。关闭后这类工具不再互相阻塞，多个会话可以同时跑构建。修改会重建运行时，任务运行期间无法变更。")}
+    >
+      <OpaqueWriters port={port} onChanged={onChanged} />
+    </Group>
   );
 }

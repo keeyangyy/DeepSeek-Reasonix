@@ -28,7 +28,7 @@ import { ConfigTrouble } from "./ConfigTrouble";
 import { Compaction } from "./Compaction";
 import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
-import { OpaqueWriters } from "./OpaqueWriters";
+import { OpaqueWritersGroup } from "./OpaqueWriters";
 import { ProgressWatch } from "./ProgressWatch";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
@@ -122,6 +122,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
   const [extTab, setExtTab] = useState<"installed" | "market">(openedAnchor === "market" ? "market" : "installed");
   const [installedTarget, setInstalledTarget] = useState<{ kind: string; name: string } | null>(null);
   const [extRefreshing, setExtRefreshing] = useState(false);
+  const [extErrors, setExtErrors] = useState<Partial<Record<"mcp" | "packages" | "skills", string>>>({});
   const extRefresh = useRef(0);
   const [updatingPkg, setUpdatingPkg] = useState({ name: "", applying: false });
   const applyingChanged = useCallback((applying: boolean) => setUpdatingPkg((p) => ({ ...p, applying })), []);
@@ -135,6 +136,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
     const refresh = ++extRefresh.current;
     const current = () => extRefresh.current === refresh;
     setExtRefreshing(true);
+    setExtErrors({});
     const where = scopeAt || undefined;
     port.capabilityScopes().then((c) => { if (current()) setScopes(c); }).catch(() => { if (current()) setScopes([]); });
     const mcpRead = port.mcp(where).then((c) => {
@@ -142,8 +144,8 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
       setMcp(c.servers);
       setScope(c.scope);
       setLive(c.live !== false);
-    }).catch(() => { if (current()) setMcp([]); });
-    const packageRead = port.plugins().then((c) => { if (current()) setPackages(c); }).catch(() => { if (current()) setPackages([]); });
+    }).catch((e) => { if (current()) { setMcp([]); setExtErrors((errors) => ({ ...errors, mcp: reason(e) })); } });
+    const packageRead = port.plugins().then((c) => { if (current()) setPackages(c); }).catch((e) => { if (current()) { setPackages([]); setExtErrors((errors) => ({ ...errors, packages: reason(e) })); } });
     port.hooks().then((c) => { if (current()) setHookCount(c.hooks.length); }).catch(() => { if (current()) setHookCount(0); });
     port.network().then((n) => { if (current()) setNetMode(t(NET_MODE[n.mode] ?? n.mode)); }).catch(() => { if (current()) setNetMode(""); });
     port.memories().then((c) => { if (current()) setMemCount(c.memories.length); }).catch(() => { if (current()) setMemCount(0); });
@@ -153,7 +155,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
       setSkills(c.skills);
       setImplicit(c.implicit);
     })
-      .catch(() => { if (current()) setSkills([]); });
+      .catch((e) => { if (current()) { setSkills([]); setExtErrors((errors) => ({ ...errors, skills: reason(e) })); } });
     void Promise.allSettled([mcpRead, packageRead, skillRead]).then(() => { if (current()) setExtRefreshing(false); });
   }, [port, scopeAt]);
   const currentExt = useRef({ port, reloadExt, onChanged });
@@ -607,12 +609,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
               >
                 <BrowserTools port={port} onChanged={onChanged} />
               </Group>
-              <Group id="opaque-writers"
-                title={t("写锁串行")}
-                hint={t("无法声明写入范围的工具会占用整个工作区，同一项目的会话因此排队。关闭后这类工具不再互相阻塞，多个会话可以同时跑构建。修改会重建运行时，任务运行期间无法变更。")}
-              >
-                <OpaqueWriters port={port} onChanged={onChanged} />
-              </Group>
+              <OpaqueWritersGroup port={port} onChanged={onChanged} />
             </>
           )}
 
@@ -667,11 +664,12 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                   <Packages
                     port={port}
                     packages={packages}
-                    onChanged={afterExtChange} onReloadError={reload.report}
+                    onChanged={afterExtChange} onReloadError={reload.report} onReloaded={reload.applied}
                     updating={updatingPkg.name}
                     onUpdate={(name) => setUpdatingPkg({ name, applying: false })}
                   />
-                  {packages.length === 0 && !addingPkg && <div className="empty">{t("尚未安装插件包。")}</div>}
+                  {extErrors.packages && <div className="rnote" data-s="bad" role="alert">{extErrors.packages} <button className="act" data-action="extensions.refresh" disabled={extRefreshing} onClick={reloadExt}>{t("重试")}</button></div>}
+                  {packages.length === 0 && !addingPkg && !extRefreshing && !extErrors.packages && <div className="empty">{t("尚未安装插件包。")}</div>}
                 </Group>
                 {/* Below the packages: what was added by hand. A server the user
                     typed in themselves is not part of anyone's package, and
@@ -699,7 +697,8 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                   {looseMcp.map((m) => (
                     <ServerRow key={m.name} m={m} port={port} onDone={afterExtChange} root={scopeAt} live={live} />
                   ))}
-                  {looseMcp.length === 0 && !adding && <div className="empty">{t("尚未接入外部服务。")}</div>}
+                  {extErrors.mcp && <div className="rnote" data-s="bad" role="alert">{extErrors.mcp} <button className="act" data-action="extensions.refresh" disabled={extRefreshing} onClick={reloadExt}>{t("重试")}</button></div>}
+                  {looseMcp.length === 0 && !adding && !extRefreshing && !extErrors.mcp && <div className="empty">{t("尚未接入外部服务。")}</div>}
                 </Group>
                 <Group id="skills"
                   title={t("技能")}
@@ -713,7 +712,8 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                   {looseSkills.map((sk) => (
                     <SkillRow key={sk.name} sk={sk} implicit={implicit} port={port} onDone={afterExtChange} root={scopeAt} onFailed={setFailed} />
                   ))}
-                  {looseSkills.length === 0 && <div className="empty">{t("当前工作目录下没有技能。")}</div>}
+                  {extErrors.skills && <div className="rnote" data-s="bad" role="alert">{extErrors.skills} <button className="act" data-action="extensions.refresh" disabled={extRefreshing} onClick={reloadExt}>{t("重试")}</button></div>}
+                  {looseSkills.length === 0 && !extRefreshing && !extErrors.skills && <div className="empty">{t("当前工作目录下没有技能。")}</div>}
                 </Group>
               </>
               )}

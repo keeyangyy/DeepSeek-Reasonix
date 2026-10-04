@@ -61,4 +61,6 @@ const (
 	NoticeCodeLanguageOverridden = "language_overridden"
 	// default_model names nothing configured, so the window opened on a fallback; the file is unchanged.
 	NoticeCodeDefaultModelUnavailable = "default_model_unavailable"
+	// A legacy memory file could not be preserved, so the metadata migration left it as it was.
+	NoticeCodeMemoryMigrationBackup = "memory_migration_backup"
 )

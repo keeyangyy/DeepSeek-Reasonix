@@ -279,6 +279,19 @@ describe("waiting for another session to finish writing", () => {
     ({ kind: "notice", code, level, text }) as SessionEvent;
   const cards = (st: SessionState) => st.items.filter((i): i is Extract<Item, { t: "notice" }> => i.t === "notice");
 
+  it("preserves holder and claim scope through close and event replay", () => {
+    const scope = { contended: 0, heldMs: 0, idleMs: 0, holder: "Fixture A", holderSessionId: "session-a", paths: ["src/a.go"], requestedPaths: ["src/a.go"] };
+    const opened = { ...lease("workspace_lease", "warn", "Waiting"), workspaceLease: scope } as SessionEvent;
+    const closed = { ...lease("workspace_lease_resumed", "info", "Claim granted"), workspaceLease: scope } as SessionEvent;
+    const waiting = run([opened]);
+    expect(cards(waiting)[0]).toMatchObject({ workspaceLease: scope });
+    const done = reduce(waiting, closed);
+    expect(cards(done)).toHaveLength(1);
+    expect(cards(done)[0]).toMatchObject({ id: cards(waiting)[0].id, workspaceLease: scope });
+    expect(cards(run([opened, closed]))[0]).toMatchObject({ workspaceLease: scope });
+    expect(cards(reduce(waiting, { ...closed, code: "workspace_lease_abandoned" } as SessionEvent))[0]).toMatchObject({ workspaceLease: scope });
+  });
+
   // The open used to be the whole surface: one card saying the session would
   // continue "when it is safe", still saying it long after it had.
   it("rewrites the waiting card in place when the wait ends", () => {
