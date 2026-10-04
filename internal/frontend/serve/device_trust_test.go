@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -121,5 +122,32 @@ func TestShutdownKeepsTheDevicesCloseForgets(t *testing.T) {
 	share.Close()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("closing the share left the file behind (stat err = %v)", err)
+	}
+}
+
+// TestReopeningAShareKeepsThePairedDevices is the restart path: opening the share
+// again stops the old listener but leaves the phones paired, so nobody scans a
+// second time.
+func TestReopeningAShareKeepsThePairedDevices(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "device-trust.json")
+	share := NewDeviceShare(nil)
+	share.registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(path, devices) }
+	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	share.addresses = func() []ShareAddress { return []ShareAddress{{Interface: "lo", IP: "127.0.0.1", Kind: AddressLAN}} }
+	t.Cleanup(share.Close)
+
+	code, _ := share.registry.Offer()
+	credential, _, err := share.registry.Redeem(code, "phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := share.Open("127.0.0.1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, ok := share.registry.Authenticate(credential); !ok {
+		t.Fatal("reopening the share unpaired the phone that had scanned")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("reopening the share forgot the devices on disk: %v", err)
 	}
 }

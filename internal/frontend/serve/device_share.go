@@ -148,14 +148,16 @@ func (s *DeviceShare) Attach(h http.Handler) {
 }
 
 // Open listens on ip, one of the addresses Status lists, on the configured port
-// or one the system picks. A share already open is closed first, so its devices go with it.
+// or one the system picks. A share already open stops listening first; the phones
+// already paired stay paired, so reopening — after a restart, say — does not ask
+// for a new code.
 func (s *DeviceShare) Open(ip string) (ShareStatus, error) {
 	if !slices.ContainsFunc(s.addresses(), func(a ShareAddress) bool { return a.IP == ip }) {
 		return s.Status(), ErrShareAddress
 	}
 	s.turn.Lock()
 	defer s.turn.Unlock()
-	s.closeLocked()
+	s.stopListeningLocked()
 	s.mu.Lock()
 	handler := s.handler
 	s.mu.Unlock()
