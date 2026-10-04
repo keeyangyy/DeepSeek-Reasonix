@@ -219,10 +219,7 @@ func (a *App) runtimeProjectTopicNodes(scope, workspaceRoot string, snapshots []
 			kind = "global_topic"
 			sessionKind = "global_session"
 		}
-		label := defaultTopicTitle
-		if strings.TrimSpace(sessions[0].topicTitle) != "" {
-			label = sessions[0].topicTitle
-		}
+		label := topicLabelFallback(sessions[0])
 		node := ProjectNode{
 			Key: kind + "_" + topicID, Kind: kind, Label: a.localizedTopicTitle(label, sessions[0].topicTitleSource),
 			Root: workspaceRoot, TopicID: topicID, TurnsState: string(sessioncatalog.TurnsUnknown),
@@ -243,6 +240,9 @@ func (a *App) runtimeProjectTopicNodes(scope, workspaceRoot string, snapshots []
 			}
 			path := strings.TrimSpace(session.sessionPath)
 			sessionLabel := sessionCustomTitleForLabel(path)
+			if sessionLabel == "" {
+				sessionLabel = sessionPreviewForPath(path)
+			}
 			if sessionLabel == "" {
 				sessionLabel = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 			}
