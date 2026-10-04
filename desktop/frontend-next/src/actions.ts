@@ -309,6 +309,7 @@ export const ACTIONS: UIAction[] = [
   // Asking a machine whether it answers. Nothing on either side changes, and
   // asking twice is the point when the first answer was "not yet".
   { id: "remote.probe", kind: "repeatable", target: "entity", proof: "authority-effect" },
+  { id: "remote.hide", kind: "view", target: "entity", proof: "interaction" },
   { id: "remote.read", kind: "repeatable", target: "entity", proof: "authority-effect" },
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.add-cancel", kind: "view", target: "none", proof: "interaction" },

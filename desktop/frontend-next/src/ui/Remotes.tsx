@@ -5,6 +5,7 @@ import type { RemoteHost, RemoteHostEdit, RemoteProbe } from "../port/remote";
 import { say } from "../i18n/kernel";
 import { toggleHiddenHost, useHiddenHosts } from "../state/remotehide";
 import { RemoteDirs } from "./RemoteDirs";
+import { Switch } from "./Switch";
 
 interface Props {
   hub: HubPort;
@@ -165,9 +166,13 @@ export function Remotes({ hub, onError }: Props) {
             >
               {t("编辑")}
             </button>
-            <button className="rmtlnk" onClick={() => toggleHiddenHost(host.name)}>
-              {t(hidden.includes(host.name) ? "在侧栏显示" : "在侧栏隐藏")}
-            </button>
+            <span className="st">{t("在侧栏显示")}</span>
+            <Switch
+              data-action="remote.hide"
+              on={!hidden.includes(host.name)}
+              label={t(hidden.includes(host.name) ? "在侧栏显示" : "在侧栏隐藏")}
+              onClick={() => toggleHiddenHost(host.name)}
+            />
             <button className="rmtlnk" data-danger="" disabled={!!busy} onClick={() => setConfirm(host.name)}>
               {t("移除")}
             </button>
