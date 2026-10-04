@@ -278,6 +278,9 @@ export const EN_SETTINGS: Record<string, string> = {
   "全局记忆写入免确认": "Save global memories without asking",
   "无法读取记忆写入设置。": "Could not read the memory-write setting.",
 
+  "在侧栏隐藏": "Hide from the rail",
+  "在侧栏显示": "Show in the rail",
+
   "宣告做完": "Claims it is done",
   "还在做": "Still working",
   "卡住了，要你介入": "Stuck — needs you",

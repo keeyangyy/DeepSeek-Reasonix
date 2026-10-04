@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import type { HubPort } from "../port/hub";
 import type { RemoteHost, RemoteHostEdit, RemoteProbe } from "../port/remote";
 import { say } from "../i18n/kernel";
+import { toggleHiddenHost, useHiddenHosts } from "../state/remotehide";
 import { RemoteDirs } from "./RemoteDirs";
 
 interface Props {
@@ -58,6 +59,7 @@ export function Remotes({ hub, onError }: Props) {
   const [editing, setEditing] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState("");
+  const hidden = useHiddenHosts();
   // What each machine answered when asked. Kept per host so a second probe
   // does not blank the first one's answer while it runs.
   const [probes, setProbes] = useState<Record<string, RemoteProbe>>({});
@@ -162,6 +164,9 @@ export function Remotes({ hub, onError }: Props) {
               }}
             >
               {t("编辑")}
+            </button>
+            <button className="rmtlnk" onClick={() => toggleHiddenHost(host.name)}>
+              {t(hidden.includes(host.name) ? "在侧栏显示" : "在侧栏隐藏")}
             </button>
             <button className="rmtlnk" data-danger="" disabled={!!busy} onClick={() => setConfirm(host.name)}>
               {t("移除")}
