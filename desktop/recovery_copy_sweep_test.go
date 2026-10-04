@@ -28,13 +28,16 @@ func forkThreeIdenticalRecoveryCopies(t *testing.T, dir, name string) (parentPat
 	if err := disk.Save(parentPath); err != nil {
 		t.Fatalf("Save parent: %v", err)
 	}
+	if err := agent.SaveBranchMeta(parentPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta parent: %v", err)
+	}
 	var stale *agent.Session
 	for range 3 {
 		fork := agent.NewSession("sys")
 		fork.Add(provider.Message{Role: provider.RoleUser, Content: "first"})
 		fork.Add(provider.Message{Role: provider.RoleAssistant, Content: "one"})
 		fork.Add(provider.Message{Role: provider.RoleUser, Content: "local " + name})
-		info, err := fork.SaveRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: parentPath})
+		info, err := fork.SaveRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: parentPath, BranchMeta: agent.BranchMeta{Scope: "global"}})
 		if err != nil {
 			t.Fatalf("SaveRecoveryBranch: %v", err)
 		}

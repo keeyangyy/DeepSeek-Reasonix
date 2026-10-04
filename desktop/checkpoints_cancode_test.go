@@ -56,6 +56,9 @@ func TestDesktopRewindCommitAndUndoUseAuthoritativeControllerState(t *testing.T)
 	if err := session.Save(sessionPath); err != nil {
 		t.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(sessionPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatal(err)
+	}
 	ag := agent.New(nil, nil, session, agent.Options{}, event.Discard)
 	ctrl := control.New(control.Options{Executor: ag, Runner: ag, SessionDir: dir, SessionPath: sessionPath, WorkspaceRoot: root, Label: "test"})
 	app := NewApp()

@@ -3017,10 +3017,8 @@ func TestSetEffortForTabLeaseHeldKeepsOldControllerAlive(t *testing.T) {
 		t.Fatal("tab controller changed after failed effort switch")
 	}
 
-	// The failed switch must leave the old runtime alive: after the other
-	// window releases the lease, retrying from the same tab has to succeed.
-	// (The old code closed the old controller before acquiring the lease, so
-	// this retry died on a snapshot of a closed session.)
+	// The failed switch must leave the old runtime alive: once the other
+	// window releases the lease, retrying from the same tab must succeed.
 	externalLease.Release()
 	released = true
 	if err := app.SetEffortForTab(tab.ID, "max"); err != nil {
@@ -3070,6 +3068,7 @@ func TestSetEffortForTabReanchorsDepthCapRecoveryBranch(t *testing.T) {
 	meta.ParentID = "effort-switch-conflict"
 	meta.RecoveryReason = "snapshot conflict"
 	meta.RecoveryDepth = agent.SessionRecoveryMaxDepth
+	meta.Scope = "global"
 	if err := agent.SaveBranchMeta(recoveryPath, meta); err != nil {
 		t.Fatalf("SaveBranchMeta: %v", err)
 	}
@@ -3556,10 +3555,7 @@ func TestSetModelForTabRefreshesCarriedSystemPromptWithoutChangingDefaults(t *te
 }
 
 // TestSetModelForTabRestoresSessionAuthorizations pins the fix for a model
-// switch dropping same-session "Allow for this session" tool grants and
-// Plan-mode read-only command trust, forcing the user to re-approve
-// something already granted this session after every model/effort/token-mode
-// switch.
+// switch dropping session tool grants, forcing re-approval after every switch.
 func TestSetModelForTabRestoresSessionAuthorizations(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	setDesktopTestCredential(t, "OLD_MODEL_KEY", "sk-test")
@@ -3626,9 +3622,7 @@ func TestSetModelForTabRestoresSessionAuthorizations(t *testing.T) {
 }
 
 // TestRebuildSettingLockedRestoresSessionAuthorizations covers the same
-// dropped-session-authorization bug for the settings-change rebuild path
-// (also used by the deferred-rebuild retry loop), independent from
-// SetModelForTab's own rebuild.
+// dropped-session-authorization bug on the settings-change rebuild path.
 func TestRebuildSettingLockedRestoresSessionAuthorizations(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	setDesktopTestCredential(t, "OLD_MODEL_KEY", "sk-test")
@@ -3720,6 +3714,9 @@ func TestSetModelForTabContinuesRecoveryPathAfterSnapshotConflict(t *testing.T) 
 	current.Add(provider.Message{Role: provider.RoleUser, Content: "disk second"})
 	if err := current.Save(originalPath); err != nil {
 		t.Fatalf("save current session: %v", err)
+	}
+	if err := agent.SaveBranchMeta(originalPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta current session: %v", err)
 	}
 
 	stale := agent.NewSession("old system prompt")
@@ -7156,6 +7153,12 @@ func TestDesktopSessionAPIsUseControllerSessionDir(t *testing.T) {
 	if err := os.WriteFile(pathB, []byte(`{"role":"user","content":"workspace B"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write pathB: %v", err)
 	}
+	if err := agent.SaveBranchMeta(pathA, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta pathA: %v", err)
+	}
+	if err := agent.SaveBranchMeta(pathB, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta pathB: %v", err)
+	}
 
 	app := NewApp()
 	app.setTestCtrl(control.New(control.Options{SessionDir: dirA, SessionPath: pathA, Label: "test"}), "")
@@ -8442,10 +8445,8 @@ func TestAuthorizeAndConnectMCPServerSerializesConcurrentDisable(t *testing.T) {
 }
 
 // RemovePlugin disconnects the uninstalled plugin's MCP servers, so it must
-// serialize on the MCP lifecycle lock: an unlocked disconnect interleaving
-// with authorization lets the reconnect relaunch the just-removed
-// server from its stale snapshot. The plugin does not need to exist — the
-// lock is taken before the uninstall runs, which is the contract under test.
+// serialize on the MCP lifecycle lock; the contract under test is that the
+// lock is taken before the uninstall runs, whether or not the plugin exists.
 func TestRemovePluginSerializesWithMCPAuthorization(t *testing.T) {
 	releaseConnection := make(chan struct{})
 	gateAddr, attempts := newDesktopMCPStartGate(t, func(attempt int, conn net.Conn) {
@@ -8541,8 +8542,7 @@ func installedPluginNamed(t *testing.T, name string) bool {
 
 // A global plugin uninstall must clean every runtime, not only the active tab:
 // sibling registries on the shared Host would otherwise keep provider-visible
-// tools backed by the closed client, and other workspaces would keep running
-// the uninstalled server.
+// tools backed by the closed client.
 func TestRemovePluginDisconnectsEveryRuntime(t *testing.T) {
 	fixture := newGatedDesktopMCPLaunchFixture(t, "")
 	pluginRoot := installGatedTestPluginPackage(t, "h")
@@ -8671,9 +8671,8 @@ func TestRemovePluginRejectsBusyDetachedRuntime(t *testing.T) {
 }
 
 // A turn start holds its tab's turn gate before the controller reports active
-// work, so an idle check done without the gate can go stale immediately. The
-// authorization must wait on the sibling's gate — never disconnect first — and must
-// fail once the gated re-check sees the started work.
+// work, so an idle check done without the gate can go stale immediately; the
+// authorization must wait on the sibling's gate and fail once work is seen.
 func TestAuthorizeAndConnectMCPServerWaitsForSiblingTurnGate(t *testing.T) {
 	gateAddr, attempts := newDesktopMCPStartGate(t, func(attempt int, conn net.Conn) {
 		_, _ = conn.Write([]byte{1})

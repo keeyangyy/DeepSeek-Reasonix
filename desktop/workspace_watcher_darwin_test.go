@@ -472,6 +472,9 @@ func runDarwinLowNoFileChild(t *testing.T) {
 	if err := session.SaveSnapshot(sessionPath); err != nil {
 		t.Fatalf("save session snapshot: %v", err)
 	}
+	if err := agent.SaveBranchMeta(sessionPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta: %v", err)
+	}
 }
 
 func newDarwinWatcherForTest(t *testing.T) workspaceWatcher {

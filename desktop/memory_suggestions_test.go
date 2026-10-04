@@ -212,6 +212,9 @@ func writeSuggestionSession(t *testing.T, dir, name string, messages ...provider
 	if err := sess.Save(filepath.Join(dir, name)); err != nil {
 		t.Fatalf("save session %s: %v", name, err)
 	}
+	if err := agent.SaveBranchMeta(filepath.Join(dir, name), agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("save branch meta %s: %v", name, err)
+	}
 }
 
 // TestHistoryEnglishCandidateNameBackwardCompat: an English statement whose

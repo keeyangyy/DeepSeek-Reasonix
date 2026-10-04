@@ -37,11 +37,14 @@ func forkCoveredRecoveryBranch(t *testing.T, dir, name string) (parentPath, bran
 	if err := disk.Save(parentPath); err != nil {
 		t.Fatalf("Save parent: %v", err)
 	}
+	if err := agent.SaveBranchMeta(parentPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta parent: %v", err)
+	}
 	stale := agent.NewSession("sys")
 	stale.Add(provider.Message{Role: provider.RoleUser, Content: "first"})
 	stale.Add(provider.Message{Role: provider.RoleAssistant, Content: "one"})
 	stale.Add(provider.Message{Role: provider.RoleUser, Content: "local " + name})
-	info, err := stale.SaveRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: parentPath})
+	info, err := stale.SaveRecoveryBranch(agent.RecoveryBranchOptions{OriginalPath: parentPath, BranchMeta: agent.BranchMeta{Scope: "global"}})
 	if err != nil {
 		t.Fatalf("SaveRecoveryBranch: %v", err)
 	}
