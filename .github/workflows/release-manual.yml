@@ -131,7 +131,7 @@ jobs:
             # Auto-summary over the fork's own release line only: the branch is
             # hundreds of upstream commits ahead of the first -mine tag, so
             # ranging over the upstream tags would dump all of them.
-            PREV="$(git tag -l 'v[0-9]*-mine.[0-9]*' --sort=-version:refname | sed -n '1p' || true)"
+            PREV="$(git tag --merged HEAD -l 'v[0-9]*-mine.[0-9]*' --sort=-creatordate | grep -vx "v$VERSION" | sed -n '1p' || true)"
             if [ -z "$PREV" ]; then
               RANGE=""
               RANGE_NOTE="first -mine release on this branch"
