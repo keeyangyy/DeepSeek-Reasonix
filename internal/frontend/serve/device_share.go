@@ -122,7 +122,15 @@ type ShareOffer struct {
 
 // NewDeviceShare returns a closed share serving page to devices.
 func NewDeviceShare(page fs.FS) *DeviceShare {
-	return &DeviceShare{registry: NewDeviceRegistry(), cloud: newCloudPresence(), page: page, addresses: PrivateAddresses, persistPort: persistSharePort}
+	registry := NewDeviceRegistry()
+	// Devices paired before a restart are adopted here, and every later change
+	// writes them back: a phone that scanned once keeps its cookie across
+	// restarts, until the share is closed or that device is removed.
+	if trust := deviceTrustPath(); trust != "" {
+		registry.Restore(loadDeviceTrust(trust))
+		registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(trust, devices) }
+	}
+	return &DeviceShare{registry: registry, cloud: newCloudPresence(), page: page, addresses: PrivateAddresses, persistPort: persistSharePort}
 }
 
 // Attach names the handler devices reach. The hub is built after the share it
