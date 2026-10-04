@@ -1175,7 +1175,7 @@
     },
     "internal/session/control/controller.go": {
       "essay": 29,
-      "file-size": 467,
+      "file-size": 470,
       "frontend-parity": 5
     },
     "internal/session/control/controller_test.go": {

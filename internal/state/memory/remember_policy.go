@@ -95,6 +95,30 @@ func rememberRequestSensitive(in rememberRequest) bool {
 	return strings.Contains(upper, "BEGIN PRIVATE KEY") || strings.Contains(upper, "BEGIN OPENSSH PRIVATE KEY")
 }
 
+// RememberWriteScope names the memory a remember call would write. An explicit
+// scope or a qualified name wins; when an update leaves the scope out, the
+// stored fact answers, so a global memory cannot ride the project switch.
+func RememberWriteScope(store Store, args json.RawMessage) FactScope {
+	in, err := parseRememberRequest(args)
+	if err != nil {
+		return FactScopeProject
+	}
+	if ref := parseMemoryReference(rememberRequestName(in)); ref.qualified {
+		return ref.scope
+	}
+	if scope := strings.TrimSpace(in.Scope); scope != "" {
+		return NormalizeFactScope(scope)
+	}
+	if id := strings.TrimSpace(in.ID); id != "" {
+		for _, stored := range store.ListAll() {
+			if stored.ID == id {
+				return NormalizeFactScope(string(stored.Scope))
+			}
+		}
+	}
+	return FactScopeProject
+}
+
 func rememberRequestOverlaps(store Store, in rememberRequest, name string) bool {
 	wantTitle := normalizedMemoryPhrase(in.Title)
 	wantDescription := normalizedMemoryPhrase(in.Description)

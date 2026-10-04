@@ -91,6 +91,16 @@ export interface OpaqueWriterSerializationSettings {
   path: string;
 }
 
+// The remember-confirmation switch as the user file holds it, one axis per
+// memory scope: a global fact reaches every project, so the two answer apart.
+export interface RememberApprovalSettings {
+  projectAutoConfirm: boolean;
+  projectEffective: boolean;
+  globalAutoConfirm: boolean;
+  globalEffective: boolean;
+  path: string;
+}
+
 // When a run reads as no longer moving. Only the user file holds it: a
 // project file cannot pause the user's runs.
 export interface ProgressWatchSettings {
