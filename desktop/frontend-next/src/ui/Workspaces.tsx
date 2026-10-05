@@ -519,6 +519,9 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         ) : (
                           <span className="sesstitle" title={rowLabel(session)}><span>{rowLabel(session)}</span></span>
                         )}
+                        {session.legacy && (
+                          <span className="sesslegacy" title={t("由 Reasonix 1.x 创建：Studio 只读打开，继续对话会另存为新会话")}>1.x</span>
+                        )}
                         {kept.length > 0 && (
                           <button
                             className="sesscopies"

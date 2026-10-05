@@ -41,6 +41,9 @@ export interface TreeSession {
   // pane rather than opening a second writer for one file.
   runtimeId?: string;
   archived?: boolean;
+  // Set when Reasonix 1.x kept this transcript: it is read here and never
+  // written, so the row says which line it came from.
+  legacy?: boolean;
   // Conflict-recovery copies of this same conversation. A save that keeps
   // conflicting writes one per turn, all under one title.
   copies?: TreeSession[];
