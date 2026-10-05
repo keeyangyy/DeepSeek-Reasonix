@@ -295,6 +295,7 @@ function convertRecord(
       workDurationMs: m.workDurationMs,
       memoryCitations: memoryCitations.length > 0 ? memoryCitations : undefined,
       serverSearch: m.serverSearch,
+      messageID: rec.messageId,
     }));
     const toolCalls = m.toolCalls ?? [];
     // Positional scan cursor: id-less calls consume the following unconsumed

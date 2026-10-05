@@ -185,6 +185,9 @@ type StreamAttemptInfo struct {
 	Attempt int // 1-based attempt number
 	Max     int // total attempts including the first (typically 6)
 	Reason  string
+	// MessageID is the id of the assistant message this attempt is producing,
+	// minted before sampling so live rows and persisted rows share one identity.
+	MessageID string
 }
 
 const TurnOutcomeFinalReadiness = "final_readiness"
