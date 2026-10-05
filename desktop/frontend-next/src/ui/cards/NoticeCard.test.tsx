@@ -117,6 +117,14 @@ describe("a coded notice with a payload", () => {
     expect(box.querySelector(".find .why")).toBeNull();
   });
 
+  it("words the currency change from the stored value and draws no second line for it", () => {
+    const box = draw({ code: "display_currency", text: "fee display currency set to USD (resolved: USD)", detail: "USD" });
+    expect(box.querySelector(".find .t")?.textContent).toBe(t("费用显示币种已设为 {mode}", { mode: "USD" }));
+    expect(box.querySelector(".find .why")).toBeNull();
+    const auto = draw({ code: "display_currency", text: "kernel", detail: "" });
+    expect(auto.querySelector(".find .t")?.textContent).toBe(t("费用显示币种已设为 {mode}", { mode: "auto" }));
+  });
+
   it("falls back to the kernel's text when the figures do not decode", () => {
     const box = draw({ code: "context_budget", text: "kernel english", detail: "not json" });
     expect(box.querySelector(".find .t")?.textContent).toContain("kernel english");
@@ -132,5 +140,32 @@ describe("a coded notice with a payload", () => {
     expect(said).toContain(t("引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次："));
     expect(said).not.toContain("Guidance was not applied");
     expect(box.querySelector(".find .why")?.textContent).toBe("同步最新的个人开发管理");
+  });
+});
+
+describe("a /compact notice", () => {
+  it("words a failure from its code in the reader's language and keeps the kernel English out", () => {
+    const box = draw({
+      level: "warn",
+      code: "compact_failed",
+      text: "compaction failed: summarizer request failed: upstream said no",
+      detail: "summary_failed",
+    });
+    const said = box.querySelector(".find .t")?.textContent ?? "";
+    expect(said).toBe("压缩失败：生成摘要的请求失败了");
+    expect(said).not.toContain("upstream");
+    expect(box.querySelector(".find .why")).toBeNull();
+  });
+
+  it("words a decline from its code, and an empty code as the no-class decline", () => {
+    expect(draw({ code: "compact_declined", text: "x", detail: "input_unchanged" }).querySelector(".find .t")?.textContent)
+      .toBe("无需压缩：上下文自上次整理后没有变化");
+    expect(draw({ code: "compact_declined", text: "x", detail: "" }).querySelector(".find .t")?.textContent)
+      .toBe("无需压缩：没有值得折叠的内容");
+  });
+
+  it("keeps the kernel's text for a code this build cannot word", () => {
+    const box = draw({ code: "compact_failed", text: "compaction failed: kernel english", detail: "future_code" });
+    expect(box.querySelector(".find .t")?.textContent).toBe("compaction failed: kernel english");
   });
 });

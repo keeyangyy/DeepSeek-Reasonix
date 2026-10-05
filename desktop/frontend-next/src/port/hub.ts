@@ -88,7 +88,7 @@ export interface HubPort extends SharePort {
   archiveSession(path: string, archived: boolean): Promise<void>;
   renameSession(path: string, title: string): Promise<void>;
   exportSession(path: string): Promise<{ name: string; content: string }>;
-  importLegacySessions(path: string, workspace: string): Promise<{ summary: string; imported: number; warnings: number }>;
+  importLegacySessions(path: string, workspace: string): Promise<{ summary: string; imported: number; warnings: number; recognised: boolean }>;
   // The host book with each link's state, or null where this kernel refuses
   // remote panes outright — a page served to a browser, rather than the window.
   // Null is what lets the sidebar leave the whole section out instead of
@@ -247,7 +247,7 @@ export class SseHub implements HubPort {
   }
 
   importLegacySessions(path: string, workspace: string) {
-    return this.post<{ summary: string; imported: number; warnings: number }>("/tree/sessions/import-legacy", { path, workspace });
+    return this.post<{ summary: string; imported: number; warnings: number; recognised: boolean }>("/tree/sessions/import-legacy", { path, workspace });
   }
 
   async remoteHosts() {

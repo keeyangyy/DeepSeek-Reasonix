@@ -25,7 +25,11 @@ func (s *Server) browserOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	tab, err := s.ctl().BrowserOpen(r.Context(), body.URL, body.Tab, body.NewTab)
 	if err != nil {
-		refuse(w, http.StatusBadRequest, "browser.open_failed", err.Error(), map[string]any{"url": body.URL})
+		params := map[string]any{"url": body.URL}
+		if tab.ID != "" {
+			params["tab"] = tab.ID
+		}
+		refuse(w, http.StatusBadRequest, "browser.open_failed", err.Error(), params)
 		return
 	}
 	writeJSON(w, tab)

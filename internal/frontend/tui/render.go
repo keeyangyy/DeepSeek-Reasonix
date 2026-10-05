@@ -40,7 +40,7 @@ func renderItem(it *Item, width, shown int, hideRail bool) string {
 		// Thinking with nothing said after it is a step, not an answer: it gets
 		// its marker and no speaker header.
 		if strings.TrimSpace(it.Text) == "" {
-			if it.Reasoning == "" {
+			if !hasThought(it.Reasoning) {
 				return ""
 			}
 			return "\n" + thought(it, width)
@@ -88,7 +88,7 @@ func renderSayPart(text string, first bool, width int, hideRail bool) string {
 
 // withThought puts the thinking marker above the first stretch of an answer.
 func withThought(it *Item, shown, width int, out string) string {
-	if shown > 0 || it.Reasoning == "" {
+	if shown > 0 || !hasThought(it.Reasoning) {
 		return out
 	}
 	return "\n" + thought(it, width) + "\n" + out
@@ -244,6 +244,11 @@ func renderUsage(u *eventwire.Usage, width int) string {
 			code = u.Currency
 		}
 		groups = append(groups, fmt.Sprintf("≈%s%.4f", pricing.CurrencySymbol(code), u.Cost))
+		if u.CostQuote != nil {
+			if band := rateBandText(u.CostQuote.RateBand); band != "" {
+				groups = append(groups, band)
+			}
+		}
 	}
 	if u.Estimated {
 		groups = append(groups, "estimated")
@@ -262,6 +267,11 @@ func renderCompaction(it *Item, width int) string {
 	c := it.Compaction
 	if !it.Done {
 		return termrender.Dim("  ⋯ " + i18n.M.CompactionWorking)
+	}
+	if c != nil && strings.TrimSpace(c.Summary) == "" && c.Trigger != "manual" {
+		if why, ok := i18n.M.CompactionWhy[c.Code]; ok && c.Code != "" {
+			return termrender.Dim("  ⊘ " + fmt.Sprintf(i18n.M.CompactionAbortedFmt, why))
+		}
 	}
 	if c == nil || strings.TrimSpace(c.Summary) == "" {
 		return ""
@@ -296,6 +306,16 @@ func codedNoticeText(it *Item) string {
 	case event.NoticeCodeContextBudget:
 		if f, ok := event.DecodeContextBudgetFigures(it.Detail); ok {
 			return fmt.Sprintf(i18n.M.NoticeContextBudgetFmt, f.Percent, f.Remaining)
+		}
+	case event.NoticeCodeCompacted:
+		return i18n.M.NoticeCompacted
+	case event.NoticeCodeCompactDeclined:
+		if why, ok := i18n.M.CompactionWhy[it.Detail]; ok {
+			return fmt.Sprintf(i18n.M.NoticeCompactDeclinedFmt, why)
+		}
+	case event.NoticeCodeCompactFailed:
+		if why, ok := i18n.M.CompactionWhy[it.Detail]; ok {
+			return fmt.Sprintf(i18n.M.NoticeCompactFailedFmt, why)
 		}
 	case event.NoticeCodeUnappliedSteer:
 		if it.Detail != "" {
@@ -351,3 +371,7 @@ func indent(block, prefix string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// hasThought is false for reasoning that carries no text: a block of only
+// whitespace has nothing to fold, so it earns no "thought for 0s" marker.
+func hasThought(reasoning string) bool { return strings.TrimSpace(reasoning) != "" }

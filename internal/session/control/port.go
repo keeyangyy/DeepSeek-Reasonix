@@ -240,6 +240,7 @@ type MCPControl interface {
 	RemoveMCPServer(name string) (disconnected bool, err error)
 	ConfiguredMCPNames() []string
 	ConfiguredMCPServers() []MCPServerState
+	MCPServerHealth() []MCPHealth
 	MCPCatalogTools() map[string]int
 	DisconnectedMCPNames() []string
 	UnregisterMCPServerTools(name string) bool
@@ -270,6 +271,8 @@ type RuntimeSettings interface {
 	SaveRememberApproval(projectAutoConfirm, globalAutoConfirm bool) error
 	CompactionSettings() CompactionSettings
 	SaveCompactionSettings(softLimitTokens int) error
+	DisplayCurrencySettings() DisplayCurrencySettings
+	SaveDisplayCurrency(mode string) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
 	ConfigProblem() *ConfigProblem
@@ -385,6 +388,14 @@ type LocalShell interface {
 	RunShellWith(command string, opts ShellRun)
 }
 
+// Commits proposes a commit message for the staged changes and records a local
+// commit once the person has confirmed the text. It never stages, pushes or
+// rewrites history.
+type Commits interface {
+	ProposeCommit(ctx context.Context) (CommitProposal, error)
+	CommitStaged(ctx context.Context, req CommitRequest) (CommitResult, error)
+}
+
 // SessionAPI is the full driving port — the composition of every sub-port, for
 // a frontend that drives all of it: the TUI does, and the HTTP server all but
 // one. A leaner frontend names EditorAPI instead.
@@ -408,6 +419,7 @@ type SessionAPI interface {
 	LocalShell
 	DiffRendering
 	Feedback
+	Commits
 }
 
 // EditorAPI is what an editor integration drives over ACP: turns, approvals and

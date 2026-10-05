@@ -49,11 +49,16 @@ func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		modified := sessionstore.SessionContentModTime(si.Path)
+		// A name the person typed outranks the generated one.
+		title := strings.TrimSpace(si.CustomTitle)
+		if title == "" {
+			title = s.sessionTitle(base, si.Preview, modified.UnixNano())
+		}
 		out = append(out, sessionEntry{
 			Name:     strings.TrimSuffix(base, ".jsonl"),
 			Path:     si.Path,
 			Turns:    si.Turns,
-			Title:    s.sessionTitle(base, si.Preview, modified.UnixNano()),
+			Title:    title,
 			Current:  sessionstore.CanonicalSessionPath(si.Path) == current,
 			Modified: modified,
 		})

@@ -1018,30 +1018,67 @@ function reloadRig(platform = "darwin") {
   return { state, send, gone, revive };
 }
 
-test("the reload key brings back a window whose page stopped drawing", () => {
-  const press = (over) => ({ type: "keyDown", key: "r", code: "KeyR", control: false, alt: false, shift: false, meta: false, isAutoRepeat: false, ...over });
-  const cases = [
-    ["darwin", { meta: true }, { control: true }],
-    ["win32", { control: true }, { meta: true }],
-    ["linux", { control: true }, { meta: true }],
-  ];
-  for (const [platform, mod, other] of cases) {
+const reloadPress = (over) => ({ type: "keyDown", key: "r", code: "KeyR", control: false, alt: false, shift: false, meta: false, isAutoRepeat: false, ...over });
+const reloadMods = [
+  ["darwin", { meta: true }, { control: true }],
+  ["win32", { control: true }, { meta: true }],
+  ["linux", { control: true }, { meta: true }],
+];
+
+test("reloadAction reads the chord, not the layout", () => {
+  const { reloadAction } = require("../src/reload.js");
+  for (const [platform, mod, other] of reloadMods) {
+    const at = (input) => reloadAction(input, platform);
+    assert.equal(at(reloadPress(mod)), "reload");
+    assert.equal(at(reloadPress({ ...mod, key: "к" })), "reload");
+    assert.equal(at(reloadPress({ key: "F5", code: "F5" })), "reload");
+    assert.equal(at(reloadPress({ ...mod, key: "p", code: "KeyR" })), null, `${platform}: a Dvorak P reloaded`);
+    assert.equal(at(reloadPress({ ...mod, key: "r", code: "KeyP" })), "reload", `${platform}: a Dvorak R did not reload`);
+    assert.equal(at(reloadPress({ ...mod, shift: true })), "hard");
+    assert.equal(at(reloadPress({ ...mod, shift: true, key: "R" })), "hard");
+    for (const input of [
+      reloadPress(), reloadPress(other), reloadPress({ ...mod, alt: true }),
+      reloadPress({ ...mod, type: "keyUp" }), reloadPress({ ...mod, isAutoRepeat: true }),
+      reloadPress({ ...mod, key: "t", code: "KeyT" }), reloadPress({ key: "F5", code: "F5", control: true }),
+      reloadPress({ key: "F5", code: "F5", shift: true }), reloadPress({ shift: true }),
+    ]) assert.equal(at(input), null, `${platform}: ${JSON.stringify(input)}`);
+  }
+});
+
+test("only the hard reload chord reloads the app window; F5 and Ctrl/Cmd+R reach the page", () => {
+  for (const [platform, mod] of reloadMods) {
     const { state, send } = reloadRig(platform);
-    send(press(mod));
-    send(press({ ...mod, key: "R" }));
-    send(press({ ...mod, key: "к" }));
-    send(press({ key: "F5", code: "F5" }));
-    assert.equal(state.reloads, 4, `${platform}: the reload keys did not reload`);
-    send(press());
-    send(press(other));
-    send(press({ ...mod, shift: true }));
-    send(press({ ...mod, alt: true }));
-    send(press({ ...mod, type: "keyUp" }));
-    send(press({ ...mod, isAutoRepeat: true }));
-    send(press({ ...mod, key: "t", code: "KeyT" }));
-    send(press({ key: "F5", code: "F5", control: true }));
-    assert.equal(state.reloads, 4, `${platform}: something other than a fresh reload press reloaded`);
-    assert.equal(state.prevented, 4);
+    send(reloadPress(mod));
+    send(reloadPress({ key: "F5", code: "F5" }));
+    assert.equal(state.reloads, 0, `${platform}: a plain reload key reloaded the UI`);
+    assert.equal(state.prevented, 0, `${platform}: a plain reload key was swallowed`);
+    send(reloadPress({ ...mod, shift: true, key: "R" }));
+    assert.equal(state.reloads, 1, `${platform}: the recovery chord did not reload`);
+    assert.equal(state.prevented, 1);
+  }
+});
+
+test("a browser pane reloads on F5 and Ctrl/Cmd+R, ignoring cache on the shifted chord, and swallows nothing else", () => {
+  const { installPaneReload } = require("../src/reload.js");
+  for (const [platform, mod] of reloadMods) {
+    let handler;
+    const calls = { reload: 0, hard: 0, prevented: 0 };
+    const contents = {
+      on: (name, fn) => { if (name === "before-input-event") handler = fn; },
+      reload: () => { calls.reload += 1; },
+      reloadIgnoringCache: () => { calls.hard += 1; },
+    };
+    installPaneReload(contents, platform);
+    const send = (input) => handler({ preventDefault: () => { calls.prevented += 1; } }, input);
+    send(reloadPress(mod));
+    send(reloadPress({ key: "F5", code: "F5" }));
+    assert.deepEqual(calls, { reload: 2, hard: 0, prevented: 2 }, platform);
+    send(reloadPress({ ...mod, shift: true, key: "R" }));
+    assert.deepEqual(calls, { reload: 2, hard: 1, prevented: 3 }, platform);
+    send(reloadPress({ ...mod, key: "f", code: "KeyF" }));
+    send(reloadPress({ key: "F12", code: "F12" }));
+    send(reloadPress({ ...mod, alt: true }));
+    assert.deepEqual(calls, { reload: 2, hard: 1, prevented: 3 }, `${platform}: another key was handled`);
   }
 });
 

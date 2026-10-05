@@ -141,9 +141,7 @@ type MCPServerState struct {
 	Description string
 	Tools       []plugin.ToolInfo
 	Stale       bool // the declaration changed since that cache was written
-	// Pending is a repository-declared server nobody has answered for. It is
-	// off, and a surface that shows only Enabled cannot tell that from one the
-	// user switched off — which reads as the project's MCP having vanished.
+	// Pending marks a repository-declared server awaiting launch approval.
 	Pending bool
 	// AlwaysLoad is what config asks for now; InSchema is whether this
 	// session's provider schema carries the server's tools, fixed at its start.

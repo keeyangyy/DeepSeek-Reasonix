@@ -177,7 +177,7 @@ echo "解释这段代码" | reasonix run
 - 参数可以夹在任务文字之间：`reasonix run fix --yolo bug` 以 bypassPermissions 执行任务 `fix bug`。
 - 写在 `run` 前面的参数，只有终端界面（加上 `-y`、`-p`）和 `run` 都以同样方式接受每一个时，才会移到它后面：`reasonix -y run "task"` 等同于
   `reasonix run -y "task"`。
-- 其中只要有一个是终端界面专用参数（`--inline`、`-r`、不带值的 `--resume`），整条命令行就交给终端界面。
+- 其中只要有一个是终端界面专用参数（`-r`、不带值的 `--resume`），整条命令行就交给终端界面。
 - 只有 `run` 接受的前置参数（`--output-format`、`--metrics`）也一样：整条命令行交给终端界面，由它报错。这类参数请写在 `run` 后面。
 - 前置的 `-p` 只在子命令之前才算数；写在 `run` 后面的 `-p` 属于 `run` 自己。
 - 前置参数之后的第一个词就是子命令，和不带参数时一样：`reasonix --yolo run the tests` 会无界面执行
@@ -265,7 +265,7 @@ reasonix run "运行测试" --output-format stream-json
 }
 ```
 
-`permission_denials` 列出本次运行的权限门拒绝的调用，没有被拒时为空数组；被拒不改变退出码，唯独在 `--fail-on-unverified` 下 `permission.untrusted_folder` 退出 `3`。
+`permission_denials` 列出本次运行的权限门拒绝的调用，没有被拒时为空数组；被拒一般不改变退出码；`permission.untrusted_folder` 退出 `4`（指定 `--fail-on-unverified` 时为 `3`）。
 同一个 `code` 也随被拒的工具结果出现：`stream-json` 里是 `refusalCode`，`--events-jsonl`
 里是 `refusal_code`。
 
@@ -312,7 +312,8 @@ reasonix run "运行测试" --output-format stream-json
 | `0` | 模型已结束，包括有调用被拒或就绪检查未满足的情况。 |
 | `1` | 运行失败：模型服务、配置、上限或取消。 |
 | `2` | 命令行参数无效。 |
-| `3` | 指定了 `--fail-on-unverified`，且最终就绪检查未满足，或因文件夹未被信任而所有编辑和命令都被拒绝。 |
+| `3` | 指定了 `--fail-on-unverified`，且最终就绪检查未满足，或因文件夹未被信任而编辑和命令被拒绝。 |
+| `4` | 文件夹未被信任，编辑和命令被拒绝，任务没有完成。用 `reasonix trust --dir <folder>` 信任它，或明知故犯地传 `--permission-mode`。 |
 
 ### 脱敏机器接口
 

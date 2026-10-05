@@ -571,7 +571,9 @@ func systemOf(req provider.Request) string {
 // project instructions and the skills index, so one remember re-sent all of
 // them; the facts are reached through the memory tool instead.
 func TestEffectRememberDoesNotMoveTheCachedPrefix(t *testing.T) {
-	isolateConfigHome(t)
+	home := isolateConfigHome(t)
+	t.Setenv("REASONIX_HOME", filepath.Join(home, ".reasonix"))
+	t.Setenv("REASONIX_STATE_HOME", "")
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	writeFile(t, dir, "reasonix.toml", effectProbeConfig)
@@ -580,7 +582,8 @@ func TestEffectRememberDoesNotMoveTheCachedPrefix(t *testing.T) {
 
 	indexPath := filepath.Join(memory.StoreFor(config.MemoryUserDir(), dir).Dir, "MEMORY.md")
 
-	first, err := Build(context.Background(), Options{Sink: event.Discard})
+	opts := Options{Sink: event.Discard, Home: os.Getenv("REASONIX_HOME"), WorkspaceRoot: dir, resolvedShell: pinnedEffectShell()}
+	first, err := Build(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("first Build: %v", err)
 	}
@@ -603,7 +606,7 @@ func TestEffectRememberDoesNotMoveTheCachedPrefix(t *testing.T) {
 		t.Fatalf("the save never reached the index this test is about:\n%s", index)
 	}
 
-	second, err := Build(context.Background(), Options{Sink: event.Discard})
+	second, err := Build(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("second Build: %v", err)
 	}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { AddPlugin } from "./AddPlugin";
@@ -38,12 +38,12 @@ it.each(["zh", "en"])("returns a failed new installation to its source and requi
   await userEvent.click(screen.getByRole("button", { name: t("安装") }));
   expect((await screen.findByRole("alert")).textContent).toContain("The install target is unavailable");
   const back = screen.getByRole("button", { name: t("返回") });
-  expect(document.activeElement).toBe(back);
+  await waitFor(() => expect(document.activeElement).toBe(back));
   expect(back.hasAttribute("data-primary")).toBe(true);
   await userEvent.keyboard("{Enter}");
   const input = screen.getByRole<HTMLTextAreaElement>("textbox");
   expect(input.value).toBe(source);
-  expect(document.activeElement).toBe(input);
+  await waitFor(() => expect(document.activeElement).toBe(input));
   expect(preview).toHaveBeenCalledTimes(1);
   expect(install).toHaveBeenCalledTimes(1);
   await userEvent.clear(input);
@@ -71,11 +71,11 @@ it.each(["zh", "en"])("re-previews a failed update, recovers a preview error, an
   await userEvent.click(await screen.findByRole("button", { name: t("更新") }));
   expect((await screen.findByRole("alert")).textContent).toContain("The install target is unavailable");
   const retry = screen.getByRole("button", { name: t("重试") });
-  expect(document.activeElement).toBe(retry);
+  await waitFor(() => expect(document.activeElement).toBe(retry));
   expect(retry.hasAttribute("data-primary")).toBe(true);
   await userEvent.keyboard("{Enter}");
   expect(await screen.findByText("source unavailable")).toBeTruthy();
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: t("重试") }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: t("重试") })));
   expect(install).toHaveBeenCalledTimes(1);
   await userEvent.click(screen.getByRole("button", { name: t("重试") }));
   expect(preview).toHaveBeenCalledTimes(3);
@@ -85,7 +85,7 @@ it.each(["zh", "en"])("re-previews a failed update, recovers a preview error, an
   expect(onApplying.mock.calls.map(([value]) => value)).toEqual([true, false]);
   await act(async () => finish(planned("fresh-plan")));
   const confirm = screen.getByRole("button", { name: t("更新") });
-  expect(document.activeElement).toBe(confirm);
+  await waitFor(() => expect(document.activeElement).toBe(confirm));
   expect(install).toHaveBeenCalledTimes(1);
   await userEvent.keyboard("{Enter}");
   expect(install).toHaveBeenLastCalledWith({ source, name: "notes-kit", replace: true, planId: "fresh-plan" });
@@ -104,13 +104,13 @@ it.each(["zh", "en"])("allows retrying an update's initial preview without apply
   render(<AddPlugin port={port} updating={updating} onClose={() => {}} onInstalled={() => {}} />);
   expect(await screen.findByText("source unavailable")).toBeTruthy();
   const retry = screen.getByRole("button", { name: t("重试") });
-  expect(document.activeElement).toBe(retry);
+  await waitFor(() => expect(document.activeElement).toBe(retry));
   expect(retry.hasAttribute("data-primary")).toBe(true);
   await userEvent.keyboard("{Enter}");
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: t("取消") }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: t("取消") })));
   await act(async () => reject(new Error("still unavailable")));
   expect(await screen.findByText("still unavailable")).toBeTruthy();
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: t("重试") }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: t("重试") })));
   await userEvent.keyboard("{Enter}");
   expect(await screen.findByRole("button", { name: t("更新") })).toBeTruthy();
   expect(preview).toHaveBeenCalledTimes(3);

@@ -63,4 +63,10 @@ const (
 	NoticeCodeDefaultModelUnavailable = "default_model_unavailable"
 	// A legacy memory file could not be preserved, so the metadata migration left it as it was.
 	NoticeCodeMemoryMigrationBackup = "memory_migration_backup"
+	// /compact folded the context.
+	NoticeCodeCompacted = "compacted"
+	// /compact was declined as a verdict; Detail is the decline code, its text the English fallback.
+	NoticeCodeCompactDeclined = "compact_declined"
+	// /compact failed; Detail is the failure code, its text the English fallback.
+	NoticeCodeCompactFailed = "compact_failed"
 )

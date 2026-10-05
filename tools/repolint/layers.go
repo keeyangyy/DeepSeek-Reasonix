@@ -26,6 +26,7 @@ var leaves = []string{
 	"internal/contract/ablation",
 	"internal/contract/agentgraph",
 	"internal/contract/agentpreset",
+	"internal/contract/chartspec",
 	"internal/model/billing",
 	"internal/platform/browser",
 	"internal/platform/computer",

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/mcpregistry"
 	"reasonix/internal/ext/mcpsetup"
@@ -331,10 +332,10 @@ func mcpList() int {
 			auto = " [auto_start=false]"
 		}
 		if typ == "stdio" {
-			line := strings.TrimSpace(p.Command + " " + strings.Join(p.Args, " "))
+			line := strings.TrimSpace(secrets.RedactConfigValue("", p.Command) + " " + strings.Join(secrets.RedactArgs(p.Args), " "))
 			fmt.Printf("%-16s (stdio)%s  %s\n", p.Name, auto, line)
 		} else {
-			fmt.Printf("%-16s (%s)%s  %s\n", p.Name, typ, auto, p.URL)
+			fmt.Printf("%-16s (%s)%s  %s\n", p.Name, typ, auto, redactMCPURL(p.URL))
 		}
 		listed++
 	}
@@ -374,9 +375,9 @@ func printMCPEntry(p config.PluginEntry) {
 	fmt.Printf("name: %s\n", p.Name)
 	fmt.Printf("type: %s\n", typ)
 	if typ == "stdio" {
-		fmt.Printf("command: %s\n", p.Command)
+		fmt.Printf("command: %s\n", secrets.RedactConfigValue("", p.Command))
 		if len(p.Args) > 0 {
-			fmt.Printf("args: %s\n", strings.Join(p.Args, "\n      "))
+			fmt.Printf("args: %s\n", strings.Join(secrets.RedactArgs(p.Args), "\n      "))
 		}
 		if len(p.Env) > 0 {
 			fmt.Println("env:")

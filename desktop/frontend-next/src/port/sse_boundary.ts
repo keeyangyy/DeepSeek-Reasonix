@@ -1,6 +1,6 @@
 import { SseShell } from "./sse_shell";
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings } from "./port";
-import type { ProgressWatchSettings } from "./boundary";
+import type { DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -43,6 +43,12 @@ export class SseBoundary extends SseShell {
   }
   saveRememberApproval(s: Pick<RememberApprovalSettings, "projectAutoConfirm" | "globalAutoConfirm">) {
     return this.post0<RememberApprovalSettings>("/remember-approval", s);
+  }
+  displayCurrency() {
+    return this.get<DisplayCurrencySettings>("/display-currency");
+  }
+  saveDisplayCurrency(mode: DisplayCurrencyMode) {
+    return this.post0<DisplayCurrencySettings>("/display-currency", { mode });
   }
   progressWatch() {
     return this.get<ProgressWatchSettings>("/progress-watch");

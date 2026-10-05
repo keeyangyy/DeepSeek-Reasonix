@@ -1,7 +1,8 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
+import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import { hidesAmounts, onHidesAmountsChange } from "../state/prefs";
-import type { WalletReading } from "../port/port";
+import type { AgentPort, WalletReading } from "../port/port";
 
 /** The answers to "how much is left" that must not collapse into one number: a
  *  provider with no wallet shows nothing, a wallet that could not be read shows
@@ -36,4 +37,16 @@ export const MASK = "•••";
 
 export function useHidesAmounts(): boolean {
   return useSyncExternalStore(onHidesAmountsChange, hidesAmounts, hidesAmounts);
+}
+
+/** The wallet only moves when a turn spends, so the caller decides when to read. */
+export function useWallet(port: AgentPort): [Wallet, () => void] {
+  const [wallet, setWallet] = useState<Wallet>(ABSENT);
+  const refresh = useCallback(() => {
+    port
+      .balance()
+      .then((reading) => setWallet(reading ? { kind: "read", reading } : ABSENT))
+      .catch((e) => setWallet({ kind: "unread", why: reason(e) }));
+  }, [port]);
+  return [wallet, refresh];
 }

@@ -52,7 +52,7 @@ export const initialState: SessionState = {
   waiting: {},
   running: false,
   doing: "空闲",
-  steerQueue: [], subagentPhase: {},
+  steerQueue: [], takenBack: [], subagentPhase: {},
   awaitingTurnStart: [],
   queueMoved: 0,
   browserTabsMoved: 0,
@@ -198,7 +198,7 @@ export type SessionEvent =
   | WireEvent
   | { kind: "__restore"; items: Item[]; plan?: PlanStep[]; executions: Executions }
   | { kind: "__todos"; plan: PlanStep[] }
-  | { kind: "__totals"; hit: number; miss: number; cost?: number; coverage?: CostCoverage; incompleteReason?: string }
+  | { kind: "__totals"; hit: number; miss: number; cost?: number; currency?: string; coverage?: CostCoverage; incompleteReason?: string }
   | { kind: "__error"; text: string }
   | { kind: "__user"; text: string; pending: boolean; id?: string }
   | { kind: "__unsent"; id: string }
@@ -243,7 +243,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     return {
       ...s,
       items: s.items.filter((i) => !(i.t === "user" && (i.id === ev.id || i.itemId === ev.id))),
-      steerQueue: s.steerQueue,
+      takenBack: [...s.takenBack, ev.id].slice(-32),
     };
   }
   // The card stays after the fact is dropped, marked: the transcript is the
@@ -314,6 +314,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         hit: ev.hit,
         miss: ev.miss,
         cost: ev.cost ?? s.metrics.cost,
+        currency: ev.currency || s.metrics.currency,
         coverage: ev.coverage ?? s.metrics.coverage,
         incompleteReason: ev.coverage ? ev.incompleteReason ?? "" : s.metrics.incompleteReason,
       },

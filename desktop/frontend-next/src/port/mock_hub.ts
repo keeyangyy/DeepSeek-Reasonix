@@ -221,7 +221,7 @@ export class MockHub implements HubPort {
   }
 
   importLegacySessions(_path: string, _workspace: string) {
-    return Promise.resolve({ summary: "mock migration complete", imported: 0, warnings: 0 });
+    return Promise.resolve({ summary: "mock migration complete", imported: 0, warnings: 0, recognised: true });
   }
 
   hostCapabilities() {

@@ -41,7 +41,8 @@ import { Boundary } from "./Boundary";
 import { Path } from "./Path";
 import { About } from "./About";
 import { MemoryGroup } from "./Memory";
-import { DEFAULT_DAYS, Usage } from "./Usage";
+import { DEFAULT_DAYS } from "./Usage";
+import { UsageSettings } from "./UsageSettings";
 import { Storage } from "./Storage";
 import { Appearance, SCHEMES } from "./Appearance";
 import { ScopeBar } from "./CapabilityScope";
@@ -756,14 +757,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
 
           {at === "memory" && <MemoryGroup port={port} onChanged={onChanged} />}
 
-          {at === "usage" && (
-            <Group id="usage"
-              title={t("用量与成本")}
-              hint={t("本机记录的 token 用量与花费，仅保存在这台机器上，不会上传。命中缓存的输入按缓存价计费，因此命中率直接影响费用。")}
-            >
-              <Usage port={port} />
-            </Group>
-          )}
+          {at === "usage" && <UsageSettings port={port} onChanged={onChanged} />}
 
           {at === "storage" && (
             <Group id="storage" title={t("存储")} hint={t("数据的存储位置与占用空间。会话和索引会持续增长，配置和凭据不会，因此只有前者可以迁移。迁移在重启后生效。")}><Storage port={port} hub={hub} workspace={workspaceRoot ?? status?.workspaceRoot ?? ""} onRecovered={() => { onChanged(); onSessionsRecovered?.(); }} /></Group>

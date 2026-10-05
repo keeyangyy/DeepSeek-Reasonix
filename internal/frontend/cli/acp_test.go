@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"reasonix/internal/base/i18n"
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
@@ -426,4 +427,25 @@ func (p *acpTestProvider) Stream(context.Context, provider.Request) (<-chan prov
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
+}
+
+func TestACPEffortForcedThinkingDescription(t *testing.T) {
+	prev := i18n.CurrentLanguage()
+	t.Cleanup(func() { i18n.DetectLanguage(prev) })
+	cap := config.EffortCapability{Supported: true, Levels: []string{"auto", "minimal", "high"}}
+	for _, lang := range []string{"en", "zh", "zh-TW"} {
+		i18n.DetectLanguage(lang)
+		for _, model := range []string{"glm-5.3", "glm-5.2"} {
+			entry := &config.ProviderEntry{Kind: "openai", BaseURL: "https://api.z.ai/api/paas/v4", Model: model}
+			for _, option := range acpEffortOptions(cap, entry) {
+				want := ""
+				if model == "glm-5.3" && option.Value == "minimal" {
+					want = i18n.M.ArgEffortForcedOn
+				}
+				if option.Description != want {
+					t.Errorf("%s/%s/%s: description = %q, want %q", lang, model, option.Value, option.Description, want)
+				}
+			}
+		}
+	}
 }

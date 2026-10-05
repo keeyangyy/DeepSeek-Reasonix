@@ -18,6 +18,8 @@ const MCP_STATE: Record<string, string> = {
   disabled: "已关闭",
   standby: "待命 · 首次调用时启动",
   idle: "未连接",
+  // Project declarations require approval before the server can launch.
+  pending: "待授权 · 来自项目声明",
 };
 
 // A tag only when the schema carries the server's tools or config asks it to:
@@ -70,7 +72,7 @@ export function ServerRow({
 
   const actions = (
     <span className="acts">
-      {live && m.enabled && m.state !== "ready" && (
+      {live && m.enabled && m.state !== "ready" && m.state !== "pending" && (
         <button className="act" data-action="mcp.retry" data-target={m.name} disabled={!!busy} onClick={() => void run("retry", () => port.reconnectMcp(m.name))}>
           {t(busy === "retry" ? "连接中…" : m.state === "standby" ? "立即连接" : "重连")}
         </button>
@@ -174,7 +176,7 @@ export function ServerRow({
   const why = failed || m.error;
   if (!tools.length) {
     return (
-      <div className="srv" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy}>
+      <div className="srv mcp-server" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy}>
         <div className="srv-hd">{head}</div>
         {about}
         {why && <div className="why">{why}</div>}
@@ -185,7 +187,7 @@ export function ServerRow({
   return (
     // Asking to remove has to open the row: the confirmation lives inside the
     // fold, and what the server contributes is worth seeing before dropping it.
-    <details className="srv" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy} open={confirming || undefined}>
+    <details className="srv mcp-server" data-st={m.state} data-local={m.localOverride ? "" : undefined} aria-busy={!!busy} open={confirming || undefined}>
       <summary>{head}</summary>
       {about}
       {why && <div className="why">{why}</div>}

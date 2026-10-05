@@ -28,6 +28,7 @@ const (
 	minRecentTailTokens          = 32 * 1024
 	maxRecentTailTokens          = 96 * 1024
 	summaryOutputMaxTokens       = 16 * 1024 // max digest output; further clipped by remaining candidate space
+	summaryEffort                = "low"     // lowest depth an endpoint may approve; reasoning shares the output cap
 	exceptionalMinSavingsRatio   = 0.25      // when fixed prefix alone exceeds 50%, require at least this savings
 	minRecentKeep                = 2         // never keep fewer recent messages than this
 	minCompactMessages           = 2         // skip compaction below this many compactable messages
@@ -643,8 +644,9 @@ func (a *contextWindow) summarize(ctx context.Context, region []provider.Message
 			{Role: provider.RoleSystem, Content: sys},
 			{Role: provider.RoleUser, Content: renderTranscript(region)},
 		},
-		MaxTokens:   maxOut,
-		Temperature: provider.OptionalTemperature(a.temperature),
+		MaxTokens:      maxOut,
+		EffortOverride: summaryEffort,
+		Temperature:    provider.OptionalTemperature(a.temperature),
 	}
 	if budget, clipped, budgetErr := a.effectiveOutputBudget(req); budgetErr != nil {
 		return "", usage, budgetErr

@@ -116,6 +116,7 @@ export function ProviderDetail({
             {found.ok && found.matches === false &&
               t("记的是 {had}，但它答的是 {got}。", { had: t(KIND_LABEL[entry.kind] ?? entry.kind), got: t(KIND_LABEL[found.kind ?? ""] ?? found.kind ?? "") })}
             {found.ok && found.matches !== false && t("key 有效，协议也对得上。")}
+            {found.ok && found.baseUrl && " " + t("刷新模型目录时，模型列表只在 {url} 下响应。聊天若能正常使用就不用改；可选：把接口地址改成它。", { url: found.baseUrl })}
             {found.ok && found.noProxy && " " + t("走代理连不上、直连可以。")}
             {found.ok && unlisted.length > 0 &&
               " " + t("这个端点还有 {n} 个模型不在列表里：{names}。点「刷新模型目录」把它们加进来。", {

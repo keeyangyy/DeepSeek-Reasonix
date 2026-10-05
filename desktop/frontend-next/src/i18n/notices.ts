@@ -21,5 +21,9 @@ export const NOTICE_TEXT: Record<string, string> = {
   memory_migration_backup: "旧版记忆文件没能先备份，所以没有迁移，保持原样；详情里有具体原因",
   unapplied_steer: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：",
   context_budget: "上下文已用到压缩阈值的 {percent}%，已告知模型约剩 {remaining} 个词元的空间。",
+  display_currency: "费用显示币种已设为 {mode}",
+  compacted: "已压缩",
+  compact_declined: "无需压缩：{why}",
+  compact_failed: "压缩失败：{why}",
   perseveration_loop: "模型卡在重复输出同一段文字，这一轮已停止；可以重试、补充引导，或换一个供应商/模型",
 };

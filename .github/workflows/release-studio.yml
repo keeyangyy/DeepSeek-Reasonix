@@ -757,14 +757,18 @@ jobs:
       - name: Cross-compile and archive
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
+          SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           set -euo pipefail
           mkdir -p dist
+          built="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          pkg=reasonix/internal/tools/productdocs
           for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
             os="${target%/*}"; arch="${target#*/}"; ext=""
             [ "$os" = windows ] && ext=".exe"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
-              -ldflags "-s -w -X main.version=$VERSION" -o "reasonix$ext" ./cmd/reasonix
+              -ldflags "-s -w -X main.version=$VERSION -X main.gitCommit=${SHA:0:12} -X main.buildTimeUTC=$built -X $pkg.linkedVersion=$VERSION -X $pkg.linkedRevision=$SHA" \
+              -o "reasonix$ext" ./cmd/reasonix
             if [ "$os" = windows ]; then
               zip -qj "dist/reasonix-$os-$arch.zip" "reasonix$ext"
             else
@@ -1211,13 +1215,13 @@ jobs:
 
   # The CLI's install channels, npm's `reasonix` and the Homebrew tap. The 1.x
   # line owns them until this one takes the CLI over; the repository variable
-  # STUDIO_PUBLISHES_CLI=true hands them here. They run once the release
-  # exists, because the cask points at its archives. A candidate goes to npm's
-  # `next` tag and leaves the tap alone: brew has no prerelease channel, so a
-  # candidate cask would become the default install.
+  # STUDIO_PUBLISHES_CLI=true hands them here. They run once cli-pointer has
+  # created the CLI release, because the cask points at its archives. A candidate
+  # goes to npm's `next` tag and leaves the tap alone: brew has no prerelease
+  # channel, so a candidate cask would become the default install.
   cli-channels:
     name: publish the CLI to npm and Homebrew
-    needs: [resolve, publish, cli-gate, cli-tag]
+    needs: [resolve, publish, cli-gate, cli-tag, cli-pointer]
     if: vars.STUDIO_PUBLISHES_CLI == 'true'
     runs-on: ubuntu-latest
     # id-token lets npm publish --provenance attach a Sigstore attestation; the
@@ -1256,6 +1260,18 @@ jobs:
         run: |
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/esengine/homebrew-reasonix.git" tap
+          decision="$(node scripts/brew-cask-guard.mjs tap/Casks/reasonix.rb "${VERSION#v}")"
+          case "$decision" in
+            write) ;;
+            skip)
+              echo "the tap's cask is newer than ${VERSION#v}; leaving it"
+              exit 0
+              ;;
+            *)
+              echo "::error::unexpected cask guard decision: '$decision'"
+              exit 1
+              ;;
+          esac
           bash scripts/render-brew-cask.sh "${VERSION#v}" "$TAG" cli-archives/SHA256SUMS > tap/Casks/reasonix.rb
           cd tap
           git add Casks/reasonix.rb

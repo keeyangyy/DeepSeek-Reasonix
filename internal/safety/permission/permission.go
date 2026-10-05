@@ -422,20 +422,21 @@ func rawRuleSubjectMatches(rule Rule, subject string) bool {
 	return matchGlob(rule.Subject, subject)
 }
 
+// rawBashPrefixMatches reports whether a Bash rule's command prefix names the
+// subject's program, or the program a wrapper in shellparse.PeelWrappers hands
+// it to. Only deny and ask matching reach it; allow rules keep the command
+// as written.
 func rawBashPrefixMatches(base, subject string) bool {
 	baseFields, malformed := shellparse.StaticFields(base)
 	if malformed == "" && len(baseFields) > 0 {
-		if features, ok := shellparse.AnalyzeApprovalFeatures(subject); ok && len(features.CommandPrefix) >= len(baseFields) {
-			matched := true
-			for i, want := range baseFields {
-				got := features.CommandPrefix[i]
-				if got != want && !(i == 0 && isCaseInsensitivePowerShellCmdlet(want) && strings.EqualFold(got, want)) {
-					matched = false
-					break
+		if features, ok := shellparse.AnalyzeApprovalFeatures(subject); ok && prefixFieldsMatch(baseFields, features.CommandPrefix) {
+			return true
+		}
+		if inv, ok := shellparse.PeelWrappers(subject); ok {
+			for _, layer := range inv.Layers {
+				if prefixFieldsMatch(baseFields, layer) {
+					return true
 				}
-			}
-			if matched {
-				return true
 			}
 		}
 	}
@@ -460,6 +461,19 @@ func rawBashPrefixMatches(base, subject string) bool {
 	default:
 		return false
 	}
+}
+
+func prefixFieldsMatch(baseFields, fields []string) bool {
+	if len(fields) < len(baseFields) {
+		return false
+	}
+	for i, want := range baseFields {
+		got := fields[i]
+		if got != want && !(i == 0 && isCaseInsensitivePowerShellCmdlet(want) && strings.EqualFold(got, want)) {
+			return false
+		}
+	}
+	return true
 }
 
 func isCaseInsensitivePowerShellCmdlet(s string) bool {

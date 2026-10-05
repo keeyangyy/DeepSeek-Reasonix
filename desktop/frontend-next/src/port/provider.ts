@@ -89,6 +89,9 @@ export interface Protocol {
 // gateway speaks, only which ones it answers.
 export interface ProviderProbe {
   kind: string;
+  // The address chat must be rooted at: what was typed, completed with /v1 only
+  // when the model list answered there alone.
+  baseUrl?: string;
   // Every kind that listing may be driven with, kernel order. `kind` is the
   // pre-selection among them, not the only answer: DeepSeek serves both the
   // OpenAI chat wire and the Responses API off one model list.
@@ -112,6 +115,8 @@ export interface ProviderProbe {
 export interface ProviderCheck {
   ok: boolean;
   kind?: string;
+  // Present only when the saved address is not the one chat needs.
+  baseUrl?: string;
   // Whether that answer is consistent with the kind the entry records. A
   // Responses source answers the OpenAI listing, so equality is the wrong test.
   matches?: boolean;
@@ -143,6 +148,8 @@ export interface ProviderModelCheck {
   status: ProviderModelCheckStatus;
   reason?: ProviderModelCheckReason;
   httpStatus?: number;
+  // The endpoint's own error text, for display; never an input to status or reason.
+  detail?: string;
 }
 
 export interface ProviderModelCheckRequest {

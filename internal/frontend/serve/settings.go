@@ -254,11 +254,19 @@ type modelEntry struct {
 	Effort        string      `json:"effort,omitempty"`
 	ContextWindow int         `json:"contextWindow,omitempty"`
 	Price         *modelPrice `json:"price,omitempty"`
+	// ForcesThinking tells frontends that even the lowest effort still reasons.
+	ForcesThinking bool `json:"forcesThinking,omitempty"`
 }
 
 type modelRoute struct {
 	key  string
 	solo bool
+}
+
+// modelRouteKey names where a model is reached: endpoint plus credential slot.
+// Two accounts at one endpoint are two routes.
+func modelRouteKey(p *config.ProviderEntry, model string) string {
+	return strings.ToLower(strings.TrimRight(p.BaseURL, "/")) + "\x00" + strings.TrimSpace(p.APIKeyEnv) + "\x00" + model
 }
 
 // collapseModelRoutes drops entries naming the same model at the same endpoint.

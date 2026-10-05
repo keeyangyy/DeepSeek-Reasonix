@@ -23,6 +23,8 @@ type recordingKernel struct {
 	mu    sync.Mutex
 	calls []string
 	git   bool
+	// keyless makes the kernel refuse a turn the way it does with no key set.
+	keyless bool
 }
 
 func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -67,11 +69,37 @@ func (k *recordingKernel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/inbox/items":
 		_ = json.NewEncoder(w).Encode(map[string]string{"itemId": "q-7"})
 	case "/provider-setup":
-		_ = json.NewEncoder(w).Encode(map[string]any{"required": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"required": true, "provider": "beta", "model": "b1"})
+	case "/submit":
+		if k.keyless {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": "provider.key_missing", "message": "no key"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	case "/provider-setup/connections":
 		_ = json.NewEncoder(w).Encode(map[string]any{"revision": "r1", "connections": []map[string]any{
 			{"name": "alpha", "kind": "openai", "models": 2, "keyRequired": true},
 			{"name": "beta", "kind": "anthropic", "models": 1, "active": true},
+		}})
+	case "/skills":
+		_ = json.NewEncoder(w).Encode(map[string]any{"skills": []map[string]any{
+			{"name": "test", "scope": "builtin", "enabled": true},
+			{"name": "deploy", "scope": "project", "enabled": false},
+			{"name": "audit", "scope": "global", "enabled": true, "subagent": true},
+		}})
+	case "/models":
+		_ = json.NewEncoder(w).Encode(map[string]any{"current": "alpha/fast", "models": []map[string]any{
+			{"ref": "alpha/fast", "provider": "alpha", "model": "fast", "active": true},
+			{"ref": "alpha/deep", "provider": "alpha", "model": "deep"},
+			{"ref": "beta/solo", "provider": "beta", "model": "solo"},
+		}})
+	case "/mcp":
+		_ = json.NewEncoder(w).Encode(map[string]any{"servers": []map[string]any{
+			{"name": "docs", "state": "ready", "enabled": true, "transport": "http", "source": "user", "tools": 2,
+				"toolList": []map[string]any{{"name": "search", "readOnly": true}, {"name": "purge", "destructive": true}}},
+			{"name": "db", "state": "disabled", "enabled": false, "transport": "stdio", "source": "project_mcp_json", "launch": "node db.js --token ***"},
+			{"name": "mail", "state": "disabled", "enabled": false, "transport": "stdio", "source": "user_config"},
 		}})
 	case "/checkpoints":
 		_ = json.NewEncoder(w).Encode([]map[string]any{
@@ -224,7 +252,7 @@ func TestEnterSubmitsWhenIdleAndQueuesWhileRunning(t *testing.T) {
 	run(m, press(m, "ctrl+s"))
 	calls := strings.Join(k.seen(), "\n")
 	for _, want := range []string{
-		`POST /submit {"input":"hello","refuseUnknownSlash":true}`,
+		`POST /submit {"input":"hello"}`,
 		`POST /inbox/items {"input":"and tests","intent":"followup"}`,
 		`POST /inbox/items {"input":"stop, use make","intent":"steer"}`,
 	} {
@@ -681,8 +709,7 @@ func TestUTF16Offsets(t *testing.T) {
 	}
 }
 
-// The task list is read from the kernel when it says the list moved, and drawn
-// while it still has work in it.
+// The task list is read from the kernel when it says the list moved.
 func TestTodosFollowTheKernel(t *testing.T) {
 	m, _ := testModel(t)
 	_, cmd := m.Update(updateMsg{us: []Update{{Event: eventwire.Event{Kind: "todo_progress"}}}, ok: true})
@@ -692,10 +719,6 @@ func TestTodosFollowTheKernel(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
-	}
-	m.todos = []TodoItem{{Content: "done", Status: "completed"}}
-	if strings.Contains(m.View().Content, "To-dos") {
-		t.Fatal("a finished list stayed on screen")
 	}
 }
 
@@ -709,7 +732,7 @@ func TestPastedImageSendsItsReference(t *testing.T) {
 		t.Fatalf("composer = %q", got)
 	}
 	run(m, press(m, "enter"))
-	if calls := strings.Join(k.seen(), "\n"); !strings.Contains(calls, `{"input":"what is this @.reasonix/attachments/shot.png",`) {
+	if calls := strings.Join(k.seen(), "\n"); !strings.Contains(calls, `{"input":"what is this @.reasonix/attachments/shot.png"}`) {
 		t.Fatalf("submit missing the reference:\n%s", calls)
 	}
 }

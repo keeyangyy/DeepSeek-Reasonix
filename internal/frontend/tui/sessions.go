@@ -33,6 +33,11 @@ func (c *Client) Sessions(ctx context.Context) ([]SessionInfo, error) {
 	return out, err
 }
 
+// RenameSession sets the title of the saved conversation listed under name.
+func (c *Client) RenameSession(ctx context.Context, name, title string) error {
+	return c.do(ctx, http.MethodPost, "/sessions/rename", map[string]string{"id": name, "title": title}, nil)
+}
+
 // Resume binds the runtime to the saved conversation at path.
 func (c *Client) Resume(ctx context.Context, path string) error {
 	return c.do(ctx, http.MethodPost, "/resume", map[string]string{"path": path}, nil)
@@ -165,7 +170,7 @@ func (m *model) onResumed(msg resumedMsg) tea.Cmd {
 	}
 	m.resetScreen()
 	title := m.emit(func(int, bool) string { return termrender.Accent("◆ ") + termrender.Bold(i18n.M.ResumedTitle) })
-	return tea.Sequence(title, m.fetchHistory(true), tea.Batch(m.fetchStatus(), m.fetchTodos(), m.fetchMeters()))
+	return tea.Sequence(title, m.fetchHistory(true), tea.Batch(m.fetchStatus(), m.fetchTodosForRebuild(), m.fetchMeters()))
 }
 
 // resetScreen drops the transcript this screen drew, for a conversation that

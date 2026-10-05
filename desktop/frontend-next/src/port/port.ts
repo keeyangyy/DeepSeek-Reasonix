@@ -11,16 +11,17 @@ export type { AdjudicationEntry, AdjudicationState, Adjudications } from "./adju
 import type { HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource } from "./hook";
 import type { CapabilityScope, McpCatalog, McpDraft, McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, ScopeLayer } from "./mcp";
 import type { MemoryCatalog, MemoryEdit, MemoryEntry } from "./memory";
-import type { UsageReport } from "./usage";
+import type { UsageQuery, UsageReport } from "./usage";
+export { DEFAULT_USAGE_DAYS } from "./usage";
 export type { MemoryEdit } from "./memory";
-export type { Money, UsageDay, UsageModel, UsageProvider, UsageReport } from "./usage";
+export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
 import type { SkillCatalog, SkillEntry } from "./skill";
 import type { UpdateProgress, VersionEntry, VersionHub } from "./version";
-import type { ChangeDiff, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo } from "./workspace";
+import type { ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo } from "./workspace";
 
 // The port is one contract; its subjects each keep their own file, the way the
 // wire and the layers below already do. This is where a reader still finds
@@ -32,13 +33,13 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
   RewindResult, RewindScope, RoleAssignments, ScopeLayer, SessionEntry, SessionStatus,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
-  VersionHub, WalletLine, WalletReading, ChangeDiff, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo };
+  VersionHub, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo };
 
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, ProgressWatchSettings, RememberApprovalSettings, SandboxSettings } from "./boundary";
+import type { BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, ProgressWatchSettings, RememberApprovalSettings, SandboxSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -218,6 +219,7 @@ export interface AgentPort {
   dryRunHook(h: HookEntry): Promise<HookDryRun>;
   memories(): Promise<MemoryCatalog>;
   usage(days: number, source?: string): Promise<UsageReport>;
+  usage(query: UsageQuery): Promise<UsageReport>;
   // Archives rather than deletes: a fact dropped by mistake stays recoverable.
   forgetMemory(name: string): Promise<void>;
   saveMemory(edit: MemoryEdit): Promise<void>;
@@ -260,6 +262,9 @@ export interface AgentPort {
   saveRememberApproval(
     s: Pick<RememberApprovalSettings, "projectAutoConfirm" | "globalAutoConfirm">,
   ): Promise<RememberApprovalSettings>;
+  displayCurrency(): Promise<DisplayCurrencySettings>;
+  // Applies live: the kernel announces it and every ledger rebinds; no rebuild.
+  saveDisplayCurrency(mode: DisplayCurrencyMode): Promise<DisplayCurrencySettings>;
   progressWatch(): Promise<ProgressWatchSettings>;
   // Applies to the running turn at its next round; no rebuild.
   saveProgressWatch(s: Pick<ProgressWatchSettings, "pause" | "rounds" | "tokenMultiple">): Promise<ProgressWatchSettings>;
@@ -437,6 +442,10 @@ export interface AgentPort {
   // only this says how, and asking per path is what keeps a session that
   // touched two hundred files from shipping two hundred diffs nobody opened.
   changeDiff(path: string): Promise<ChangeDiff>;
+  // Drafts a message for what is staged. Nothing is committed: the person edits
+  // the text, and commitStaged records it locally once they confirm.
+  proposeCommit(signal?: AbortSignal): Promise<CommitProposal>;
+  commitStaged(req: CommitRequest): Promise<CommitResult>;
   // Dot entries are left out unless hidden is set; VCS stores never appear.
   workspaceFiles(path?: string, query?: string, hidden?: boolean): Promise<WorkspaceFiles>;
   workspaceFile(path: string): Promise<WorkspaceFile>;

@@ -534,7 +534,8 @@ describe("a line taken back from the queue", () => {
 
   it("restores the same text twice when it is taken back twice", () => {
     const p = props();
-    const view = render(<Composer {...p} restore={{ n: 1, text: "甲" }} />);
+    const view = render(<Composer {...p} />);
+    view.rerender(<Composer {...p} restore={{ n: 1, text: "甲" }} />);
     const box = view.container.querySelector("textarea") as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "", selectionStart: 0 } });
     view.rerender(<Composer {...p} restore={{ n: 2, text: "甲" }} />);

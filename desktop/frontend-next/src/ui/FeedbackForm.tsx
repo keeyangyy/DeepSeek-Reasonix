@@ -46,7 +46,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
   const [body, setBody] = useState(() => heldDraft().body);
   const [contact, setContact] = useState(() => heldDraft().contact);
   const [name, setName] = useState("");
-  const [shots, setShots] = useState<Shot[]>([]);
+  const [shots, setShots] = useState<Shot[]>(() => heldDraft().shots);
   const [refused, setRefused] = useState<Refused[]>([]);
   const [over, setOver] = useState(false);
   const [phase, setPhase] = useState<"editing" | "sending" | "sent">("editing");
@@ -78,8 +78,8 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
   useEffect(load, [load]);
 
   useEffect(() => {
-    if (phase !== "sent") holdDraft({ category, body, contact });
-  }, [category, body, contact, phase]);
+    if (phase !== "sent") holdDraft({ category, body, contact, shots });
+  }, [category, body, contact, shots, phase]);
 
   useEffect(() => {
     if (phase === "sent") done.current?.focus();
@@ -90,6 +90,14 @@ export function FeedbackForm({ port, onMine, onClose, onFile }: Props) {
   }, [failure]);
 
   const limits = env?.limits;
+
+  useEffect(() => {
+    if (!limits) return;
+    setShots((prev) => {
+      const fit = prev.filter((s) => s.bytes <= limits.uploadBytes).slice(0, limits.images);
+      return fit.length === prev.length ? prev : fit;
+    });
+  }, [limits]);
 
   const add = useCallback(
     async (files: File[]) => {

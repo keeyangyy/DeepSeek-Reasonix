@@ -227,6 +227,7 @@ func (s *Server) probeProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, struct {
 		Kind       string   `json:"kind"`
+		BaseURL    string   `json:"baseUrl"`
 		Kinds      []string `json:"kinds"`
 		AuthHeader bool     `json:"authHeader"`
 		Models     []string `json:"models"`
@@ -238,6 +239,7 @@ func (s *Server) probeProvider(w http.ResponseWriter, r *http.Request) {
 		NoProxy    bool     `json:"noProxy"`
 	}{
 		Kind:       got.Kind,
+		BaseURL:    got.BaseURL,
 		Kinds:      nonNilStrings(got.Kinds),
 		AuthHeader: got.AuthHeader,
 		Models:     nonNilStrings(got.Models),

@@ -240,6 +240,11 @@ describe("a line that is still queued", () => {
     expect(rows(st)[0].queued).toBe("followup");
   });
 
+  it("does not name a row for an entry taken back before its receipt landed", () => {
+    const st = run([typed("row-1", "x"), { kind: "__unsent", id: "inbox-9" } as SessionEvent, queued("row-1", "inbox-9", "steer")]);
+    expect(rows(st)).toEqual([]);
+  });
+
   it("takes the row away once the kernel drops it", () => {
     const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer")]);
     expect(rows(reduce(waiting, { kind: "__unsent", id: "row-1" } as SessionEvent))).toEqual([]);

@@ -16,4 +16,16 @@ export const FOLD_WHY: Record<string, string> = {
   savings_below_minimum: "固定前缀已占满检查点上限，这次折叠省下的空间太少，没有采用",
   fixed_prefix_above_trigger: "无法折叠的固定部分本身已超过压缩阈值",
   fold_empty_after_hooks: "扩展钩子把待折叠的内容清空了",
+  cancelled: "压缩被取消了",
+  unclassified: "压缩失败，原因未归类；详情见日志",
+  busy: "有一轮对话或会话切换正在进行，请稍后再试",
+  input_unchanged: "上下文自上次整理后没有变化",
+  no_new_closed_prefix: "自上个检查点以来没有已结束的内容",
+  fold_below_economics: "新增内容太少，不值得再生成一次摘要",
+  active_turn_boundary: "正在进行的这一轮需要先结束",
+  no_foldable_region: "没有可折叠的内容",
 };
+
+// The reason a /compact notice carries as its detail; an empty detail is the
+// kernel's decline with no class.
+export const NO_CODE_WHY = "没有值得折叠的内容";

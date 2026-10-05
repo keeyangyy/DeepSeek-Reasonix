@@ -2,7 +2,9 @@ package sessionstore
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -166,4 +168,49 @@ func withV4Sessions(dir string, out []SessionInfo) []SessionInfo {
 		})
 	}
 	return out
+}
+
+// ImportV4From copies the 1.x v4 conversations directly under store into dir
+// as transcripts, for a store that does not sit beside dir. A conversation already
+// imported, or one with no turns, is skipped; one that cannot be read does not
+// stop the rest.
+func ImportV4From(store fs.FS, dir string) (int, error) {
+	entries, err := fs.ReadDir(store, ".")
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return 0, err
+	}
+	imported := 0
+	var errs []error
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		s, err := sessionv4.OpenIn(store, e.Name())
+		if err != nil {
+			errs = append(errs, fmt.Errorf("session %s: %w", e.Name(), err))
+			continue
+		}
+		id := s.Manifest.SessionID
+		path := v4ImportPath(dir, id)
+		if !isV4SessionID(id) || sessionArtifactExists(path) {
+			continue
+		}
+		t, err := s.Transcript()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("session %s: %w", id, err))
+			continue
+		}
+		if _, turns := SessionPreviewFromMessages(t.Messages); turns == 0 {
+			continue
+		}
+		if err := importV4(path, s); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		imported++
+	}
+	return imported, errors.Join(errs...)
 }

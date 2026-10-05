@@ -122,10 +122,10 @@ type settledPrint struct {
 // settledRow keeps a copy of the row to draw from. Full screen, a shell
 // call's output and an answer's thinking start shut and can open later.
 func (m *model) settledRow(row Item, shown int) settledPrint {
-	if m.scr != nil && (row.Kind == ItemTool || row.Kind == ItemSay && row.Reasoning != "" && shown == 0) {
+	if m.scr != nil && (row.Kind == ItemTool || row.Kind == ItemSay && hasThought(row.Reasoning) && shown == 0) {
 		row.Fold = foldShut
 	}
-	if m.verbose && row.Kind == ItemSay && row.Reasoning != "" && shown == 0 {
+	if m.verbose && row.Kind == ItemSay && hasThought(row.Reasoning) && shown == 0 {
 		row.Fold = m.verboseFold()
 	}
 	return settledPrint{render: func(w int, hideRail bool) string { return renderItem(&row, w, shown, hideRail) }, row: &row}

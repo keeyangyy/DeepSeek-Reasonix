@@ -21,7 +21,40 @@ func (a *contextWindow) contextMaintenanceInputHash(visible []provider.Message) 
 	return hex.EncodeToString(sum[:])
 }
 
-func (a *contextWindow) contextMaintenanceBlocked(inputHash string) (bool, string) {
+// transientSummaryFailure reports a failure of the summary request itself, which
+// a later attempt can answer differently. Every other class is a property of
+// the input or the install, so retrying the same input cannot change it.
+func transientSummaryFailure(code string) bool {
+	switch CompactionNoopReason(code) {
+	case FailSummaryTruncated, FailSummaryTimeout, FailSummaryFailed:
+		return true
+	}
+	return false
+}
+
+// retryGrowthStep is how much the input must grow past a transient failure
+// before another summary request is worth its cost.
+func (a *contextWindow) retryGrowthStep() int {
+	return max(1, a.compactTrigger()/8)
+}
+
+// blockedReceiptHolds reports whether a blocked or failed receipt still
+// suppresses automatic maintenance at this input size. A transient failure
+// recorded without a size (older sidecars) is released once.
+func (a *contextWindow) blockedReceiptHolds(r *sessionstore.ContextMaintenanceReceipt, tokens int) bool {
+	if r == nil || (r.Status != "blocked" && r.Status != "failed") {
+		return false
+	}
+	if transientSummaryFailure(r.Code) {
+		return r.InputTokens > 0 && tokens < r.InputTokens+a.retryGrowthStep()
+	}
+	return true
+}
+
+// contextMaintenanceBlocked reports whether automatic maintenance is
+// suppressed. Overflow is a fresh provider refusal, so it passes a transient
+// failure; one overflow recovery per request bounds the cost.
+func (a *contextWindow) contextMaintenanceBlocked(inputHash string, tokens int, overflow bool) (bool, string) {
 	if a == nil {
 		return false, ""
 	}
@@ -36,12 +69,12 @@ func (a *contextWindow) contextMaintenanceBlocked(inputHash string) (bool, strin
 		}
 		return false, ""
 	}
-	if r.Status != "blocked" && r.Status != "failed" {
+	if overflow && transientSummaryFailure(r.Code) {
 		return false, ""
 	}
-	// Generation-scoped: once this generation fails, automatic maintenance
-	// does not pay for another summary until a successful install, manual
-	// compress, or lineage change advances the generation.
+	if !a.blockedReceiptHolds(r, tokens) {
+		return false, ""
+	}
 	return true, firstNonEmpty(a.sess.win.compactionState.BlockedReason, r.Reason)
 }
 
@@ -106,7 +139,7 @@ func (a *contextWindow) recordContextMaintenanceBlocked(inputHash, trigger, acti
 
 // recordContextMaintenanceOutcome records blocked or failed for the current
 // generation. Automatic Prepare will not re-enter summary until the generation
-// advances (successful install, manual compress, or lineage change).
+// advances, or, for a transient summary failure, the input has grown.
 func (a *contextWindow) recordContextMaintenanceOutcome(inputHash, trigger, action, status string, code CompactionNoopReason, reason string) {
 	if a == nil || a.sess.conversation == nil {
 		return
@@ -123,6 +156,8 @@ func (a *contextWindow) recordContextMaintenanceOutcome(inputHash, trigger, acti
 	if status != "failed" {
 		status = "blocked"
 	}
+	visible := a.modelVisibleMessages()
+	inputTokens := a.estimatedVisibleRequestTokens(visible)
 	_, transcriptVersion := a.sess.conversation.SnapshotMessagesVersion()
 	promptCacheKey := a.currentPromptCacheKey()
 	a.sess.win.compactionMu.Lock()
@@ -130,7 +165,7 @@ func (a *contextWindow) recordContextMaintenanceOutcome(inputHash, trigger, acti
 	previous := state
 	if state.LastReceipt != nil &&
 		(state.LastReceipt.Status == "blocked" || state.LastReceipt.Status == "failed") &&
-		state.LastReceipt.Action == action {
+		state.LastReceipt.Action == action && !transientSummaryFailure(string(code)) {
 		a.sess.win.compactionMu.Unlock()
 		return
 	}
@@ -151,7 +186,7 @@ func (a *contextWindow) recordContextMaintenanceOutcome(inputHash, trigger, acti
 	state.LastReceipt = &sessionstore.ContextMaintenanceReceipt{
 		OperationID: fmt.Sprintf("%s-%s-%d", status, action, state.Generation), Status: status, Action: action,
 		Trigger: trigger, SourceProjection: state.Projection.ProjectionVersion,
-		ProjectionVersion: state.Projection.ProjectionVersion, InputHash: inputHash,
+		ProjectionVersion: state.Projection.ProjectionVersion, InputHash: inputHash, InputTokens: inputTokens,
 		BlockedInputHash: inputHash, Reason: reason, CreatedAt: now,
 		Code: string(code), Boundary: a.compactBoundary(), TriggerTokens: a.compactTrigger(),
 	}

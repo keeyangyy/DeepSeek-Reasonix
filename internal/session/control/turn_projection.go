@@ -60,7 +60,7 @@ func (c *Controller) turnBlocksFor(source string, includeOwed bool, notes []stri
 		turnBlock{"background-jobs", c.backgroundJobsBlock()},
 		turnBlock{"memory-update", memoryUpdateBlock(notes)},
 		turnBlock{"reasoning-language", langpref.ReasoningLanguageBlock(langpref.ResolveReasoningLanguage(reasoningLanguage, source))},
-		turnBlock{"response-language", langpref.ResponseLanguageBlock(responseLanguage)},
+		turnBlock{"response-language", langpref.ResponseLanguageBlock(langpref.ResolveResponseLanguage(responseLanguage, source))},
 		turnBlock{"", planModeMarkerBlock(plan)},
 		turnBlock{"active-goal", c.activeGoalTurnBlock(goal, goalStatus)},
 	)

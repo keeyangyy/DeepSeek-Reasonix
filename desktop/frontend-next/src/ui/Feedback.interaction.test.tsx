@@ -393,4 +393,62 @@ describe("dialog", () => {
     await ready();
     expect(body().value).toBe("还没写完的话");
   });
+
+  it("keeps attached screenshots across close and reopen, and drops them once sent", async () => {
+    setup();
+    await fill();
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, [png("one.png"), png("two.png")]);
+    await screen.findByAltText("two.png");
+    await userEvent.click(screen.getByRole("button", { name: "移除截图 one.png" }));
+    cleanup();
+
+    const again = setup();
+    await ready();
+    expect(screen.queryByAltText("one.png")).toBeNull();
+    const img = screen.getByAltText("two.png") as HTMLImageElement;
+    expect(img.src).toMatch(/^data:image\/png/);
+    const spy = vi.spyOn(again.port, "sendFeedback");
+    await userEvent.type(name(), "ada");
+    await userEvent.click(send());
+    expect(await screen.findByText("已收到你的反馈")).toBeTruthy();
+    expect(spy.mock.calls[0]![0].images).toHaveLength(1);
+    expect(spy.mock.calls[0]![0].images[0]).toMatchObject({ name: "two.png" });
+    cleanup();
+
+    setup();
+    await ready();
+    expect(document.querySelector(".fbk-shots")).toBeNull();
+    expect(body().value).toBe("");
+  });
+
+  it("keeps screenshots when a send fails, and honours the count limit after restore", async () => {
+    const { port } = setup({ limits: { bodyBytes: 4000, nameChars: 40, contactChars: 80, images: 2, uploadBytes: 100 } as FeedbackEnv["limits"] });
+    port.sendFeedback = vi.fn(async () => { throw new HttpError(500, "boom"); }) as AgentPort["sendFeedback"];
+    await fill();
+    const input = () => document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    await userEvent.upload(input(), [png("a.png", 10), png("b.png", 10)]);
+    await waitFor(() => expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(2));
+    await userEvent.click(send());
+    await screen.findByRole("alert");
+    expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(2);
+    cleanup();
+
+    setup({ limits: { bodyBytes: 4000, nameChars: 40, contactChars: 80, images: 2, uploadBytes: 100 } as FeedbackEnv["limits"] });
+    await ready();
+    expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(2);
+    fireEvent.change(input(), { target: { files: [png("c.png", 10)] } });
+    expect(await screen.findByText(/c\.png：最多 2 张/)).toBeTruthy();
+    expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(2);
+  });
+
+  it("trims restored screenshots that no longer fit the limits", async () => {
+    setup({ limits: { bodyBytes: 4000, nameChars: 40, contactChars: 80, images: 3, uploadBytes: 100 } as FeedbackEnv["limits"] });
+    await ready();
+    await userEvent.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, [png("a.png", 10), png("b.png", 10), png("c.png", 10)]);
+    await waitFor(() => expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(3));
+    cleanup();
+    setup({ limits: { bodyBytes: 4000, nameChars: 40, contactChars: 80, images: 2, uploadBytes: 100 } as FeedbackEnv["limits"] });
+    await ready();
+    await waitFor(() => expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(2));
+  });
 });

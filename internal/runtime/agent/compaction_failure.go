@@ -26,6 +26,9 @@ const (
 	FailHookRefused          CompactionNoopReason = "hook_refused"
 	FailPersistFailed        CompactionNoopReason = "persist_failed"
 	FailResultAboveTrigger   CompactionNoopReason = "result_above_trigger"
+	FailCancelled            CompactionNoopReason = "cancelled"
+	FailUnclassified         CompactionNoopReason = "unclassified"
+	FailBusy                 CompactionNoopReason = "busy"
 )
 
 var (
@@ -55,7 +58,8 @@ func classifySummaryError(parent context.Context, err error) error {
 
 // compactionFailureCode classifies a fold error by identity. A rejection
 // carries its own code; every other class is a sentinel its producer wrapped.
-// An error nobody classified yields no code, so no cause is invented.
+// A cancelled run is its own class; an error nobody classified is reported as
+// unclassified, so a card never shows a failure with no stated reason.
 func compactionFailureCode(err error) CompactionNoopReason {
 	if err == nil {
 		return ""
@@ -78,6 +82,12 @@ func compactionFailureCode(err error) CompactionNoopReason {
 		return FailHookRefused
 	case errors.Is(err, errProjectionNotPersisted):
 		return FailPersistFailed
+	case errors.Is(err, context.Canceled):
+		return FailCancelled
 	}
-	return ""
+	return FailUnclassified
 }
+
+// CompactionFailureCode is the class of a fold error, for a caller that reports
+// the failure to a frontend: the code is the identity, the sentence a fallback.
+func CompactionFailureCode(err error) CompactionNoopReason { return compactionFailureCode(err) }

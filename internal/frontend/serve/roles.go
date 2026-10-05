@@ -85,7 +85,7 @@ func (s *Server) setRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.rebuildInPlace(r.Context()); err != nil {
-		writeErr(w, http.StatusConflict, err)
+		rebuildFailed(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

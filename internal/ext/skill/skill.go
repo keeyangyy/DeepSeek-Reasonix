@@ -511,20 +511,7 @@ func StaticDisabled(names ...string) func() []string {
 }
 
 func normalizeMaxDepth(depth int) int {
-	const (
-		defaultDepth = 3
-		maxDepth     = 5
-	)
-	if depth == 0 {
-		return defaultDepth
-	}
-	if depth < 1 {
-		return 1
-	}
-	if depth > maxDepth {
-		return maxDepth
-	}
-	return depth
+	return (&config.Config{Skills: config.SkillsConfig{MaxDepth: depth}}).SkillMaxDepth()
 }
 
 // pathStatus classifies a root directory without failing on the common case of

@@ -16,6 +16,7 @@ import { useFoldAway } from "./foldaway";
 import { useDrawerCloses } from "./drawer";
 import { RemoteAsk } from "./RemoteAsk";
 import { Feedback, type FeedbackTab } from "./Feedback";
+import { usePaneForSheets } from "./usePaneForSheets";
 import { BrowserLogin } from "./BrowserLogin";
 import type { RemoteAsk as RemoteAskT, RemoteHost } from "../port/remote";
 import { Boundary } from "./Boundary";
@@ -489,27 +490,25 @@ export function App({ hub }: { hub: HubPort }) {
   // the window's, not whichever project happens to sit first in the tree.
   const newSessionRoot = activeWorkspace?.root;
 
-  // Every settings route is a runtime's, so with no pane open there is nothing
-  // to read them from. Asking for settings then opens a session in the current
-  // folder, as the empty state's own button would, and the sheet follows it.
-  const prefsPane = useRef(false);
-  useEffect(() => {
-    if (!settings || !panesRead || runtimes.length > 0) {
-      prefsPane.current = false;
-      return;
-    }
-    if (prefsPane.current) return;
-    prefsPane.current = true;
-    if (!newSessionRoot) {
+  usePaneForSheets({
+    settings: !!settings,
+    feedback: feedback !== null,
+    panesRead,
+    panes: runtimes.length,
+    root: newSessionRoot,
+    openPane,
+    refuse: (message) => {
       setSettings(false);
-      setError(t("设置需要一个打开的会话。请先在左栏添加一个文件夹。"));
-      return;
-    }
-    void openPane({ root: newSessionRoot }).catch((e) => {
+      setFeedback(null);
+      setError(message);
+    },
+    fail: (e) => {
       setSettings(false);
+      setFeedback(null);
       fail(e);
-    });
-  }, [settings, panesRead, runtimes.length, newSessionRoot, openPane, fail]);
+    },
+    clear: (message) => setError((cur) => (cur === message ? "" : cur)),
+  });
 
   // The tab strip has nowhere to await: closing is the end of the gesture there,
   // so a refusal has to land in the error bar rather than in a caller.

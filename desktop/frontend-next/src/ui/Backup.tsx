@@ -52,6 +52,14 @@ export function Backup({ port }: { port: AgentPort }) {
   const min = catalog?.minPassphrase ?? 10;
   const mismatch = again !== "" && pass !== again;
   const ready = chosen.size > 0 && pass.length >= min && pass === again && !busy;
+  const wait =
+    chosen.size === 0
+      ? t("至少选择一项备份内容")
+      : pass.length < min
+        ? t("口令还差 {n} 个字符", { n: min - pass.length })
+        : again === ""
+          ? t("请再输一次口令")
+          : "";
 
   const create = async () => {
     setBusy(true);
@@ -124,9 +132,14 @@ export function Backup({ port }: { port: AgentPort }) {
       {mismatch && <p className="acct-note" data-err="">{t("两次输入的口令不一致")}</p>}
 
       <div className="bk-acts">
-        <button className="act" data-primary data-action="backup.create" disabled={!ready} onClick={() => void create()}>
+        <button className="act" data-primary data-action="backup.create" disabled={!ready} aria-describedby={!ready && wait ? "bk-wait" : undefined} onClick={() => void create()}>
           {t(busy ? "正在加密上传…" : "备份到账号")}
         </button>
+        {!ready && !busy && wait && (
+          <span id="bk-wait" className="acct-note" aria-live="polite" data-action="backup.wait">
+            {wait}
+          </span>
+        )}
         <span className="acct-note">
           {t("已用 {n}/{max} 份", { n: catalog.backups.length, max: catalog.limits.maxCount })}
         </span>

@@ -25,7 +25,7 @@ import { SlottedView } from "./SlottedView";
 import { key as slotKey, placement } from "./slots";
 import { Metrics } from "./Metrics";
 import { railOf } from "./panels/derive";
-import { ABSENT, MASK, accountOf, useHidesAmounts, type Wallet } from "./wallet";
+import { MASK, accountOf, useHidesAmounts, useWallet } from "./wallet";
 import { setHidesAmounts } from "../state/prefs";
 import { swapping } from "./swap";
 import { PaneNav, type PaneView } from "./PaneNav";
@@ -74,6 +74,7 @@ const totalsOf = (st: SessionStatus) => ({
   hit: st.cacheHit,
   miss: st.cacheMiss,
   cost: quoteAmount(st.sessionCostQuote),
+  currency: st.sessionCostQuote?.selected?.currency || st.sessionCostQuote?.original.currency,
   coverage: st.sessionCostQuote?.coverage,
   incompleteReason: st.sessionCostQuote?.incompleteReason,
 });
@@ -189,6 +190,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     port.status().then(applyStatus).catch(() => {});
   }, [port, applyStatus]);
 
+  const [wallet, refreshWallet] = useWallet(port);
+  const hideAmounts = useHidesAmounts();
+
+  const revalue = useCallback(() => {
+    port.status().then((st) => { applyStatus(st); dispatch(totalsOf(st) as never); }).catch(() => {});
+    refreshWallet();
+  }, [port, applyStatus, refreshWallet]);
+
   // A hole in the stream is the transport's fact; which authority answers it is
   // each model's own. The transcript is rebuilt from /history, the run graph
   // from the read the kernel rebuilds — one gap, two different re-reads.
@@ -210,13 +219,16 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           // Settling one is the other half of the same move, and the receipt
           // rides as a field rather than a kind of its own.
           else if ("decisionReceipt" in ev && ev.decisionReceipt) refreshStatus();
+          // The session total is the kernel's, read in the currency it now
+          // values in; summing what arrived before the change would mix two.
+          if (ev.kind === "notice" && ev.code === "display_currency") revalue();
         },
         () => {
           rebuild();
           refreshStatus();
         },
       ),
-    [port, reloadMcp, rebuild, refreshStatus],
+    [port, reloadMcp, rebuild, refreshStatus, revalue],
   );
 
   // What the rows cover is dispatched before the rows themselves, so the table
@@ -250,18 +262,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     return () => {
       alive = false;
     };
-  }, [port]);
-
-  // The wallet only moves when a turn spends, so its clock is the turn — not
-  // /status's 250ms poll, which is what it used to ride. A provider with no
-  // wallet endpoint answers absent, which renders as nothing.
-  const [wallet, setWallet] = useState<Wallet>(ABSENT);
-  const hideAmounts = useHidesAmounts();
-  const refreshWallet = useCallback(() => {
-    port
-      .balance()
-      .then((reading) => setWallet(reading ? { kind: "read", reading } : ABSENT))
-      .catch((e) => setWallet({ kind: "unread", why: reason(e) }));
   }, [port]);
 
   useEffect(() => {
@@ -332,7 +332,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     return { steps, wrote };
   }, [s.revision]);
   /* eslint-enable react-hooks/exhaustive-deps */
-
   // An MCP server connects lazily and fails at first use, so a turn boundary is
   // also when its status can have changed — no timer of its own needed.
   useEffect(() => {
@@ -341,7 +340,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     port.checkpoints().then(setCheckpoints).catch(() => {});
   }, [reloadMcp, port, status?.sessionPath, running]);
   // A call that may write can have moved the tree before the turn ends.
-  useEffect(() => void port.changes().then(setTree).catch(() => setTree(null)), [port, status?.sessionPath, running, counts.wrote]);
+  const refreshTree = useCallback(() => void port.changes().then(setTree).catch(() => setTree(null)), [port]);
+  useEffect(refreshTree, [refreshTree, status?.sessionPath, running, counts.wrote]);
 
   // One turn can be dozens of model round trips — the session this was measured
   // on ran thirty, from 9k tokens to 57k. Reading the gauge only at the turn
@@ -612,7 +612,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             shown={visible && workbench}
             onSurfaces={setSurfaces}
             scheme={theme === "light" ? "light" : "dark"}
-            changes={tree?.changes ?? []}
+            changes={tree?.changes ?? []} onTreeChanged={refreshTree}
             running={running}
             wrote={counts.wrote}
             remote={!!rt.host}

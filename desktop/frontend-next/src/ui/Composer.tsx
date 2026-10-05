@@ -5,7 +5,7 @@ import type { AgentPort, ChipCall, ModelEntry, SessionStatus, Attachment } from 
 import { Picker } from "./Menu";
 import { Policy } from "./Policy";
 import { modelMenu } from "./modelmenu";
-import { effortMenu, effortReading, effortsFor, routeEffortPick } from "./effort";
+import { effortMenu, effortReading, effortsFor, forcesThinkingFor, routeEffortPick } from "./effort";
 import { CompletionMenu, useCompletion } from "./Completion";
 import { ChipMirror, useSkillChips } from "./ChipMirror";
 import { useIme } from "./ime";
@@ -154,10 +154,13 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     queueMicrotask(() => box.current?.focus());
   }, [quote?.n]);
 
+  const restoredAt = useRef(restore?.n ?? 0);
   useEffect(() => {
-    if (!restore?.n) return;
+    if (!restore?.n || restore.n === restoredAt.current) return;
+    restoredAt.current = restore.n;
     setText((prev) => {
-      const next = prev.trim() ? `${prev.replace(/\s+$/, "")}\n${restore.text}` : restore.text;
+      const next = !prev.trim() || prev.trim() === restore.text.trim()
+        ? restore.text : `${prev.replace(/\s+$/, "")}\n${restore.text}`;
       pending.current = next.length;
       return next;
     });
@@ -375,6 +378,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
   // may still carry one from a model that did, and printing that would be the
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
+  const forcedThinking = forcesThinkingFor(models, status?.modelRef);
   const modelLb = status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—";
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
@@ -727,7 +731,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
                 title={t("推理强度")}
                 current={declared ? status.effort || "auto" : ""}
                 pending={busy["effort"] || busy["mode"]}
-                items={effortMenu(efforts, modelLb, "__effort-declare", status.modes)}
+                items={effortMenu(efforts, modelLb, "__effort-declare", status.modes, forcedThinking)}
                 onPick={(value) => routeEffortPick(value, status.modes, {
                   declare: () => onSettings("providers:effort-declare"),
                   effort: (level) => change("effort", () => port.setEffort(level)),

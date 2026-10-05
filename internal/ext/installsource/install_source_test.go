@@ -595,8 +595,8 @@ func TestParseSkillContentRejectsMalformedFrontmatter(t *testing.T) {
 	if err == nil {
 		t.Fatal("malformed frontmatter should fail")
 	}
-	if !strings.Contains(err.Error(), "invalid YAML") || !strings.Contains(strings.ToLower(err.Error()), "line") {
-		t.Fatalf("error = %v, want invalid YAML with location", err)
+	if !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("error = %v, want invalid manifest identity", err)
 	}
 }
 
@@ -2062,7 +2062,7 @@ func TestGitHubClaudeMarketplaceRejectsEscapingRelativeSource(t *testing.T) {
 		"kind":   "plugin",
 	})
 	_, err := tl.Execute(context.Background(), raw)
-	if err == nil || !strings.Contains(err.Error(), "escapes") {
+	if !errors.Is(err, ErrManifestMissing) {
 		t.Fatalf("error = %v, want marketplace path escape rejection", err)
 	}
 }
@@ -2210,7 +2210,7 @@ func TestGitHubClaudeMarketplaceSelectedUnsupportedSourceFails(t *testing.T) {
 		"name":   "external",
 	})
 	_, err := tl.Execute(context.Background(), raw)
-	if err == nil || !strings.Contains(err.Error(), "external source") {
+	if !errors.Is(err, ErrManifestMissing) {
 		t.Fatalf("error = %v, want external-source rejection for the selected plugin", err)
 	}
 }
@@ -2335,7 +2335,7 @@ func TestGitHubPluginApplyRefusesUnpinnableDrift(t *testing.T) {
 	if len(resp.Actions) != 1 || resp.Actions[0].Status != "failed" {
 		t.Fatalf("actions = %+v, want the single install action failed", resp.Actions)
 	}
-	if !strings.Contains(resp.Actions[0].Error, "approved commit cafe0001") {
+	if !strings.Contains(resp.Actions[0].Error, ErrApprovalDenied.Error()) {
 		t.Fatalf("action error = %q, want the approved-commit drift refusal", resp.Actions[0].Error)
 	}
 	if _, ok, _ := pluginpkg.FindInstalled(filepath.Join(home, ".reasonix"), "pwf"); ok {

@@ -81,6 +81,7 @@ export const ACTIONS: UIAction[] = [
   // refused while a turn runs, so it never stops work.
   { id: "session.close", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "session.archive", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  { id: "session.copy-info", kind: "shell-native", target: "entity", proof: "interaction" },
   { id: "session.export", kind: "shell-native", target: "entity", proof: "browser" },
   { id: "session.delete", kind: "destructive", target: "entity", proof: "authority-effect" },
 
@@ -112,6 +113,15 @@ export const ACTIONS: UIAction[] = [
   { id: "prompt.refine", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "prompt.adopt", kind: "view", target: "none", proof: "interaction" },
   { id: "prompt.discard", kind: "view", target: "none", proof: "interaction" },
+
+  // ── Committing what is staged ────────────────────────────────────────────
+  // Drafting reads the index and asks the model; only confirm records a commit,
+  // and only locally.
+  { id: "commit.draft", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "commit.edit", kind: "view", target: "none", proof: "interaction" },
+  { id: "commit.acknowledge", kind: "view", target: "none", proof: "interaction" },
+  { id: "commit.confirm", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "commit.close", kind: "view", target: "none", proof: "interaction" },
 
   // ── What is waiting to be sent ───────────────────────────────────────────
   { id: "queue.edit", kind: "kernel-mutation", target: "entity", proof: "interaction" },
@@ -391,6 +401,11 @@ export const ACTIONS: UIAction[] = [
   { id: "theme.import", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.folder", kind: "repeatable", target: "none", proof: "interaction" },
 
+  // Usage changes what report is read, not canonical session state.
+  { id: "usage.range.start", kind: "view", target: "none", proof: "interaction" },
+  { id: "usage.range.end", kind: "view", target: "none", proof: "interaction" },
+  { id: "usage.range.month", kind: "view", target: "none", proof: "interaction" },
+
   // ── How the window looks ─────────────────────────────────────────────────
   // Named for what a person is doing, not for the control they reached for.
   // The interface scale has a row of presets and a slider beside it, and both
@@ -472,6 +487,9 @@ export const ACTIONS: UIAction[] = [
   { id: "remember-approval.global", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
+  // The kernel announces the change on the stream, so no rebuild stands between
+  // the click and the canonical change.
+  { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.pause", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.rounds", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "progress-watch.token-multiple", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

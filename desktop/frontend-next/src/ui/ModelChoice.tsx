@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { t } from "../i18n";
-import type { ProviderModelCheckReason, ProviderModelCheckStatus } from "../port/port";
+import type { ProviderModelCheck, ProviderModelCheckReason, ProviderModelCheckStatus } from "../port/port";
 
 // Which models a connection offers. A gateway answers with hundreds of names
 // that differ by a date suffix, so the list is a search field first: one field
@@ -18,7 +18,13 @@ export interface ModelFact {
   origin: ModelOrigin;
   status?: ProviderModelCheckStatus;
   reason?: ProviderModelCheckReason;
+  httpStatus?: number;
+  detail?: string;
   checking?: boolean;
+}
+
+export function checkedFact(fact: ModelFact | undefined, origin: ModelOrigin, got: ProviderModelCheck): ModelFact {
+  return { ...(fact ?? { origin }), status: got.status, reason: got.reason, httpStatus: got.httpStatus, detail: got.detail };
 }
 
 export function clearModelCheckFacts(facts: Record<string, ModelFact>): Record<string, ModelFact> {
@@ -176,6 +182,8 @@ function ModelEvidence({ fact }: { fact: ModelFact }) {
     <span className="mevidence" role={fact.status === "unavailable" ? "alert" : "status"} aria-live="polite">
       <span>{t(origin)}</span>
       {state && <><i aria-hidden="true" data-state={fact.checking ? "checking" : fact.status ?? "unverified"} />{t(state)}</>}
+      {!fact.checking && fact.httpStatus ? <code className="mhttp">{`HTTP ${fact.httpStatus}`}</code> : null}
+      {!fact.checking && fact.detail ? <span className="mdetail">{fact.detail}</span> : null}
     </span>
   );
 }

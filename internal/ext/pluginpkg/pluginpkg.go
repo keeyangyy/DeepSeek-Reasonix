@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -397,17 +396,20 @@ func ParseDir(root string) (Package, []string, error) {
 	// error (a v1 typo names its field path); only a missing file falls
 	// through to the next manifest kind.
 	if pkg, warnings, err := parseNative(filepath.Join(root, NativeManifest), root); err == nil {
-		return pkg, append(warnings, pkg.skillNameWarnings()...), nil
+		warnings = append(warnings, pkg.skillNameWarnings()...)
+		return pkg, append(warnings, pkg.agentNameWarnings()...), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Package{}, nil, err
 	}
 	if pkg, warnings, err := parseCodex(filepath.Join(root, CodexManifest), root); err == nil {
-		return pkg, append(warnings, pkg.skillNameWarnings()...), nil
+		warnings = append(warnings, pkg.skillNameWarnings()...)
+		return pkg, append(warnings, pkg.agentNameWarnings()...), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Package{}, nil, err
 	}
 	if pkg, warnings, err := parseClaudePlugin(filepath.Join(root, ClaudeManifest), root); err == nil {
-		return pkg, append(warnings, pkg.skillNameWarnings()...), nil
+		warnings = append(warnings, pkg.skillNameWarnings()...)
+		return pkg, append(warnings, pkg.agentNameWarnings()...), nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Package{}, nil, err
 	}
@@ -575,12 +577,7 @@ func applyClaudeConventionDirs(root string, manifest *Manifest) []string {
 			manifest.Commands = append(manifest.Commands, rel)
 		}
 	}
-	for _, rel := range claudeConventionAgentDirs {
-		dir := filepath.Join(root, filepath.FromSlash(rel))
-		if dirContainsAgentMd(dir) && !containsPathEntry(manifest.Agents, rel) {
-			manifest.Agents = append(manifest.Agents, rel)
-		}
-	}
+	applyClaudeAgentDirs(root, manifest)
 	return warnings
 }
 
@@ -1140,24 +1137,6 @@ func (p Package) hookRefs() []HookRef {
 				Description: hook.Description,
 			})
 		}
-	}
-	return out
-}
-
-func (p Package) mcpServerRefs() []MCPServerRef {
-	names := slices.Sorted(maps.Keys(p.Manifest.MCPServers))
-	out := make([]MCPServerRef, 0, len(names))
-	for _, name := range names {
-		server := p.Manifest.MCPServers[name]
-		out = append(out, MCPServerRef{
-			Name:        name,
-			DisplayName: firstNonEmpty(strings.TrimSpace(server.DisplayName), name),
-			Description: strings.TrimSpace(server.Description),
-			Transport:   pluginMCPTransport(server),
-			Command:     strings.TrimSpace(server.Command),
-			URL:         strings.TrimSpace(server.URL),
-			AutoStart:   server.AutoStart == nil || *server.AutoStart,
-		})
 	}
 	return out
 }

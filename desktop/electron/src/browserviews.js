@@ -1,6 +1,7 @@
 "use strict";
 const crypto = require("node:crypto");
 const { WebContentsView, session } = require("electron");
+const { installPaneReload } = require("./reload");
 const { guestNavigationAllowed, typedAddress } = require("./browserguard");
 
 // The size a page lays out at while nobody is looking at it: the kernel drives
@@ -96,6 +97,7 @@ class BrowserViews {
       if (allowed(to)) onPopup(to);
       return { action: "deny" };
     });
+    installPaneReload(contents);
     contents.debugger.attach("1.3");
     contents.debugger.on("message", (_event, method, params, sessionId) => {
       if (sessionId) return;

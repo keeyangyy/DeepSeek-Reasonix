@@ -3,6 +3,8 @@
 export const EN_COMPOSER: Record<string, string> = {
   "↓ 回到最新": "↓ Back to latest",
   "不思考": "No reasoning",
+  "最轻量": "Minimal",
+  "比快速档更轻；GLM-5.2 会跳过思考": "Lighter than Fast; GLM-5.2 skips thinking",
   "超深入": "Extra deep",
   "不做推理直接作答，响应最快，适合简单问答": "Answers without reasoning; fastest, for simple questions",
   "比深入投入更多推理，适合困难的多步问题": "More reasoning than Deep, for hard multi-step problems",

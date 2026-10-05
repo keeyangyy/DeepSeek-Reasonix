@@ -219,6 +219,9 @@ export interface SessionState {
   running: boolean;
   doing: string;
   steerQueue: string[];
+  // Queue ids this window gave up, so a receipt that lands after the withdrawal
+  // cannot name a row for an entry that no longer exists.
+  takenBack: string[];
   // The rows whose turns have not started yet, oldest first: each send that the
   // kernel has not yet named a message for. A steer never joins them, because
   // it starts no turn of its own.

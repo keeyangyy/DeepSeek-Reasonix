@@ -546,7 +546,9 @@ export const EN: Record<string, string> = {
   "编辑": "Edit",
   "测试中…": "Testing…",
   "测试连接": "Test it",
-  "没保存成功": "Not saved",
+  "保存失败": "Save failed",
+  "已保存，尚未生效": "Saved, not applied yet",
+  "刷新模型目录失败": "Could not refresh the model catalog",
   "重新问一次有哪些模型": "Ask for the model list again",
   "刷新模型目录": "Refresh model catalog",
   "正在刷新…": "Refreshing…",
@@ -785,6 +787,7 @@ export const EN: Record<string, string> = {
   "打开主题目录": "Open themes folder",
   "阅读": "Read",
   "设置需要一个打开的会话。请先在左栏添加一个文件夹。": "Settings need an open session. Add a folder in the sidebar first.",
+  "反馈需要一个打开的会话。请先在左栏添加一个文件夹。": "Feedback needs an open session. Add a folder in the sidebar first.",
   "{host} 需要登录": "{host} asks you to sign in",
   "代理 {host} 需要登录": "The proxy {host} asks you to sign in",
   "用户名": "Username",
@@ -834,6 +837,7 @@ export const EN: Record<string, string> = {
   "已关闭": "Disabled",
   "未连接": "Not connected",
   "待命 · 首次调用时启动": "Standby · starts on first call",
+  "待授权 · 来自项目声明": "Awaiting approval · declared by the project",
   "本地构建": "Local build",
   "只在这台机器上": "This machine only",
   "这个项目": "This project",
@@ -1053,6 +1057,7 @@ export const EN: Record<string, string> = {
   "兼顾响应速度与可靠性，适合大多数任务": "Balance speed and reliability for most tasks",
   "投入更多时间分析复杂上下文与执行方案": "Spend more time analyzing complex context and execution plans",
   "用于最复杂的问题，等待时间与消耗最高": "For the hardest problems, with the longest wait and highest usage",
+  "思考仍开启并计费，该模型无法关闭思考": "Thinking stays on and is billed; this model cannot turn it off",
   "仅显示当前模型实际支持的档位。": "Only levels actually supported by this model are shown.",
   "按模型生效": "Per model",
   "查看上下文与压缩": "View context and compaction",
@@ -1119,6 +1124,11 @@ export const EN: Record<string, string> = {
   "读取": "Read",
   "本地工作区": "Local workspace",
   "暂停执行": "Pause run",
+  "复制会话信息": "Copy session information",
+  "会话 ID": "Session ID",
+  "会话上下文路径": "Session context path",
+  "任务路径": "Task path",
+  "任务日志": "Task log",
   "导出会话": "Export session",
   "取消置顶": "Unpin",
   "置顶会话": "Pin session",
@@ -1213,6 +1223,64 @@ export const EN: Record<string, string> = {
     "The model returned nothing; try again",
   "优化请求格式不正确":
     "The refine request was malformed",
+  "提交…":
+    "Commit…",
+  "起草提交说明":
+    "Draft commit message",
+  "读取暂存区，起草提交说明…":
+    "Reading the staged changes and drafting a message…",
+  "重新起草":
+    "Redraft",
+  "提交说明":
+    "Commit message",
+  "暂存的文件":
+    "Staged files",
+  "{n} 个文件已暂存":
+    "{n} files staged",
+  "可能含有密钥：{files}":
+    "May contain secrets: {files}",
+  "新增的内容里有形似密钥的值":
+    "Added lines contain values shaped like credentials",
+  "我确认这些内容可以提交":
+    "I confirm these can be committed",
+  "提交到本地":
+    "Commit locally",
+  "只在本地提交，不会推送":
+    "Recorded locally only; nothing is pushed",
+  "已提交 {hash}：{subject}":
+    "Committed {hash}: {subject}",
+  "改过暂存区后请重新起草":
+    "Draft again after changing what is staged",
+  "暂存区内容过长，只按前面一部分起草":
+    "The staged diff is long; the draft reads only its first part",
+  "这个工作区不是 git 仓库，无法提交":
+    "This workspace is not a git repository, so there is nothing to commit",
+  "暂存区是空的，先用 git add 暂存要提交的文件":
+    "Nothing is staged; stage the files to commit with git add first",
+  "暂存区在你确认之后又变了，请重新起草":
+    "The staged changes changed after you reviewed them; draft again",
+  "暂存的内容里有疑似密钥的文件，需要你确认后才能提交":
+    "The staged changes include likely secrets; confirm them before committing",
+  "提交说明是空的":
+    "The commit message is empty",
+  "提交说明含有无法记录的字符":
+    "The commit message contains characters git cannot record",
+  "提交说明超过 {max_bytes} 字节":
+    "The commit message is over {max_bytes} bytes",
+  "git 没有配置提交者姓名和邮箱（user.name、user.email）":
+    "git has no author name and email configured (user.name, user.email)",
+  "git 没能记录这次提交":
+    "git could not record the commit",
+  "当前会话没有可用的模型，无法起草提交说明":
+    "This session has no model to draft a commit message with",
+  "起草提交说明超时，请重试":
+    "Drafting the commit message timed out; try again",
+  "模型没有给出提交说明，请重试":
+    "The model returned no commit message; try again",
+  "读取暂存区失败":
+    "Reading the staged changes failed",
+  "提交请求格式不正确":
+    "The commit request was malformed",
   "新增工具":
     "New tools",
   "agent 可以调用，每次调用照常经过权限确认":
@@ -1231,6 +1299,7 @@ export const EN: Record<string, string> = {
   "任务已按设置暂停：模型卡在重复输出同一段文字": "Paused by your setting: the model is stuck repeating the same text",
   "等待你的输入": "Waiting for you",
   "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：": "Guidance was not applied because the turn ended before it could be processed. Send it again if it is still needed:",
+  "费用显示币种已设为 {mode}": "Cost display currency set to {mode}",
   "上下文已用到压缩阈值的 {percent}%，已告知模型约剩 {remaining} 个词元的空间。": "Context at {percent}% of the compaction threshold — the model was told it has about {remaining} tokens of room left.",
   "模型卡在重复输出同一段文字，这一轮已停止；可以重试、补充引导，或换一个供应商/模型": "The model is stuck repeating the same text; this turn was stopped. Try again, add guidance, or switch provider/model.",
 };

@@ -85,3 +85,23 @@ func TestFoldedCodedNoticeShowsTheLatestPayload(t *testing.T) {
 		t.Fatalf("items = %+v", tr.Items)
 	}
 }
+
+func TestCompactionNoticesAndCardNameTheirReasonInTheUILanguage(t *testing.T) {
+	inChinese(t)
+	failed := &Item{Code: "compact_failed", Text: "compaction failed: upstream said no", Detail: "summary_failed"}
+	if got := renderNotice(failed); !strings.Contains(got, "压缩失败") || !strings.Contains(got, "请求失败") || strings.Contains(got, "upstream") {
+		t.Fatalf("failed notice = %q", got)
+	}
+	declined := &Item{Code: "compact_declined", Text: "nothing to compact — x", Detail: "input_unchanged"}
+	if got := renderNotice(declined); !strings.Contains(got, "无需压缩") || !strings.Contains(got, "没有变化") {
+		t.Fatalf("declined notice = %q", got)
+	}
+	unknown := &Item{Code: "compact_failed", Text: "compaction failed: kernel english", Detail: "future_code"}
+	if got := renderNotice(unknown); !strings.Contains(got, "kernel english") {
+		t.Fatalf("unknown code must keep the kernel text, got %q", got)
+	}
+	card := &Item{Done: true, Compaction: &eventwire.Compaction{Trigger: "auto", Code: "cancelled"}}
+	if got := renderCompaction(card, 80); !strings.Contains(got, "压缩被取消") {
+		t.Fatalf("cancelled card = %q", got)
+	}
+}

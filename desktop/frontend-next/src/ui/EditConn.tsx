@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { ProviderCheck, ProviderEntry } from "../port/port";
-import { clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
+import { checkedFact, clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
 import type { Port } from "./Providers";
 import { SAVED_NOT_APPLIED, reason } from "../i18n/kernel";
 import { HttpError } from "../port/port";
@@ -23,6 +23,7 @@ export function EditConn({
   const seededModels = [...new Set([...entry.models, ...(initialCheck?.models ?? [])])];
   const seededVision = [...new Set([...(entry.visionModels ?? []), ...(initialCheck?.vision ?? [])])];
   const [baseUrl, setBaseUrl] = useState(entry.baseUrl);
+  const [completed, setCompleted] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<string[]>(seededModels);
   const [picked, setPicked] = useState<string[]>(entry.models);
@@ -34,7 +35,7 @@ export function EditConn({
   const [diff, setDiff] = useState(() => initialCheck?.ok ? catalogDiff(entry.models, initialCheck.models ?? []) : null);
   const [checkingModel, setCheckingModel] = useState("");
   const [def, setDef] = useState(entry.default || entry.models[0] || "");
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState<{ text: string; kind: "refresh" | "save" | "unapplied" } | null>(null);
   const [more, setMore] = useState(declare);
   const [win, setWin] = useState(entry.contextWindow ? String(entry.contextWindow) : "");
   const [maxOut, setMaxOut] = useState(entry.maxOutputTokens ? String(entry.maxOutputTokens) : "");
@@ -86,11 +87,14 @@ export function EditConn({
   // provider with no credential at all, which fails before it reaches the host.
   const refetch = async () => {
     setBusy(`refresh:${entry.name}`);
-    setErr("");
+    setErr(null);
     try {
       const refreshed = apiKey.trim()
         ? await port.probeProvider(baseUrl.trim(), apiKey.trim())
         : await port.checkProvider(entry.name);
+      const changed = !!refreshed.baseUrl && refreshed.baseUrl !== baseUrl.trim();
+      if (changed) setBaseUrl(refreshed.baseUrl!);
+      setCompleted(changed ? refreshed.baseUrl! : "");
       const found = refreshed.models ?? [];
       if (found.length === 0) throw new Error("这个端点没报出任何聊天模型");
       const readers = refreshed.vision ?? [];
@@ -102,7 +106,7 @@ export function EditConn({
       setVision((current) => [...new Set([...current, ...readers])]);
       setVisionSettable((current) => current ? [...new Set([...current, ...readers])] : current);
     } catch (e) {
-      setErr(reason(e));
+      setErr({ text: reason(e), kind: "refresh" });
     } finally {
       setBusy("");
     }
@@ -125,7 +129,7 @@ export function EditConn({
       });
       setFacts((current) => ({
         ...current,
-        [model]: { ...(current[model] ?? { origin: "configured" }), status: got.status, reason: got.reason },
+        [model]: checkedFact(current[model], "configured", got),
       }));
     } catch {
       setFacts((current) => ({
@@ -170,7 +174,7 @@ export function EditConn({
 
   const save = async () => {
     setBusy(`edit:${entry.name}`);
-    setErr("");
+    setErr(null);
     try {
       await port.editProvider({
         name: entry.name,
@@ -191,10 +195,11 @@ export function EditConn({
       });
       onDone();
     } catch (e) {
-      setErr(reason(e));
+      const unapplied = e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "");
+      setErr({ text: reason(e), kind: unapplied ? "unapplied" : "save" });
       // Saved but not yet applied: the list has to show what is on file while
       // the form stays open to say why.
-      if (e instanceof HttpError && SAVED_NOT_APPLIED.includes(e.reason?.code ?? "")) onSaved?.();
+      if (unapplied) onSaved?.();
     } finally {
       setBusy("");
     }
@@ -253,6 +258,9 @@ export function EditConn({
         <p className="mguide">
           {t("目录只用于发现，不是白名单。未列出的模型会按原始 ID 保存；验证会发送一次最小请求，可能产生少量 Token 费用。")}
         </p>
+        {completed !== "" && completed === baseUrl.trim() && (
+          <p className="mdiff" role="status">{t("接口地址已补全为 {url}", { url: completed })}</p>
+        )}
         {diff && (diff.added > 0 || diff.missing > 0) && (
           <p className="mdiff" role="status">
             {diff.added > 0 && t("发现 {n} 个新模型。", { n: diff.added })}
@@ -370,9 +378,9 @@ export function EditConn({
       </details>
 
       {err && (
-        <div className="find" data-lvl="warn">
-          <span className="t">{t("没保存成功")}</span>
-          <span className="why">{err}</span>
+        <div className="find" data-lvl={err.kind === "unapplied" ? "warn" : "err"} role={err.kind === "unapplied" ? "status" : "alert"}>
+          <span className="t">{t(err.kind === "unapplied" ? "已保存，尚未生效" : err.kind === "save" ? "保存失败" : "刷新模型目录失败")}</span>
+          <span className="why">{err.text}</span>
         </div>
       )}
 

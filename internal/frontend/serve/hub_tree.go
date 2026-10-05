@@ -157,19 +157,23 @@ func (h *Hub) workspaceSessions(root string, open map[string]string) []treeSessi
 			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived,
 		})
 	}
-	attachVersions(dir, out)
+	attachVersions(dir, out, h.openSessionsIn(root))
 	return append(h.unlistedOpenSessions(root, out), out...)
 }
 
 // attachVersions hangs each conversation's earlier versions under its row. It
-// runs after the rows exist because a version can be newer than its parent.
-func attachVersions(dir string, rows []treeSession) {
+// runs after the rows exist because a version can be newer than its parent. A
+// version a pane has open is left out: it is listed as that pane's own row.
+func attachVersions(dir string, rows []treeSession, open map[string]string) {
 	byParent, err := sessionstore.ListSessionVersions(dir)
 	if err != nil || len(byParent) == 0 {
 		return
 	}
 	for i := range rows {
 		for _, v := range byParent[sessionstore.BranchID(rows[i].Path)] {
+			if open[sessionstore.CanonicalSessionPath(v.Path)] != "" {
+				continue
+			}
 			rows[i].Versions = append(rows[i].Versions, treeSession{
 				Path: v.Path, Name: strings.TrimSuffix(filepath.Base(v.Path), ".jsonl"), Title: previewTitle(v.Preview), Turns: v.Turns,
 			})
@@ -194,7 +198,7 @@ func (h *Hub) unlistedOpenSessions(root string, listed []treeSession) []treeSess
 		ctrl := rt.Server.Controller()
 		path := ctrl.SessionPath()
 		canonical := sessionstore.CanonicalSessionPath(path)
-		if canonical == "" || seen[canonical] || ctrl.WorkspaceRoot() != root {
+		if canonical == "" || seen[canonical] || !drivesRoot(rt, root) {
 			continue
 		}
 		seen[canonical] = true
@@ -261,27 +265,28 @@ func (h *Hub) importLegacySessions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	known := false
+	known := ""
 	for _, ref := range h.roots() {
 		if ref.dir == workspace {
-			known = true
+			known = ref.dir
 			break
 		}
 	}
-	if !known {
+	if known == "" {
 		refuse(w, http.StatusForbidden, "workspace.unknown", "select a known workspace for recovered sessions", nil)
 		return
 	}
-	result := migration.RunLegacySessionImportInto(strings.TrimSpace(body.Path), SessionDirFor(workspace), event.Discard)
+	result := migration.RunLegacySessionImportInto(strings.TrimSpace(body.Path), SessionDirFor(known), event.Discard)
 	count := 0
 	for _, imported := range result.SessionImports {
 		count += imported.Count
 	}
 	writeJSON(w, struct {
-		Summary  string `json:"summary"`
-		Imported int    `json:"imported"`
-		Warnings int    `json:"warnings"`
-	}{Summary: result.Summary(), Imported: count, Warnings: len(result.SessionErrs)})
+		Summary    string `json:"summary"`
+		Imported   int    `json:"imported"`
+		Warnings   int    `json:"warnings"`
+		Recognised bool   `json:"recognised"`
+	}{Summary: result.Summary(), Imported: count, Warnings: len(result.SessionErrs), Recognised: !result.Unrecognised})
 }
 
 // recoveryLineageRoot names the conversation a copy belongs to. The stamped
@@ -347,7 +352,7 @@ func (h *Hub) removeWorkspace(w http.ResponseWriter, r *http.Request) {
 		missingField(w, "path")
 		return
 	}
-	inFolder := func(rt *Runtime) bool { return rt.Local() && rt.Server.Controller().WorkspaceRoot() == dir }
+	inFolder := func(rt *Runtime) bool { return drivesRoot(rt, dir) }
 	if !h.releaseOrRefuse(w, r, "workspace.running", "a conversation in this folder is running; stop it first", h.panesWhere(inFolder)) {
 		return
 	}
@@ -527,6 +532,26 @@ func (h *Hub) roots() []rootRef {
 }
 
 // openSessions maps canonical session paths to the runtime driving them.
+// drivesRoot reports whether rt is a local pane working in root.
+func drivesRoot(rt *Runtime, root string) bool {
+	return rt.Local() && rt.Server.Controller().WorkspaceRoot() == root
+}
+
+// openSessionsIn is openSessions for the panes drivesRoot accepts: the ones
+// unlistedOpenSessions will give a row of their own under root.
+func (h *Hub) openSessionsIn(root string) map[string]string {
+	out := map[string]string{}
+	for _, rt := range h.localRuntimes() {
+		if !drivesRoot(rt, root) {
+			continue
+		}
+		if path := sessionstore.CanonicalSessionPath(rt.Server.Controller().SessionPath()); path != "" {
+			out[path] = rt.ID
+		}
+	}
+	return out
+}
+
 func (h *Hub) openSessions() map[string]string {
 	out := map[string]string{}
 	for _, rt := range h.localRuntimes() {

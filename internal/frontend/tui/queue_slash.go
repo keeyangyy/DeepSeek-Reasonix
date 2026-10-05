@@ -16,6 +16,7 @@ type slashDoneMsg struct{ level, text string }
 // statusReportMsg carries the fresh status a /status report is drawn from.
 type statusReportMsg struct {
 	s   Status
+	git *GitInfo
 	err error
 }
 
@@ -40,10 +41,20 @@ func (m *model) queueSlash(display string) (tea.Cmd, bool) {
 	case "/takeover":
 		running := m.tr.Running
 		run = func() tea.Msg { return m.takeover(fields[1:], running) }
+	case "/rename":
+		idx, title, ok := renameByIndexArgs(fields, rest)
+		if !ok {
+			return nil, false
+		}
+		run = func() tea.Msg { return m.renameSession(idx, title) }
 	case "/status":
 		run = func() tea.Msg {
 			s, err := m.client.Status(m.ctx)
-			return statusReportMsg{s: s, err: err}
+			msg := statusReportMsg{s: s, err: err}
+			if g, gerr := m.client.WorkspaceGit(m.ctx); gerr == nil {
+				msg.git = &g
+			}
+			return msg
 		}
 	case "/export":
 		run = m.exportSession()
@@ -88,6 +99,33 @@ func (m *model) takeover(args []string, running bool) tea.Msg {
 	return takeoverMsg{err: err, text: i18n.M.TakeoverNoSteal}
 }
 
+// renameByIndexArgs recognises "/rename <n> <title>", the form that names a
+// saved session by its position; any other shape is the current session's.
+func renameByIndexArgs(fields []string, rest string) (idx int, title string, ok bool) {
+	if len(fields) < 3 {
+		return 0, "", false
+	}
+	idx, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0, "", false
+	}
+	return idx, strings.TrimSpace(strings.TrimPrefix(rest, fields[1])), true
+}
+
+func (m *model) renameSession(idx int, title string) tea.Msg {
+	list, err := m.client.Sessions(m.ctx)
+	if err != nil {
+		return slashDoneMsg{level: "error", text: "rename: " + err.Error()}
+	}
+	if idx < 1 || idx > len(list) {
+		return slashDoneMsg{level: "info", text: fmt.Sprintf(i18n.M.ResumeBadIndexFmt, len(list))}
+	}
+	if err := m.client.RenameSession(m.ctx, list[idx-1].Name, title); err != nil {
+		return slashDoneMsg{level: "error", text: "rename: " + err.Error()}
+	}
+	return slashDoneMsg{level: "info", text: fmt.Sprintf(i18n.M.RenameDoneFmt, title)}
+}
+
 func (m *model) onSlashDone(msg slashDoneMsg) tea.Cmd {
 	m.tr.AddNotice(msg.level, msg.text)
 	return m.commit()
@@ -104,6 +142,9 @@ func (m *model) onTakeover(msg takeoverMsg) tea.Cmd {
 func (m *model) onStatusReport(msg statusReportMsg) tea.Cmd {
 	if msg.err == nil {
 		m.status = msg.s
+	}
+	if msg.git != nil {
+		m.git = *msg.git
 	}
 	return m.onSlashDone(slashDoneMsg{level: "info", text: m.statusDetails()})
 }

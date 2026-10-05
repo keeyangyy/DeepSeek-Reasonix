@@ -111,6 +111,15 @@ export class MockProvider extends MockBoundary {
     if (request.model.includes("missing")) {
       return { model: request.model, status: "unavailable", reason: "not_found" };
     }
+    if (request.model.includes("refused")) {
+      return {
+        model: request.model,
+        status: "unknown",
+        reason: "rejected",
+        httpStatus: 400,
+        detail: `registry.ollama.ai/library/${request.model} does not support tools`,
+      };
+    }
     return { model: request.model, status: "available" };
   }
 

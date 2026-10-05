@@ -209,6 +209,11 @@ func effortArgItems(prior []string, d ArgData) []SlashItem {
 	if len(prior) <= 1 {
 		entry := currentEffortEntry(d)
 		cap := config.EffortCapabilityForEntry(entry)
+		// Legacy disabled choices land on the lowest thinking-enabled level.
+		forced := ""
+		if config.EffortForcesThinking(entry) && len(cap.Levels) > 1 {
+			forced = cap.Levels[1]
+		}
 		var out []SlashItem
 		for _, level := range cap.Levels {
 			hint := ""
@@ -225,6 +230,13 @@ func effortArgItems(prior []string, d ArgData) []SlashItem {
 				hint = i18n.M.ArgEffortXHigh
 			case "max":
 				hint = i18n.M.ArgEffortMax
+			}
+			if level == forced {
+				if hint == "" {
+					hint = i18n.M.ArgEffortForcedOn
+				} else {
+					hint += " · " + i18n.M.ArgEffortForcedOn
+				}
 			}
 			out = append(out, SlashItem{Label: level, Insert: level, Hint: hint})
 		}
@@ -435,6 +447,10 @@ func (c *Controller) managementNotice(trimmed string) bool {
 	switch fields[0] {
 	case "/model":
 		c.notice(c.modelListText())
+	case "/preset", "/work-mode", "/profile":
+		c.presetNotice(fields)
+	case "/remote":
+		c.remoteNotice()
 	case "/provider":
 		if len(fields) >= 2 {
 			c.notice(c.providerSwitchText(fields[1]))

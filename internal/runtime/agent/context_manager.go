@@ -117,7 +117,7 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 		prepared.InputTokens = est
 	}
 	inputHash := a.contextMaintenanceInputHash(visible)
-	if blocked, reason := a.contextMaintenanceBlocked(inputHash); blocked && policy.Trigger != CompactionTriggerManual {
+	if blocked, reason := a.contextMaintenanceBlocked(inputHash, ownEst, policy.Trigger == CompactionTriggerOverflow); blocked && policy.Trigger != CompactionTriggerManual {
 		// A generation that freed nothing has nothing left to try, so the
 		// request goes out and the provider rules.
 		if policy.Trigger == CompactionTriggerOverflow {

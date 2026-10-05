@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActionDispatch } from "react";
 import type { AgentPort, Queue as QueueSnapshot, QueueItem } from "../port/port";
 import type { SessionEvent } from "../state/session";
@@ -25,8 +25,11 @@ export function useQueueActions({ port, dispatch, fail, moved, sessionPath }: In
   // and the CLI's, in front of this one. The optimistic rows say only what was
   // sent from here, and they do not survive a reload.
   useEffect(() => {
-    port.queue().then(setQueue).catch(() => setQueue(null));
+    let current = true;
+    port.queue().then((q) => current && setQueue(q)).catch(() => current && setQueue(null));
+    return () => { current = false; };
   }, [port, moved, sessionPath]);
+  const taking = useRef(new Set<string>());
 
   const onQueueEdit = useCallback((id: string, text: string) => void port.editQueued(id, text).catch(fail), [port, fail]);
   const onQueueMove = useCallback((id: string, to: number) => void port.moveQueued(id, to).catch(fail), [port, fail]);
@@ -64,12 +67,15 @@ export function useQueueActions({ port, dispatch, fail, moved, sessionPath }: In
   // the text, and a line that cannot be read stays queued rather than lost.
   const onQueueCancel = useCallback(
     async (itemId: string) => {
+      if (taking.current.has(itemId)) return;
+      taking.current.add(itemId);
       try {
         const text = await port.readQueued(itemId);
         await port.cancelQueued(itemId);
         dispatch({ kind: "__unsent", id: itemId } as never);
         setRestored((r) => ({ n: r.n + 1, text }));
       } catch (e) {
+        taking.current.delete(itemId);
         fail(e);
       }
     },

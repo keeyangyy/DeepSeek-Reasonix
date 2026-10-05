@@ -18,7 +18,7 @@ export const PROVIDER_EDIT_DISABLED = "provider.editing_disabled";
 // A paired device answers this for every account route, votes included.
 export const ACCOUNT_SIGNIN_DISABLED = "account.signin_disabled";
 // The write landed and only applying it to the open conversation did not.
-export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed"];
+export const SAVED_NOT_APPLIED: readonly string[] = ["provider.saved_while_running", "provider.saved_model_unlisted", "runtime.rebuild_failed", "runtime.saved_while_running"];
 
 const SAID: Record<string, string> = {
   "shell.destructive_target": "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径",
@@ -78,6 +78,7 @@ const SAID: Record<string, string> = {
   "session.bad_path": "无法解析该会话路径",
   "session.open_failed": "打不开这个会话",
   "session.outside_dir": "该路径位于会话目录之外",
+  "session.unknown": "没有这个会话",
   "request.method_not_allowed": "该地址不接受此种请求方式",
   "request.bad_content_type": "请求体必须是 application/json",
   "permissions.editing_disabled": "这台服务器未开放权限编辑",
@@ -142,6 +143,7 @@ const SAID: Record<string, string> = {
   "provider.no_current_model": "当前没有正在使用的模型，无法记录其窗口大小",
   "context.window_after_this_turn": "窗口大小已记录，将在本轮结束后生效",
   "provider.saved_while_running": "已保存。当前对话还有未结束的工作（正在运行、等待你回答或有后台任务），仍按原设置进行；结束后再保存一次即可生效",
+  "runtime.saved_while_running": "已保存。当前对话还有未结束的工作（正在运行、等待你回答或有后台任务），仍按原设置进行；结束后再保存一次即可生效",
   "provider.saved_model_unlisted": "已保存。当前对话使用的模型已不在该来源的列表中，切换模型后才会生效",
   "provider.extra_body_null": "额外设置中的「{path}」不能为空值（null）",
   "provider.no_websearch_wire": "该协议不支持由端点自行搜索",
@@ -175,12 +177,14 @@ const SAID: Record<string, string> = {
   "picker.failed": "打不开文件夹选择框：{error}",
   "provider.bad_key_slot": "名称「{name}」不能用来存放密钥：密钥槽位由名称推导，而它不能以数字开头。改一个以字母开头的名称即可，密钥本身没有问题。",
   "page.not_built": "这个内核没有带界面，只提供接口",
+  "provider.key_missing": "当前模型还没有 API key，请先在设置里添加",
   "provider.key_required": "请填写 API key",
   "provider.key_too_large": "该 key 长度异常，可能粘贴了错误内容",
   "provider.setup_done": "已连接，无需重复配置",
   "provider.setup_failed": "远端配置未完成，请稍后重试",
   "provider.unknown": "没有这个模型连接",
   "provider.no_key_slot": "该连接没有可存放密钥的变量，请先在配置中为它指定 api_key_env",
+  "provider.key_unstorable": "该 key 含有无法安全保存的字符组合，请重新复制",
   "provider.key_invalid": "该 key 超长或含换行，请重新复制",
   "provider.credentials_changed": "已保存的密钥在此期间被改动，请重新打开配置再试",
   "provider.activation_failed": "密钥已保存，但连接尚未生效，请重试",
@@ -219,6 +223,21 @@ const SAID: Record<string, string> = {
   "prompt_refine.no_answer": "模型没有给出结果，请重试",
   "prompt_refine.failed": "优化失败，请重试",
   "prompt_refine.bad_request": "优化请求格式不正确",
+
+  "commit.no_repository": "这个工作区不是 git 仓库，无法提交",
+  "commit.nothing_staged": "暂存区是空的，先用 git add 暂存要提交的文件",
+  "commit.staged_changed": "暂存区在你确认之后又变了，请重新起草",
+  "commit.secrets_staged": "暂存的内容里有疑似密钥的文件，需要你确认后才能提交",
+  "commit.empty_message": "提交说明是空的",
+  "commit.message_invalid": "提交说明含有无法记录的字符",
+  "commit.message_too_long": "提交说明超过 {max_bytes} 字节",
+  "commit.identity_missing": "git 没有配置提交者姓名和邮箱（user.name、user.email）",
+  "commit.failed": "git 没能记录这次提交",
+  "commit.no_model": "当前会话没有可用的模型，无法起草提交说明",
+  "commit.timeout": "起草提交说明超时，请重试",
+  "commit.no_answer": "模型没有给出提交说明，请重试",
+  "commit.git_failed": "读取暂存区失败",
+  "commit.bad_request": "提交请求格式不正确",
 
   // ── 会话 ─────────────────────────────────────────────────────────
   "session.disabled": "这台服务器已关闭会话切换",
@@ -296,6 +315,8 @@ const SAID: Record<string, string> = {
   "compaction.no_soft_limit": "本次请求未包含阈值，未做任何修改",
   "browser_tools.save_failed": "内置浏览器设置未能保存：{detail}",
   "browser_tools.no_enabled": "本次请求未说明开关状态，未做任何修改",
+  "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
+  "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
   "workspace.untrustable": "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹",
   "workspace.trust_save_failed": "未能记下对此文件夹的信任决定：{detail}",

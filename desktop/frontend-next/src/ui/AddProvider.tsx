@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import type { Protocol, ProviderEntry, ProviderProbe } from "../port/port";
-import { clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
+import { checkedFact, clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
 import { KIND_LABEL, hostOf, nameFrom, sourceNameUsable, vendorLabel } from "./vendors";
 import type { Port } from "./Providers";
 import { reason } from "../i18n/kernel";
@@ -19,6 +19,7 @@ export function AddProvider({
   port: Port; taken: string[]; known: ProviderEntry[]; onDone: () => void; onCancel: () => void;
 }) {
   const [baseUrl, setBaseUrl] = useState("");
+  const [completed, setCompleted] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [probe, setProbe] = useState<ProviderProbe | null>(null);
   const [catalog, setCatalog] = useState<Protocol[]>([]);
@@ -77,6 +78,10 @@ export function AddProvider({
     try {
       const got = await port.probeProvider(baseUrl.trim(), apiKey.trim());
       setProbe(got);
+      const resolved = got.baseUrl?.trim() ?? "";
+      const changed = resolved !== "" && resolved !== baseUrl.trim();
+      if (changed) setBaseUrl(resolved);
+      setCompleted(changed ? resolved : "");
       setKind((current) => current || got.kind);
       setModels((current) => [...new Set([...got.models, ...current])]);
       setPicked((current) => current.length ? current : got.models.slice(0, 8));
@@ -151,7 +156,7 @@ export function AddProvider({
       });
       setFacts((current) => ({
         ...current,
-        [model]: { ...(current[model] ?? { origin: "manual" }), status: got.status, reason: got.reason },
+        [model]: checkedFact(current[model], "manual", got),
       }));
     } catch {
       setFacts((current) => ({
@@ -333,6 +338,7 @@ export function AddProvider({
           )}
         </div>
         {probe && <p className="probe-ok">{t("连接可用 · 找到 {n} 个模型", { n: probe.models.length })}</p>}
+        {completed !== "" && completed === baseUrl.trim() && <p className="probe-ok">{t("接口地址已补全为 {url}", { url: completed })}</p>}
         <div className="mlist">
           <div className="mlhead">
             <span className="ttl">{t("启用的模型")}</span>

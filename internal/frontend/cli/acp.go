@@ -372,7 +372,7 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 			Category:     "thought_level",
 			Type:         "select",
 			CurrentValue: currentEffort,
-			Options:      acpEffortOptions(cap.Levels),
+			Options:      acpEffortOptions(cap, &effortEntry),
 		})
 	} else if hadEffortOverride {
 		cleared := ""
@@ -490,12 +490,24 @@ func hasModelOption(options []acp.SessionConfigSelectOption, ref string) bool {
 	return false
 }
 
-func acpEffortOptions(levels []string) []acp.SessionConfigSelectOption {
-	out := make([]acp.SessionConfigSelectOption, 0, len(levels))
-	for _, level := range levels {
-		out = append(out, acp.SessionConfigSelectOption{Value: level, Name: effortOptionName(level)})
+func acpEffortOptions(cap config.EffortCapability, e *config.ProviderEntry) []acp.SessionConfigSelectOption {
+	out := make([]acp.SessionConfigSelectOption, 0, len(cap.Levels))
+	for _, level := range cap.Levels {
+		out = append(out, acp.SessionConfigSelectOption{
+			Value:       level,
+			Name:        effortOptionName(level),
+			Description: effortOptionDescription(cap, e, level),
+		})
 	}
 	return out
+}
+
+// Forced-thinking models still bill for reasoning at their cheapest real level.
+func effortOptionDescription(cap config.EffortCapability, e *config.ProviderEntry, level string) string {
+	if len(cap.Levels) > 1 && level == cap.Levels[1] && config.EffortForcesThinking(e) {
+		return i18n.M.ArgEffortForcedOn
+	}
+	return ""
 }
 
 func effortOptionName(level string) string {

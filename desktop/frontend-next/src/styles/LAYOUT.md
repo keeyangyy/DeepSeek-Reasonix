@@ -1397,3 +1397,18 @@ what exists.
 - The reduced-motion block is deliberately the last motion rule in the file, so a
   new component inherits the user's request instead of depending on a selector
   written before it.
+
+## MCP authorization state
+
+- A server awaiting project launch approval uses a static `--warn-ink` pip.
+  It is an authorization decision, so it does not use the animated connecting
+  indicator or the failed-connection color.
+
+## MCP rows in narrow settings groups
+
+- Below 560px of available row width, server identity, status metadata and
+  actions use separate lines. Status and provenance wrap instead of disappearing
+  behind an ellipsis; long unbroken source strings may break within the line.
+- The action group keeps its switches and connection buttons inside the row,
+  with room to wrap when needed. The container boundary scopes this to MCP rows,
+  including rows inside packages; wide server rows retain their inline layout.

@@ -94,6 +94,10 @@ Once a GitHub release `vX.Y.Z` exists, the v1.39.5 client's GitHub-list fallback
 
 While the variable is `true`, pushing a `studio-v*` tag publishes to npm `latest` and to Homebrew. The `workflow_dispatch` recovery run is subject to the same switch.
 
+`cli-channels` waits for `cli-pointer`, because the Homebrew cask names the archives of the `vX.Y.Z` release it creates. If `cli-pointer` fails, nothing reaches npm or Homebrew until the `workflow_dispatch` recovery run finishes it.
+
+The cask is written only if the tap's current version is not higher than the release's (semver order, prereleases included); a `workflow_dispatch` of an older tag leaves it alone, and a cask whose version cannot be read fails the step.
+
 The job reads the repository secrets `NPM_TOKEN` and `HOMEBREW_TAP_TOKEN`, the same pair the 1.x line uses. On the day of the switch, freeze 1.x in the same step by setting its variable `CLI_PUBLISH_FROZEN`, so the two lines never write the channels at once.
 
 No other job requests `id-token` or references these two secrets, and no workflow file reads them but `release-studio.yml`'s `cli-channels`; `cmd/signpath-contract` tests this over the parsed YAML of every workflow, and that `cli-channels` declares no environment.

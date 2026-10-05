@@ -212,7 +212,11 @@ func (b *builder) load() error {
 		return err
 	}
 	b.timer.mark("provider")
-	b.shell = resolveShellWithNotice(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, b.stderr, b.sink)
+	if opts.resolvedShell != nil {
+		b.shell = *opts.resolvedShell
+	} else {
+		b.shell = resolveShellWithNotice(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, b.stderr, b.sink)
+	}
 	// Record the resolved interpreter for diagnostics, staying at Debug because
 	// headless `run` must leave stderr empty unless --debug is passed. A launch
 	// failure emits an always-on Warn with the same kind/path/source fields.
@@ -554,6 +558,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		RecoveryHeadless: recoveryHeadlessMode(opts),
 		GoalEvaluator:    goalEvaluator(cfg, b.model.ref, b.proxy, b.sink),
 		PromptRefiner:    promptRefiner(entry, b.proxy, b.sink),
+		CommitMessenger:  commitMessenger(entry, b.proxy, b.sink),
 	}
 }
 
