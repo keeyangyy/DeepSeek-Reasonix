@@ -131,6 +131,10 @@ type StreamAttempt struct {
 	Attempt int    `json:"attempt,omitempty"`
 	Max     int    `json:"max,omitempty"`
 	Reason  string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
+	// MessageID ties this attempt's live rows to the persisted message with the
+	// same id. Absent for legacy sessions and for attempts that do not produce
+	// an assistant message.
+	MessageID string `json:"messageId,omitempty"`
 }
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
@@ -249,11 +253,12 @@ func ToWire(e event.Event) Event {
 		}
 	case event.StreamAttempt:
 		w.StreamAttempt = &StreamAttempt{
-			ID:      e.StreamAttempt.ID,
-			Action:  string(e.StreamAttempt.Action),
-			Attempt: e.StreamAttempt.Attempt,
-			Max:     e.StreamAttempt.Max,
-			Reason:  e.StreamAttempt.Reason,
+			ID:        e.StreamAttempt.ID,
+			Action:    string(e.StreamAttempt.Action),
+			Attempt:   e.StreamAttempt.Attempt,
+			Max:       e.StreamAttempt.Max,
+			Reason:    e.StreamAttempt.Reason,
+			MessageID: e.StreamAttempt.MessageID,
 		}
 	case event.TurnPhase:
 		w.Phase = string(e.PhaseName)

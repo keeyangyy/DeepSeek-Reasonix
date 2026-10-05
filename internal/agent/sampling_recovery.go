@@ -44,7 +44,7 @@ func (a *Agent) samplingDeadline(ctx context.Context) (context.Context, context.
 	return next, cancel, limit
 }
 
-func (a *Agent) streamWithSamplingRecovery(parent context.Context, turn int) (terminal streamedTurn) {
+func (a *Agent) streamWithSamplingRecovery(parent context.Context, turn int, messageID string) (terminal streamedTurn) {
 	ctx, cancel, limit := a.samplingDeadline(parent)
 	defer cancel()
 	state := samplingRecoveryState{}
@@ -81,7 +81,7 @@ func (a *Agent) streamWithSamplingRecovery(parent context.Context, turn int) (te
 			state.replay.persisted = true
 		}
 		id := newStreamAttemptID(attempt)
-		a.emitStreamAttempt(id, event.StreamAttemptBegin, attempt, "", nil)
+		a.emitStreamAttempt(id, event.StreamAttemptBegin, attempt, "", nil, messageID)
 		sink, attemptSink := a.samplingAttemptSinks()
 		result := a.runSamplingAttempt(ctx, turn, attemptSink, &state.frozen, id)
 		state.billable, _ = a.recordSamplingAttempt(state.billable, result)
@@ -146,7 +146,7 @@ func (a *Agent) handleSamplingCandidate(s *samplingRecoveryState, result streame
 			a.recordRecoveredCandidate(result)
 		}
 		sink.Flush()
-		a.emitStreamAttempt(id, event.StreamAttemptCommit, attempt, "", nil)
+		a.emitStreamAttempt(id, event.StreamAttemptCommit, attempt, "", nil, "")
 		result.usage = finalizeSamplingUsage(s.billable, result.usage)
 		return false, result
 	}
@@ -162,7 +162,7 @@ func (a *Agent) handleSamplingCandidate(s *samplingRecoveryState, result streame
 		s.replay.local = true
 	}
 	sink.Discard()
-	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "reasoning_replay", nil)
+	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "reasoning_replay", nil, "")
 	a.emitProtocolRetry(attempt, false)
 	return true, streamedTurn{}
 }
@@ -181,12 +181,12 @@ func (a *Agent) trySamplingRepair(ctx context.Context, s *samplingRecoveryState,
 		a.learnOutputBudget(limit.MaxOutputTokens)
 		s.frozen.req.MaxTokens = limit.MaxOutputTokens
 		sink.Discard()
-		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "output_limit", result.err)
+		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "output_limit", result.err, "")
 		return true
 	}
 	if next, ok, _ := a.recoverContextLimit(ctx, s.frozen, result.err, &s.context); ok {
 		sink.Discard()
-		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "context_limit", result.err)
+		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "context_limit", result.err, "")
 		s.frozen = next
 		return true
 	}
@@ -233,7 +233,7 @@ func (a *Agent) waitSamplingRetry(ctx context.Context, s *samplingRecoveryState,
 	if provider.IsStreamInterrupted(result.err) {
 		reason = provider.StreamInterruptReason(result.err)
 	}
-	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, reason, result.err)
+	a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, reason, result.err, "")
 	status := &event.RecoveryStatus{Phase: failure.Phase, Reason: failure.Code, NextAttemptAt: time.Now().Add(delay).UnixMilli(), WaitedMs: s.waited.Milliseconds(), Waiting: waiting}
 	if waiting {
 		status.WaitBudgetMs = recoveryWaitBudget.Milliseconds()

@@ -26,7 +26,7 @@ import { foregroundRunningFromRuntimeMeta, type RuntimeMetaSnapshot } from "./ru
 import { aliasActivationRequest, noteActivationRequested, noteActivationSettled, noteActivationStarted } from "./sessionDiagnostics";
 import { noteDedupDrop, noteOrderAnomaly, noteSwitchPhase, noteSwitchStart } from "./sessionSwitchDiagnostics";
 import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, filterStaleStreamDeltas, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
-import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems } from "./assistantItems";
+import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems, stampAssistantMessageID } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
 import { frontendDiagnosticsActive, recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import { uiPerfTracker } from "./uiPerf";
@@ -40,7 +40,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, messageIdCoveredLiveItemIds, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -270,7 +270,7 @@ const HISTORY_PAGE_TURNS = 60;
 export type TurnPhaseName = "working" | "checking" | "verifying" | "reviewing" | string;
 export type Item =
   | { kind: "user"; id: string; submissionId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
-  | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[] }
+  | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[]; messageID?: string }
   | { kind: "phase"; id: string; text: string }
   | { kind: "notice"; id: string; level: "info" | "warn"; text: string; detail?: string; code?: string; title?: string; variant?: "delivery" | "completion"; action?: "continue_delivery" | "open_changes" | "recover_context"; recoveryId?: string; completionSummary?: WireCompletionSummary; decisionReceipt?: WireDecisionReceipt; missing?: string[]; inboxItemId?: string }
   | {
@@ -943,6 +943,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
         workDurationMs: m.workDurationMs,
         memoryCitations: memoryCitations.length > 0 ? memoryCitations : undefined,
         serverSearch: m.serverSearch,
+        messageID: m.id,
       });
       for (const item of built) {
         if (item.kind === "assistant") item.id = `${idPrefix}${seq}`;
@@ -1322,7 +1323,7 @@ function applyStreamAttempt(s: State, e: WireEvent): State {
   if (!sa?.id || !sa.action) return s;
   switch (sa.action) {
     case "begin": {
-      const active = ensureActiveAssistant(s);
+      const active = stampAssistantMessageID(ensureActiveAssistant(s), sa.messageID ?? "");
       // Snapshot only what this attempt may replace in the visible stream.
       // Provider activity timing is closed at discard but remains accumulated so
       // retry backoff is not counted in the completed TPS denominator.
@@ -3083,6 +3084,10 @@ export function useController() {
               const liveState = statesRef.current.get(tabId);
               const liveItems = liveState?.items ?? [];
               const removeIds = duplicateLiveItemIds(projection.items, liveItems);
+              // The backend mints an assistant id before sampling, so a page row
+              // and a live row can name the same message; that is authoritative,
+              // unlike the content heuristics that follow.
+              removeIds.push(...messageIdCoveredLiveItemIds(projection.items, liveItems));
               // A2-a: exact turn alignment. The page names the in-flight turn;
               // that turn's live rows are superseded by it — no content guessing.
               const openTurnId = projection.openTurnId;

@@ -110,7 +110,7 @@ func TestContextLimitRecoveryChangesOnlyOutputField(t *testing.T) {
 		{Role: provider.RoleUser, Content: "continue", Images: []string{"data:image/png;base64,AA=="}},
 	})
 	beforeMessages := a.sess.conversation.Snapshot()
-	got := a.streamWithSamplingRecovery(WithResponseFormat(context.Background(), "json_object"), 1)
+	got := a.streamWithSamplingRecovery(WithResponseFormat(context.Background(), "json_object"), 1, "")
 	if got.err != nil {
 		t.Fatalf("recovery failed: %v", got.err)
 	}
@@ -163,7 +163,7 @@ func TestUnnumberedContextLimitSkipsIdenticalRetry(t *testing.T) {
 	a := newBudgetAgent(t, prov)
 	a.sess.conversation.Replace(foldableSessionOverForce(6).Messages)
 
-	got := a.streamWithSamplingRecovery(context.Background(), 1)
+	got := a.streamWithSamplingRecovery(context.Background(), 1, "")
 	if got.err != nil {
 		t.Fatalf("recovery failed: %v", got.err)
 	}
@@ -196,7 +196,7 @@ func TestContextLimitRecoveryPublishesUnknownGatewayBudget(t *testing.T) {
 		errs:   []error{limit, nil},
 	}
 	a := newBudgetAgent(t, prov)
-	got := a.streamWithSamplingRecovery(context.Background(), 1)
+	got := a.streamWithSamplingRecovery(context.Background(), 1, "")
 	if got.err != nil {
 		t.Fatalf("unknown gateway recovery failed: %v", got.err)
 	}
@@ -230,7 +230,7 @@ func TestContextLimitRecoveryRetriesOriginalRequestOnlyOnce(t *testing.T) {
 		errs: []error{limit, limit, limit},
 	}
 	a := newBudgetAgent(t, prov)
-	got := a.streamWithSamplingRecovery(context.Background(), 1)
+	got := a.streamWithSamplingRecovery(context.Background(), 1, "")
 	if got.err == nil {
 		t.Fatal("expected terminal context overflow")
 	}

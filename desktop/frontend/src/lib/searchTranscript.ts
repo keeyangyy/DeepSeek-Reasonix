@@ -38,7 +38,7 @@ export function historySearchSources(
 
 export function historySearchAndAnswer(
   id: string,
-  m: { content: string; reasoning?: string; workDurationMs?: number; memoryCitations?: Extract<Item, { kind: "assistant" }>["memoryCitations"]; serverSearch?: { id?: string; query?: string; sources_status?: "available" | "not_provided"; results?: { title?: string; url?: string }[] }[] },
+  m: { content: string; reasoning?: string; workDurationMs?: number; memoryCitations?: Extract<Item, { kind: "assistant" }>["memoryCitations"]; serverSearch?: { id?: string; query?: string; sources_status?: "available" | "not_provided"; results?: { title?: string; url?: string }[] }[]; messageID?: string },
 ): Item[] {
   const out: Item[] = historySearchCards(m.serverSearch);
   const searchSources = historySearchSources(m.serverSearch);
@@ -52,6 +52,7 @@ export function historySearchAndAnswer(
       workDurationMs: m.workDurationMs,
       memoryCitations: m.memoryCitations,
       searchSources,
+      messageID: m.messageID,
     });
   }
   return out;
