@@ -220,8 +220,6 @@ function entryToRecord(entry: HistoryEntry): TranscriptRecord {
 }
 
 // itemIdForToolCall mirrors the single-shot conversion: id-addressed tool
-// items take the toolCallId whether they come from the call or from a
-// standalone result row, so a late-merging pair keeps one stable item id.
 function itemIdForToolCall(tcId: string, fallback: string): string {
   return tcId || fallback;
 }

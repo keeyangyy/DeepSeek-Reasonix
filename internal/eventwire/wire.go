@@ -126,14 +126,11 @@ type WorkspacePathChange struct {
 
 // StreamAttempt is the JSON form of event.StreamAttemptInfo.
 type StreamAttempt struct {
-	ID      string `json:"id"`
-	Action  string `json:"action"` // begin | discard | commit
-	Attempt int    `json:"attempt,omitempty"`
-	Max     int    `json:"max,omitempty"`
-	Reason  string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
-	// MessageID ties this attempt's live rows to the persisted message with the
-	// same id. Absent for legacy sessions and for attempts that do not produce
-	// an assistant message.
+	ID        string `json:"id"`
+	Action    string `json:"action"` // begin | discard | commit
+	Attempt   int    `json:"attempt,omitempty"`
+	Max       int    `json:"max,omitempty"`
+	Reason    string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
 	MessageID string `json:"messageId,omitempty"`
 }
 
@@ -252,14 +249,9 @@ func ToWire(e event.Event) Event {
 			w.RetryScope = string(e.RetryScope)
 		}
 	case event.StreamAttempt:
-		w.StreamAttempt = &StreamAttempt{
-			ID:        e.StreamAttempt.ID,
-			Action:    string(e.StreamAttempt.Action),
-			Attempt:   e.StreamAttempt.Attempt,
-			Max:       e.StreamAttempt.Max,
-			Reason:    e.StreamAttempt.Reason,
-			MessageID: e.StreamAttempt.MessageID,
-		}
+		att := e.StreamAttempt
+		w.StreamAttempt = &StreamAttempt{ID: att.ID, Action: string(att.Action), Attempt: att.Attempt,
+			Max: att.Max, Reason: att.Reason, MessageID: att.MessageID}
 	case event.TurnPhase:
 		w.Phase = string(e.PhaseName)
 		if w.Phase == "" {
@@ -394,10 +386,7 @@ type Ask struct {
 	TurnID    string        `json:"turnId,omitempty"`
 }
 
-// MCPInteraction is the JSON form of an event.MCPInteraction: one
-// server-initiated elicitation awaiting the user's accept/decline/cancel.
-// Schema and URL come from the MCP server; form answers travel only in the
-// resolve call, never on this event.
+// MCPInteraction is the JSON form of an event.MCPInteraction.
 type MCPInteraction struct {
 	ID              string          `json:"id"`
 	Server          string          `json:"server"`
@@ -639,8 +628,6 @@ func ToWireCacheDiagnostics(d *event.CacheDiagnostics) *CacheDiagnostics {
 }
 
 // KindNames returns every stable frontend event kind in event.Kind order. It is
-// the protocol-neutral source used by consumers such as the Remote schema
-// generator; callers receive a copy and may sort it without mutating eventwire.
 func KindNames() []string {
 	names := make([]string, 0, int(event.KindCount))
 	for kind := range event.KindCount {

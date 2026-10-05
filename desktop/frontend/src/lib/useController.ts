@@ -116,8 +116,6 @@ const SUBAGENT_PROGRESS_PREFIX = "reasonix.subagent.";
 const TURN_ACTIVITY_KINDS = new Set(["turn_started", "text", "reasoning", "message", "tool_dispatch", "tool_progress", "tool_result_preview", "tool_result"]);
 const SUBAGENT_PROGRESS_PHASES = new Set(["queued", "running", "reasoning", "responding", "tool", "retrying", "completed", "partial", "failed", "cancelled"]);
 // Tool names that initialize a sub-agent progress card. parallel_tasks/fleet
-// are group cards: they settle when their whole child progress tree is
-// terminal, since they never receive a terminal status of their own.
 const SUBAGENT_PROGRESS_TOOLS = new Set(["task", "read_only_task", "parallel_tasks", "fleet"]);
 // Per-channel preview retention. The backend already bounds what it sends
 // (8 KiB pending per child); these caps keep one hot card from dominating the
@@ -3084,9 +3082,6 @@ export function useController() {
               const liveState = statesRef.current.get(tabId);
               const liveItems = liveState?.items ?? [];
               const removeIds = duplicateLiveItemIds(projection.items, liveItems);
-              // The backend mints an assistant id before sampling, so a page row
-              // and a live row can name the same message; that is authoritative,
-              // unlike the content heuristics that follow.
               removeIds.push(...messageIdCoveredLiveItemIds(projection.items, liveItems));
               // A2-a: exact turn alignment. The page names the in-flight turn;
               // that turn's live rows are superseded by it — no content guessing.
