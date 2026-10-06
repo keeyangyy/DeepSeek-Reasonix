@@ -2961,11 +2961,10 @@ func channelDisplayName(provider, domain string) string {
 	}
 }
 
-// DeleteSession moves a saved session to the local trash. If the session still
-// has an in-process runtime, the runtime is cancelled and removed first so
-// autosave cannot recreate or append to the deleted file later.
+// DeleteSession moves a saved session to the local trash, cancelling its
+// in-process runtime first so autosave cannot recreate the deleted file.
 func (a *App) DeleteSession(path string) error {
-	return friendlySessionFileError(a.deleteSession(path))
+	return friendlySessionFileError(a.deleteSession(path, removalToTrash))
 }
 
 // DeleteRecoveryCopy is the guarded bulk-cleanup path. The frontend's copy
@@ -2978,7 +2977,7 @@ func (a *App) DeleteRecoveryCopy(path string) error {
 
 var errRecoveryCopyNotRedundant = errors.New("recovery session contains content not preserved by its parent")
 
-func (a *App) deleteSession(path string) error {
+func (a *App) deleteSession(path string, mode removalMode) error {
 	dir := a.activeSessionDir()
 	sessionPath, key, err := validateSessionPath(dir, path)
 	if err != nil {
@@ -3007,13 +3006,13 @@ func (a *App) deleteSession(path string) error {
 		teardownTimedOut := waitDestroyHandles(destroys)
 		a.closeRemovedSessionRuntimesForSessionAfterDestroyAdmissionHeld(removed, dir, sessionPath, closedRemoved)
 		if teardownTimedOut {
-			if err := agent.MarkCleanupPending(sessionPath, "delete"); err != nil {
+			if err := agent.MarkCleanupPending(sessionPath, cleanupPendingOperation(mode)); err != nil {
 				a.closeRemainingRemovedSessionRuntimesAfterDestroyAdmissionHeld(removed, closedRemoved)
 				return err
 			}
-			go delayedDesktopSessionTrash(dir, sessionPath, key, destroys)
+			go delayedSessionRetire(mode, dir, sessionPath, key, destroys)
 		} else {
-			err = trashSessionArtifacts(dir, sessionPath, key)
+			err = removeSessionArtifactsByMode(mode, dir, sessionPath, key)
 			finishDestroyHandles(destroys)
 			if err != nil {
 				a.closeRemainingRemovedSessionRuntimesAfterDestroyAdmissionHeld(removed, closedRemoved)

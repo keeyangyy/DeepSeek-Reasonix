@@ -445,6 +445,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-09-29: the sub-agent status strip adds the sidecar polling hook, the
 // strip component and its CSS, and the fold-header sub-agent count (2427.9 KiB
 // measured); widen to 2429.
-const rawInitialBudgetKiB = 2_429;
+// 2026-10-07: the sidebar permanent-delete entry — the row button, the item in
+// both context menus, the purge branch on both archive entry points, and its
+// labels — adds 0.6 KiB (2429.6 KiB measured); widen to 2430.
+const rawInitialBudgetKiB = 2_430;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

@@ -376,6 +376,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   QuerySessionTakeover(tabId: string): Promise<import("./types").SessionTakeoverView | null>;
   TakeoverSession(tabId: string, mode: "wait" | "interrupt"): Promise<void>;
   DeleteSession(path: string): Promise<void>;
+  PurgeSession(path: string): Promise<void>;
   DeleteRecoveryCopy(path: string): Promise<void>;
   GetRecoveryLineage(key: { scope: string; workspaceRoot?: string; topicId: string; path?: string; recordClassification?: boolean }): Promise<RecoveryLineageView>;
   GetSessionVersionState(key: { scope: string; workspaceRoot?: string; topicId: string; path?: string; recordClassification?: boolean }): Promise<import("./types").SessionVersionStateView>;
@@ -719,6 +720,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   RenameTopic(topicID: string, title: string): Promise<void>;
   DeleteTopic(topicID: string): Promise<void>;
   TrashTopic(topicID: string): Promise<void>;
+  PurgeTopic(topicID: string): Promise<void>;
   SetTopicPinned(topicID: string, pinned: boolean): Promise<void>;
   ContextPanel(tabID: string): Promise<ContextPanelInfo>;
   // New native-feel bindings (added with the desktop native-feel plan).
@@ -1139,7 +1141,7 @@ function bridgeBreadcrumb(method: string): string {
   if (/^(AddSkillPath|RemoveSkillPath|SetSkillPathEnabled|RefreshSkills|SetSkillEnabled|SetSkillImplicitInvocation|AcceptSkillSuggestion|AvailableSubagentTools|CreateSubagentProfile|UpdateSubagentProfile|DeleteSubagentProfile|SetSubagentProfileModel|SetSubagentProfileEffort|TrySubagentProfile|CancelTrySubagentProfile)/.test(method))
     return `skill ${method}`;
   if (/^(MinimiseMainWindow|ToggleMaximiseMainWindow|IsMainWindowMaximised|CloseMainWindow)$/.test(method)) return `window ${method}`;
-  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|StartTopicActivation|EnsureBlankSurface|SetActiveTab|CloseTab|RegisterNavigationIntent|CloseMergedWorktreeTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|IsolatedWorktreeAvailability|CreateIsolatedWorktree|InspectWorktreeMerge|GetWorktreeStatus|PrepareWorktreeMerge|ReconcileRecoveryVersions|MergeWorktreeBack|FinalizeWorktreeMerge|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
+  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|StartTopicActivation|EnsureBlankSurface|SetActiveTab|CloseTab|RegisterNavigationIntent|CloseMergedWorktreeTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|PurgeTopic|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|IsolatedWorktreeAvailability|CreateIsolatedWorktree|InspectWorktreeMerge|GetWorktreeStatus|PrepareWorktreeMerge|ReconcileRecoveryVersions|MergeWorktreeBack|FinalizeWorktreeMerge|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
     return `nav ${method}`;
   return "";
 }
@@ -3442,6 +3444,7 @@ function makeMockApp(): AppBindings {
         });
       }
     },
+    async PurgeSession(path: string) { const i = sessions.findIndex((s) => s.path === path); if (i >= 0) sessions.splice(i, 1); },
     async DeleteRecoveryCopy(path: string) {
       return this.DeleteSession(path);
     },
@@ -5560,12 +5563,9 @@ function makeMockApp(): AppBindings {
       );
     },
     async AIRenameSession(topicID: string) { return mockAIRenameSession(findMockTopic(topicID)); },
-    async DeleteTopic(topicID: string) {
-      deleteMockTopic(topicID);
-    },
-    async TrashTopic(topicID: string) {
-      deleteMockTopic(topicID);
-    },
+    async DeleteTopic(topicID: string) { deleteMockTopic(topicID); },
+    async TrashTopic(topicID: string) { deleteMockTopic(topicID); },
+    async PurgeTopic(topicID: string) { deleteMockTopic(topicID); },
     async SetTopicPinned(topicID: string, pinned: boolean) {
       setMockTopicPinned(topicID, pinned);
     },

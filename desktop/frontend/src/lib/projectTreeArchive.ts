@@ -8,6 +8,10 @@ export { projectTreeWithoutTopics } from "./projectTreeTopic";
 
 type TopicPageState = { nextCursor?: string; loading: boolean };
 
+// Permanent removal deletes the session files in place instead of publishing
+// them to the local trash.
+export type ProjectTreeRemovalMode = "trash" | "purge";
+
 export type ProjectTreeRefreshOptions = {
   reloadTopicKeys?: string[];
   reloadAllTopics?: boolean;
@@ -155,7 +159,7 @@ export function useProjectTreeArchiveController({
   const [trashingSessions, setTrashingSessions] = useState<Set<string>>(new Set());
   const archiveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
-  const trashTopic = useCallback(async (topicId: string) => {
+  const removeTopic = useCallback(async (topicId: string, mode: ProjectTreeRemovalMode) => {
     if (!beginTrashingTopic(topicId)) return;
     const folderKey = projectTreeFolderKeyForTopic(treeRef.current, topicId);
     const reloadOptions: ProjectTreeRefreshOptions = {
@@ -170,7 +174,7 @@ export function useProjectTreeArchiveController({
 
     const queued = enqueueProjectTreeArchive(archiveQueueRef.current, async () => {
       await runProjectTreeArchiveJob({
-        archive: () => app.TrashTopic(topicId),
+        archive: () => (mode === "purge" ? app.PurgeTopic(topicId) : app.TrashTopic(topicId)),
         commit: () => {
           commitArchiveTombstone(topicId);
           // Fence every load that captured the catalog before backend commit,
@@ -196,7 +200,10 @@ export function useProjectTreeArchiveController({
     await queued;
   }, [beginTrashingTopic, closeMenu, commitArchiveTombstone, endTrashingTopic, onTopicsChanged, optimisticallyRemoveTopic, refreshRef, releaseArchiveTombstone, showToast, topicLoadSeqRef, topicPageStateRef, treeRef, updateTopicPageState]);
 
-  const trashSession = useCallback(async (rawSessionPath: string) => {
+  const trashTopic = useCallback((topicId: string) => removeTopic(topicId, "trash"), [removeTopic]);
+  const purgeTopic = useCallback((topicId: string) => removeTopic(topicId, "purge"), [removeTopic]);
+
+  const removeSession = useCallback(async (rawSessionPath: string, mode: ProjectTreeRemovalMode) => {
     const sessionPath = rawSessionPath.trim();
     if (!sessionPath || sessionTrashingRef.current.has(sessionPath)) return;
     const folderKey = projectTreeFolderKeyForSession(treeRef.current, sessionPath);
@@ -210,7 +217,7 @@ export function useProjectTreeArchiveController({
 
     const queued = enqueueProjectTreeArchive(archiveQueueRef.current, async () => {
       try {
-        await app.DeleteSession(sessionPath);
+        await (mode === "purge" ? app.PurgeSession(sessionPath) : app.DeleteSession(sessionPath));
         await refreshRef.current(reloadOptions);
         await Promise.resolve(onTopicsChanged?.()).catch(() => undefined);
       } catch (err) {
@@ -225,5 +232,8 @@ export function useProjectTreeArchiveController({
     await queued;
   }, [closeMenu, onTopicsChanged, refreshRef, showToast, treeRef]);
 
-  return { trashingTopics, trashingSessions, currentArchiveTombstones, trashTopic, trashSession };
+  const trashSession = useCallback((path: string) => removeSession(path, "trash"), [removeSession]);
+  const purgeSession = useCallback((path: string) => removeSession(path, "purge"), [removeSession]);
+
+  return { trashingTopics, trashingSessions, currentArchiveTombstones, trashTopic, trashSession, purgeTopic, purgeSession };
 }
