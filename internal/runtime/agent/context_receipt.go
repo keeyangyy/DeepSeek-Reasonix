@@ -26,16 +26,18 @@ func (a *contextWindow) contextMaintenanceInputHash(visible []provider.Message) 
 // the input or the install, so retrying the same input cannot change it.
 func transientSummaryFailure(code string) bool {
 	switch CompactionNoopReason(code) {
-	case FailSummaryTruncated, FailSummaryTimeout, FailSummaryFailed:
+	case FailSummaryTruncated, FailSummaryTimeout, FailSummaryCeiling, FailSummaryFailed:
 		return true
 	}
 	return false
 }
 
 // retryGrowthStep is how much the input must grow past a transient failure
-// before another summary request is worth its cost.
-func (a *contextWindow) retryGrowthStep() int {
-	return max(1, a.compactTrigger()/8)
+// before another summary request is worth its cost: an eighth of the trigger,
+// never more than half of what the failure left below the hard ceiling, so the
+// release point always sits short of it.
+func (a *contextWindow) retryGrowthStep(failedAt int) int {
+	return max(1, min(a.compactTrigger()/8, (a.hardInputCeiling()-failedAt)/2))
 }
 
 // blockedReceiptHolds reports whether a blocked or failed receipt still
@@ -46,7 +48,7 @@ func (a *contextWindow) blockedReceiptHolds(r *sessionstore.ContextMaintenanceRe
 		return false
 	}
 	if transientSummaryFailure(r.Code) {
-		return r.InputTokens > 0 && tokens < r.InputTokens+a.retryGrowthStep()
+		return r.InputTokens > 0 && tokens < r.InputTokens+a.retryGrowthStep(r.InputTokens)
 	}
 	return true
 }

@@ -59,7 +59,7 @@ Jobs in the run:
 | `windows-verify-package` | Checks the payload against the recorded digest, unpacks the zip and the installer, requires both trees to match the payload file for file, and outputs the SHA-256 of both packages. Holds no secrets and no environment. | none |
 | `windows-sign-installer` | Requires both packages to hash to the checked values, signs the installer, verifies its signature, and outputs the signed installer's SHA-256. Opens no archive. | shared concurrency group `certum-signing`, environment `studio-release` |
 | `cli` | Builds `reasonix` archives for six OS/arch targets plus `SHA256SUMS`. | fails on a missing archive |
-| `publish` | Renders the notes with their authors, minisigns, writes `latest.json`, creates the GitHub prerelease, mirrors to R2. | environment `studio-release`; skipped unless all four Windows signing jobs succeeded or signing is off; an unresolved `#N` stops it before signing |
+| `publish` | Renders the notes with their authors, minisigns, writes `latest.json`, creates the GitHub release (a stable tag is GitHub latest only when it is the highest stable `studio-v*` tag; a candidate is a prerelease), mirrors to R2. `latest.json` goes to R2 only, never to the GitHub release. | environment `studio-release`; skipped unless all four Windows signing jobs succeeded or signing is off; an unresolved `#N` stops it before signing |
 | `cli-gate` | Only with `STUDIO_PUBLISHES_CLI=true`. Requires `CLI_PUBLISH_FROZEN=true`. Checks out nothing and reads no secret. | fails while 1.x is not frozen, and then no other CLI job runs |
 | `cli-tag` | Only with `STUDIO_PUBLISHES_CLI=true`. For a stable or `-preview.N` version, creates the tag `vX.Y.Z` on the studio commit with the release tag identity (`RELEASE_TAG_TOKEN`, see below); an existing tag on that commit is kept, one elsewhere fails. | environment `studio-release`; runs after `publish` and `cli-gate`; checks out nothing, one inline step reads the token |
 | `cli-channels` | Only with `STUDIO_PUBLISHES_CLI=true` (unset today; 1.x owns the channels). Publishes `reasonix` and `@reasonix/cli-*` to npm with `--provenance`, then updates the Homebrew cask (not for a candidate). | no environment and no approval; `id-token: write` on this job only; runs after `publish`, `cli-gate` and `cli-tag` |
@@ -108,9 +108,9 @@ Verify a published package with `npm view reasonix dist.attestations`: the attes
 
 | ID | Expected | Command |
 | --- | --- | --- |
-| V1 | Prerelease exists with 22 assets (per-platform packages, `.minisig` files, CLI archives, `latest.json`, `SHA256SUMS`). | `gh release view studio-vX.Y.Z --json isPrerelease,assets --jq '.isPrerelease, (.assets \| length)'` |
+| V1 | The release exists with 21 assets (per-platform packages, `.minisig` files, CLI archives, `SHA256SUMS`; no `latest.json`). A stable tag is not a prerelease and is GitHub latest when it is the highest stable tag; a candidate is a prerelease. | `gh release view studio-vX.Y.Z --json isPrerelease,assets --jq '.isPrerelease, (.assets \| length)'` |
 | V2 | The catalog lists the new version first. | `curl -s https://dl.reasonix.io/studio/versions.json \| jq -r '.versions[0].tag'` |
-| V3 | The manifest is served. | `curl -sI https://dl.reasonix.io/studio-vX.Y.Z/latest.json \| head -1` |
+| V3 | The manifest is served from the mirror, and, once a Studio release is GitHub latest, the path 1.x updaters fall back to answers 404. | `curl -sI https://dl.reasonix.io/studio-vX.Y.Z/latest.json \| head -1`; `curl -sI https://github.com/esengine/DeepSeek-Reasonix/releases/latest/download/latest.json \| head -1` |
 | V4 | The body contains the version notes and the standing install text. | `gh release view studio-vX.Y.Z --json body --jq .body` |
 
 ## 5. Recovery

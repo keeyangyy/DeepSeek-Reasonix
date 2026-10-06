@@ -69,13 +69,16 @@ const (
 type Skill struct {
 	Name        string // canonical identifier; matches the directory / filename stem
 	Description string // one-liner shown in the pinned index
-	Body        string // full markdown body (post-frontmatter), loaded eagerly
+	Body        string // markdown body (post-frontmatter); see Complete for the references and scripts a listing leaves out
 	Scope       Scope  // where it came from
 	Path        string // absolute path to the SKILL.md / <name>.md, or "(builtin)"
 	Plugin      string // installed plugin package name; empty for non-plugin skills
 	// runtimeBindingsPrepared is session-local invocation state. It must not be
 	// inferred from untrusted Markdown content or persisted skill metadata.
 	runtimeBindingsPrepared bool
+	// supplementsDeferred marks a discovered directory-layout skill whose
+	// references/ and scripts/ are not yet in Body.
+	supplementsDeferred bool
 	// SlashPrefix overrides Plugin only for the user-facing invocation name.
 	// Imported Claude agents use <plugin>:agent so an agent and skill may safely
 	// share the same upstream name.
@@ -260,6 +263,7 @@ func (s *Store) ConfigureToolBindings(resolve func(Skill) []tool.MCPBinding) {
 // exact callable names. Non-plugin skills and sessions without bindings are
 // returned byte-for-byte unchanged.
 func (s *Store) Prepare(sk Skill) Skill {
+	sk = sk.Complete()
 	if s == nil || s.toolBindings == nil || strings.TrimSpace(sk.Plugin) == "" || sk.runtimeBindingsPrepared {
 		return sk
 	}
@@ -675,7 +679,7 @@ func (s *Store) Read(name string) (Skill, bool) {
 	name = norm.NFC.String(name)
 	for _, sk := range s.enabledSkills() {
 		if sk.Name == name {
-			return sk, true
+			return sk.Complete(), true
 		}
 	}
 	return Skill{}, false
@@ -684,7 +688,8 @@ func (s *Store) Read(name string) (Skill, bool) {
 // ReadSlash resolves a user-entered slash identifier without changing the
 // bare identifiers accepted by Read/run_skill.
 func (s *Store) ReadSlash(name string) (Skill, bool) {
-	return ResolveSlashSkill(s.discoveredSkills(), name)
+	sk, ok := ResolveSlashSkill(s.discoveredSkills(), name)
+	return sk.Complete(), ok
 }
 
 func (s *Store) discoverRoot(r discoveryRoot) []Skill {
@@ -837,7 +842,7 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 	sk := Skill{
 		Name:         name,
 		Description:  desc,
-		Body:         loadBodyWithScripts(path, loadBodyWithReferences(path, strings.TrimSpace(body))),
+		Body:         strings.TrimSpace(body),
 		Scope:        scope,
 		Path:         path,
 		AllowedTools: parseAllowedTools(firstNonEmptySkillValue(fm[skillFrontmatterAllowedTools], fm["tools"])),
@@ -856,6 +861,8 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 		InvocationFlags: parseInvocationFlags(fm),
 		Requires:        parseCSVFrontmatter(fm[skillFrontmatterRequires]),
 		Delivery:        delivery,
+
+		supplementsDeferred: filepath.Base(path) == SkillFile,
 	}
 	if unreadable {
 		sk.Invalid = append(sk.Invalid, "frontmatter is not valid YAML; read line by line (quote values that contain [ ] : or #)")
@@ -1101,6 +1108,19 @@ func (s *Store) globalSkillsRoot() string {
 		return filepath.Join(s.reasonixHomeDir, SkillsDirname)
 	}
 	return filepath.Join(s.homeDir, ".reasonix", SkillsDirname)
+}
+
+// Complete returns the skill with its references and scripts folded into Body.
+// Discovery leaves them out because a listing needs only the metadata, and
+// reading every skill's sibling files per catalog build is what made opening a
+// pane scale with the size of the skill library.
+func (s Skill) Complete() Skill {
+	if !s.supplementsDeferred {
+		return s
+	}
+	s.Body = loadBodyWithScripts(s.Path, loadBodyWithReferences(s.Path, s.Body))
+	s.supplementsDeferred = false
+	return s
 }
 
 // loadBodyWithReferences appends a directory-layout skill's sibling

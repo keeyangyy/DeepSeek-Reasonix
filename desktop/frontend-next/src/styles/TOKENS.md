@@ -17,6 +17,46 @@ the gate is named.
 - `interpolate-size: allow-keywords` lets `height: auto` take part in a
   transition; engines without it jump, which is the prior behaviour.
 
+## Theme packs
+
+- A pack's values are the declarations of one generated rule,
+  `:root:root[data-pack]`, in a `<style id="pack-theme">` appended to `<head>`
+  when a pack is first applied and left where it is.
+- Nothing is written to the root's inline style: a stylesheet of equal
+  specificity added later wins without `!important`, and one already present
+  loses the tie.
+- The selector ties the contrast tiers (`:root[data-theme][data-contrast]`) and
+  beats them by order. With no pack there is no element: the tiers alone carry
+  the inks, and the reader's contrast is theirs.
+- A pack's own inks take the reader's contrast as a relative-colour lightness
+  offset inside that rule; the built-in inks need none.
+- `--ok --warn --err --net --deleg --add --del --focus` are not in the pack
+  vocabulary and are never written.
+- Decoration that is not a status has its own tokens, which a pack may set
+  (see Decorative roles). A pack that names `net` or `deleg` has them dropped
+  with a warning by the kernel; the frontend has no entry that could write them.
+
+## Decorative roles
+
+`net` and `deleg` say what the agent is doing: running, connected, delegated
+out. A hyperlink, the product accent and a hover halo are not that, so they read
+their own tokens. Each default is the status colour it replaces, in both schemes
+and at every contrast step, so nothing paints differently until a pack sets one.
+
+| Pack key | Variable | Default | Job |
+| --- | --- | --- | --- |
+| `link` | `--link` | `--net` | Hyperlinks and URLs: `.md a`, `.fbk a`, `.lk`, `.hit-row .u` |
+| `brand` | `--brand` | `--net` | The product's own tint: wallet and toolbar icons, info notes, feedback status chips, skill chips, the selected option and the open workspace's bar |
+| `halo` | `--halo` | `--net` | Hover and drag-over emphasis: card hover, screenshot hover, the reference-drop ring |
+| `labelAgent` | `--label-agent` | `--deleg` | An agent's name: `.who` labels and sub-agent chips |
+| derived | `--brand-wash` | `--net-wash` | Tint behind `brand`; a pack that sets `brand` derives it at 12% over its ground, as `--accent-wash` follows `accent` |
+| derived | `--label-agent-wash` | `--deleg-wash` | Tint behind `labelAgent`, derived the same way |
+
+- `--halo` is not `--glow`: `--glow` is the running compose ring's own local
+  variable, set to `--net` while a turn runs, and stays a status.
+- The running compose ring, call lines, pips, carets and the delegated nest keep
+  `net` and `deleg`.
+
 ## Faces
 
 The interface ships its own faces. On Windows it otherwise resolved to Segoe UI
@@ -195,6 +235,10 @@ raised with its ratios kept.
   line and the other two step up; the body end does not move, because near-white
   on a dark ground haloes and narrowing the span is what "softer" means.
   Enforced by `perf/contrast.mjs`.
+- `--ghost` is `--faint`'s value in every tier: a lighter one fails the floor.
+- `perf/tiers.mjs` holds every tier: each ink is at least as legible as the
+  default palette stepped once (3.0/10.1, 3.5/7.5 and 3.5/7.0 lightness points
+  for text, muted and faint) and as the floors recorded there, on both grounds.
 - `prefers-contrast: more` is followed when the user has not chosen a tier.
   Light and dark are judged separately: a manual dark choice under a light
   system scheme would otherwise paint the light theme's dark body text onto a

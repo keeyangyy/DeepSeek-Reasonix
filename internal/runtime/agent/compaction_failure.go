@@ -20,6 +20,7 @@ const (
 
 	FailSummaryFailed        CompactionNoopReason = "summary_failed"
 	FailSummaryTimeout       CompactionNoopReason = "summary_timeout"
+	FailSummaryCeiling       CompactionNoopReason = "summary_ceiling"
 	FailSummaryTruncated     CompactionNoopReason = "summary_truncated"
 	FailSummaryInputTooLarge CompactionNoopReason = "summary_input_too_large"
 	FailContextChanged       CompactionNoopReason = "context_changed"
@@ -33,7 +34,8 @@ const (
 
 var (
 	errSummaryInputTooLarge   = errors.New("summary input exceeds the single-request budget")
-	errSummaryTimeout         = errors.New("summarizer exceeded its time bound")
+	errSummaryTimeout         = errors.New("summarizer stalled: no output within its idle bound")
+	errSummaryCeiling         = errors.New("summarizer exceeded its overall time ceiling")
 	errSummaryRequestFailed   = errors.New("summarizer request failed")
 	errCompactionHookRefused  = errors.New("compaction extension refused the fold")
 	errProjectionNotPersisted = errors.New("projection could not be persisted")
@@ -48,7 +50,8 @@ func compactionHookRefusal(err error) error {
 func classifySummaryError(parent context.Context, err error) error {
 	switch {
 	case err == nil, errors.Is(err, context.Canceled), parent.Err() != nil,
-		errors.Is(err, errSummaryOutputTruncated), errors.Is(err, errSummaryInputTooLarge):
+		errors.Is(err, errSummaryOutputTruncated), errors.Is(err, errSummaryInputTooLarge),
+		errors.Is(err, errSummaryTimeout), errors.Is(err, errSummaryCeiling):
 		return err
 	case errors.Is(err, context.DeadlineExceeded):
 		return fmt.Errorf("%w: %w", errSummaryTimeout, err)
@@ -76,6 +79,8 @@ func compactionFailureCode(err error) CompactionNoopReason {
 		return FailSummaryInputTooLarge
 	case errors.Is(err, errSummaryTimeout):
 		return FailSummaryTimeout
+	case errors.Is(err, errSummaryCeiling):
+		return FailSummaryCeiling
 	case errors.Is(err, errSummaryRequestFailed):
 		return FailSummaryFailed
 	case errors.Is(err, errCompactionHookRefused):

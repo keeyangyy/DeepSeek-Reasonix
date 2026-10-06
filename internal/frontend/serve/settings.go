@@ -197,22 +197,20 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if u := s.ctl().LastUsage(); u != nil {
 		sess["lastUsage"] = u
 	}
-	if cfg, err := config.Load(); err == nil {
-		if entry, ok := cfg.ResolveModel(currentModelRef(s.ctl())); ok {
-			sess["effort"] = entry.Effort
-			sess["modelRef"] = entry.Name + "/" + entry.Model
-			if label := strings.TrimSpace(entry.DisplayName); label != "" {
-				sess["providerDisplayName"] = label
-			}
-			// Whether this model reads images at all. A composer that cannot ask
-			// lets the user paste a screenshot into a text-only model and watch
-			// nothing happen.
-			sess["vision"] = config.EffectiveVision(entry)
-			// And whether that false is an answer or a silence: a relay forwards
-			// models nothing here has a label for, and telling its user the model
-			// cannot read images states a limitation that was never established.
-			sess["visionDeclared"] = config.VisionDeclared(entry)
+	if face, ok := s.ctl().ModelFace(); ok {
+		sess["effort"] = face.Effort
+		sess["modelRef"] = face.Ref
+		if label := providerLabel(face.Ref); label != "" {
+			sess["providerDisplayName"] = label
 		}
+		// Whether this model reads images at all. A composer that cannot ask
+		// lets the user paste a screenshot into a text-only model and watch
+		// nothing happen.
+		sess["vision"] = face.Vision
+		// And whether that false is an answer or a silence: a relay forwards
+		// models nothing here has a label for, and telling its user the model
+		// cannot read images states a limitation that was never established.
+		sess["visionDeclared"] = face.VisionDeclared
 	}
 	// Only a model that declares modes lists any, which is what keeps the
 	// switch off every other model's effort menu.
@@ -312,4 +310,14 @@ func betterModelRoute(a modelEntry, ar modelRoute, b modelEntry, br modelRoute) 
 type decisionViewer interface {
 	PlanPhase() planmode.Phase
 	Decisions() []control.Decision
+}
+
+// providerLabel reads the label live from the user's file: a rename rebuilds
+// nothing, so the build's snapshot of the entry cannot carry it.
+func providerLabel(ref string) string {
+	name, _, _ := strings.Cut(ref, "/")
+	if p, ok := config.LoadForEdit(config.UserConfigPath()).Provider(name); ok {
+		return strings.TrimSpace(p.DisplayName)
+	}
+	return ""
 }

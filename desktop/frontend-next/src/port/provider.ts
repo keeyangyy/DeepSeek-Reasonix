@@ -62,6 +62,11 @@ export interface ProviderEntry {
   // on top of the protocol.
   contextWindow?: number;
   maxOutputTokens?: number;
+  // Seconds the endpoint may stay silent before the call is read as dropped;
+  // absent is the built-in default.
+  idleTimeoutSeconds?: number;
+  // What a source without one waits; the kernel owns the number.
+  idleTimeoutDefault?: number;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
 }
@@ -176,6 +181,8 @@ export interface ProviderEdit {
   // compaction off for this source.
   contextWindow?: number;
   maxOutputTokens?: number;
+  // 0 is the built-in default; omitted leaves the stored value alone.
+  idleTimeoutSeconds?: number;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
   // Which request shape controls thinking here. "" is auto — no declaration,

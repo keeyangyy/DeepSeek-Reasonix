@@ -42,3 +42,7 @@ the source-to-target contract here: easing syntax, time units, callbacks,
 cancellation, reduced-motion behavior, and failure fallback. Verification must
 assert that the target API was actually called; a mock that silently skips it
 does not count.
+
+## Disclosure
+
+- [ ] AI assistance was used for this change (optional; for transparency only, it does not change how the change is reviewed)

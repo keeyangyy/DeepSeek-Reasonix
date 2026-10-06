@@ -67,6 +67,7 @@ type controllerDeps struct {
 	effort              string
 	providerFingerprint string
 	modelModes          []config.ModelMode // what SetModelMode accepts; see model_modes.go
+	modelFace           *ModelFace         // what the build resolved for the session's model; see model_face.go
 	sessionDir          string
 	// skills owns the session's discovered skills (enabled subset, full set, and
 	// the reloadable stores) — the skills slice of the Capabilities concern. See
@@ -155,6 +156,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		effort:                     opts.Effort,
 		providerFingerprint:        opts.ProviderFingerprint,
 		modelModes:                 opts.ModelModes,
+		modelFace:                  faceOfEntry(opts.ModelEntry),
 		sessionDir:                 opts.SessionDir,
 		skills:                     newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation),
 		skillRunner:                opts.SkillRunner,

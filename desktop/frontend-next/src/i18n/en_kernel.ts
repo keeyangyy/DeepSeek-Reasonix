@@ -3,6 +3,7 @@
 // code adds one here. i18n.test.ts is what stops one from being forgotten.
 
 export const EN_KERNEL: Record<string, string> = {
+  "内核繁忙或无法连接，这次回答可能没有被收到，重试前请先确认": "The kernel is busy or unreachable; the answer may not have been received - check before retrying",
   "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径": "The recursive delete target is protected or outside the granted roots; use a literal path inside the workspace or a granted directory",
   "无法确定递归删除范围；请使用字面命令名、路径和解释器内容": "The recursive delete extent is unknown; use a literal command name, path and interpreter payload",
   "请拆分命令；递归删除前只能使用字面路径切换目录，不能依赖变量赋值": "Split the call; only literal directory changes may precede a recursive delete, without relying on variable assignments",
@@ -167,6 +168,9 @@ export const EN_KERNEL: Record<string, string> = {
   "该协议不支持由端点自行搜索": "This protocol has no wire format for a search the endpoint runs itself",
   "这台服务器不允许修改模型来源": "This server does not allow editing model sources",
   "打不开这个网页：{error}": "That page could not be opened: {error}",
+  "没有找到可用的浏览器。请安装 Chrome、Edge 或 Chromium，或在配置里用 [browser] executable 指定路径，新会话才会读到": "No usable browser was found. Install Chrome, Edge or Chromium, or set [browser] executable in the config; a new session reads it.",
+  "内置浏览器没能启动，稍后再试一次": "The built-in browser could not start. Try again in a moment.",
+  "内置浏览器的资料目录正被另一个浏览器占用。关掉其他 Studio 窗口或用同一资料目录的浏览器后再试": "Another browser is using the built-in browser's profile directory. Close other Studio windows or browsers on that profile and try again.",
   "通知设置没能保存：{error}": "The notification settings could not be saved: {error}",
   "这台机器上没找到 VS Code、Cursor 这类编辑器。装一个，或在配置里用 [desktop] editor 指定路径。": "No editor such as VS Code or Cursor was found on this machine. Install one, or name its path with [desktop] editor.",
   "编辑器没能启动：{error}": "The editor could not be started: {error}",
@@ -291,6 +295,7 @@ export const EN_KERNEL: Record<string, string> = {
   "上下文长度不能是负数；填 0 表示不自动压缩": "The context window cannot be negative; 0 means no automatic compaction",
   "Token 上限不能是负数": "The token limit cannot be negative",
   "最大输出 Token 不能是负数": "The maximum output tokens cannot be negative",
+  "无响应超时须在 {min} 到 {max} 秒之间；留空使用默认值": "The no-answer timeout must be between {min} and {max} seconds; leave it empty for the default",
   "无法识别「{protocol}」这种思考协议": "Unrecognised reasoning protocol “{protocol}”",
   "默认档位「{level}」不在填写的档位里": "The default level “{level}” is not one of the levels listed",
   "{model} 的默认档位「{level}」不在为它选的档位里": "The default level “{level}” for {model} is not one of the levels picked for it",

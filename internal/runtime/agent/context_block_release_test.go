@@ -75,7 +75,8 @@ func TestRepeatedTransientFailureIsBoundedByGrowth(t *testing.T) {
 		growBy(a, perTurn)
 		_ = prepare(t, a, CompactionTriggerPressure)
 	}
-	step := a.window().retryGrowthStep()
+	w := a.window()
+	step := w.retryGrowthStep(w.estimatedVisibleRequestTokens(w.modelVisibleMessages()))
 	if limit := 1 + turns*perTurn/step + 1; p.calls < 2 || p.calls > limit {
 		t.Fatalf("summary requests over %d turns = %d, want within [2,%d]", turns, p.calls, limit)
 	}

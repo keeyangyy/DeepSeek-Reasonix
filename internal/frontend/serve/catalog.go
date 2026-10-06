@@ -103,6 +103,7 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 	}
 	ctl := s.ctl()
 	raw := ctl.AllSkills()
+	enabled := ctl.SkillActivation()
 	entries := make([]skillEntry, 0, len(raw))
 	for _, sk := range raw {
 		switchScope := ""
@@ -127,7 +128,7 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 			Effort:      sk.Effort,
 			AllowedURI:  sk.AllowedTools,
 			Manual:      sk.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
-			Enabled:     ctl.SkillEnabled(sk.Name),
+			Enabled:     enabled(sk.Name),
 		})
 	}
 	writeJSON(w, map[string]any{

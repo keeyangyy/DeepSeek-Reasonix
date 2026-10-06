@@ -39,6 +39,7 @@ interface Props {
   readRemoteTree: (host: string) => Promise<void>;
   reloadTree: () => Promise<void>;
   adder: Adder;
+  opening?: string;
   onOpen: (req: { root?: string; sessionPath?: string }) => Promise<void>;
   onOpenRemote: (host: string, workspace?: string, sessionPath?: string) => Promise<void>;
   onFocusPane: (id: string) => void;
@@ -81,6 +82,7 @@ export function Sidebar({
   readRemoteTree,
   reloadTree,
   adder,
+  opening,
   onOpen,
   onOpenRemote,
   onFocusPane,
@@ -234,6 +236,7 @@ export function Sidebar({
         folded={folded}
         onFold={onFold}
         reload={reloadTree}
+        opening={opening}
         onOpen={onOpen}
         onFocus={onFocusPane}
         onClose={onClosePanes}
@@ -248,7 +251,7 @@ export function Sidebar({
         onError={onError}
         adder={adder}
       >
-        {remotes ? (
+        {shownRemotes.length ? (
           <RemoteHosts
             hub={hub}
             hosts={shownRemotes}

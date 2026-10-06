@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -135,8 +136,7 @@ func (m *model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		switch {
 		case m.tr.Running:
-			m.cancelling = true
-			return m, m.call("cancel", m.client.Cancel)
+			return m, m.interrupt()
 		case !empty:
 			m.composer.Reset()
 			m.shell = false
@@ -282,6 +282,8 @@ func (m *model) send(steer bool) tea.Cmd {
 		m.composer.Reset()
 		m.tr.AddEcho(display)
 		return tea.Batch(m.commit(), m.showHelp())
+	case slices.Contains(m.opts.QuitCommands, name):
+		return tea.Quit
 	case name == "/mouse" && m.scr != nil:
 		m.composer.Reset()
 		return m.toggleMouse()
@@ -356,14 +358,28 @@ func (m *model) send(steer bool) tea.Cmd {
 	})
 }
 
+// cancelTurn asks the kernel to stop the running turn.
+func (m *model) cancelTurn() tea.Cmd {
+	m.cancelling = true
+	return m.call("cancel", m.client.Cancel)
+}
+
+// interrupt is Ctrl+C on a running turn: the first press stops it, and a
+// second while it is still stopping leaves the program.
+func (m *model) interrupt() tea.Cmd {
+	if m.cancelling {
+		return tea.Quit
+	}
+	return m.cancelTurn()
+}
+
 // escape backs out of the most specific thing in progress: the running turn,
 // then what is typed, then shell mode. On an empty idle composer a second Esc
 // soon after the first opens the rewind picker.
 func (m *model) escape(empty bool) tea.Cmd {
 	switch {
 	case m.tr.Running:
-		m.cancelling = true
-		return m.call("cancel", m.client.Cancel)
+		return m.cancelTurn()
 	case !empty:
 		m.composer.Reset()
 		return nil

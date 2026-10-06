@@ -5,10 +5,12 @@ run-name: Release Studio ${{ inputs.tag || github.ref_name }}
 # (studio-v*), its own environment gate, and its own rollback catalog at
 # dl.reasonix.io/studio/versions.json.
 #
-# What it must never touch: the repository-wide "latest" release (every Studio
-# release is a prerelease) and the root dl.reasonix.io/versions.json, which is
-# the desktop line's catalog. Studio artifacts land under the tag prefix, which
-# cannot collide because the tag name itself differs.
+# What it must never touch: the root dl.reasonix.io/versions.json, which is the
+# desktop line's catalog. Studio artifacts land under the tag prefix, which
+# cannot collide because the tag name itself differs. The highest stable tag
+# is the repository's GitHub latest and a candidate is a prerelease; the GitHub
+# release carries no root latest.json, because the 1.x updaters' last-resort
+# URL is releases/latest/download/latest.json and must keep answering 404.
 #
 # Windows artifacts are Authenticode-signed with a Certum SimplySign cloud
 # certificate in two stages: every PE file in the application tree, then the
@@ -74,8 +76,7 @@ jobs:
           fi
           version="${tag#studio-}"
           # Semver's prerelease segment, group 4, read from the grammar rather
-          # than the spelling. Every Studio release carries GitHub's prerelease
-          # flag, so the tag-level distinction needs a name of its own.
+          # than the spelling.
           candidate=false
           if [[ "${version#v}" =~ $semver ]] && [ -n "${BASH_REMATCH[4]}" ]; then
             candidate=true
@@ -994,12 +995,14 @@ jobs:
           if [ "$HAS_R2" = "true" ]; then delta_dir=../delta; fi
           go run ./cmd/studio-manifest ../dist "${{ needs.resolve.outputs.version }}" "${{ needs.resolve.outputs.tag }}" $delta_dir
 
-      # Always a prerelease: this line is not the public product line, and
-      # GitHub never promotes a prerelease to the repository-wide "latest".
+      # The manifest stays out of the GitHub release (it is mirrored to R2
+      # under <tag>/ below), and a stable release takes the repository's latest
+      # only when it is the highest stable studio tag.
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.resolve.outputs.tag }}
+          CANDIDATE: ${{ needs.resolve.outputs.candidate }}
           VERSION: ${{ needs.resolve.outputs.version }}
           SIGNED_WINDOWS: ${{ needs.windows-sign-installer.result == 'success' }}
         run: |
@@ -1040,15 +1043,20 @@ jobs:
             printf "**macOS** 已用 Developer ID 签名并公证，打开时不需要清除隔离属性。%s**Linux** 从 \`.deb\` 安装。\n\n" "$windows"
             printf '%s\n' '三个平台都能自更新：Linux 走自己的包，Windows 运行下一个安装器，macOS 替换自身 bundle。'
           } >> "$notes"
+          assets=()
+          for f in dist/*; do
+            [ "$(basename "$f")" = latest.json ] || assets+=("$f")
+          done
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file "$notes"
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" "${assets[@]}" --clobber
           else
-            gh release create "$TAG" dist/* \
+            decided="$(git tag -l 'studio-v*' | bash scripts/studio-release-flags.sh "$TAG" "$CANDIDATE")"
+            mapfile -t flags <<<"$decided"
+            gh release create "$TAG" "${assets[@]}" \
               --title "Reasonix Studio $VERSION" \
               --notes-file "$notes" \
-              --prerelease \
-              --latest=false
+              "${flags[@]}"
           fi
 
       - name: Mirror to R2 and update the Studio catalog

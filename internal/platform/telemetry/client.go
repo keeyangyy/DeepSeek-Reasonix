@@ -17,6 +17,7 @@ import (
 
 	"reasonix/internal/base/fileutil"
 	"reasonix/internal/base/netclient"
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 )
 
@@ -356,6 +357,7 @@ func (c *Client) post(ctx context.Context, path string, payload any) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	provider.ApplyClientIdentity(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err

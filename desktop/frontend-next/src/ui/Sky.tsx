@@ -114,7 +114,7 @@ export function Sky() {
       readTheme();
       if (still.matches || document.hidden) paint(false);
     });
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style"] });
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-pack", "style"] });
     still.addEventListener("change", sync);
     document.addEventListener("visibilitychange", sync);
     sync();

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
 	"sync/atomic"
 	"time"
 
@@ -216,7 +215,7 @@ func (c *capability) deltaTransport() (update.Transport, error) {
 	return update.Transport{
 		Client:         client,
 		Fallback:       v4,
-		UserAgent:      fmt.Sprintf("Reasonix-Studio/%s (%s/%s)", c.opts.Running, goruntime.GOOS, goruntime.GOARCH),
+		UserAgent:      update.UserAgent(c.opts.Running),
 		AttemptTimeout: deltaFetchWait,
 	}, nil
 }

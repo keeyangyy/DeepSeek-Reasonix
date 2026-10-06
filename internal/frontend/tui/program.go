@@ -40,6 +40,9 @@ type Options struct {
 	// CommandMode gives the composer a vi command mode: Esc enters command
 	// mode, a running turn or not, and only Ctrl+C interrupts.
 	CommandMode bool
+	// QuitCommands are the slash names that end the session, from the
+	// command catalogue the completion menu offers.
+	QuitCommands []string
 	// Statusline, when set, turns the footer's context JSON into one line
 	// that replaces the telemetry row; "" keeps the built-in row.
 	Statusline func(ctx context.Context, stdin string) string

@@ -643,7 +643,7 @@
   }
   .ws:hover { background: var(--overlay) }
   .ws:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
-  .ws[aria-selected="true"] { background: var(--overlay); border-left-color: var(--net) }
+  .ws[aria-selected="true"] { background: var(--overlay); border-left-color: var(--brand) }
   .ws[aria-selected="true"][data-s="awaiting"] { border-left-color: var(--accent) }
   .ws .goal { display: flex; align-items: baseline; gap: 7px; font: var(--w-med) var(--fs-ui)/1.45 var(--ui); color: var(--muted) }
 
@@ -1090,7 +1090,7 @@
 
   .hl .who {
     font: var(--w-med) var(--fs-micro) var(--mono); letter-spacing: var(--track-cap); padding: 1.5px 6px;
-    border-radius: var(--r-xs); color: var(--deleg); background: var(--deleg-wash);
+    border-radius: var(--r-xs); color: var(--label-agent); background: var(--label-agent-wash);
   }
 
   .cost { margin-left: auto; display: inline-flex; align-items: baseline; gap: 7px; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; flex: none }
@@ -1191,7 +1191,7 @@
   .tshots { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 0 2px 31px }
   .tshot { padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--sunk); overflow: hidden; cursor: zoom-in }
   .tshot img { display: block; max-width: 260px; max-height: 170px; object-fit: contain }
-  .tshot:hover { border-color: var(--net) }
+  .tshot:hover { border-color: var(--halo) }
   .tshot:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .tshot-full {
     position: fixed; inset: var(--chrome-h, 39px) 0 0; z-index: 60;
@@ -1332,12 +1332,12 @@
   .hit-row:hover { background: var(--overlay) }
   .hit-row .i { font: var(--w-reg) var(--fs-micro)/17px var(--mono); color: var(--ghost); text-align: right; font-variant-numeric: tabular-nums }
   .hit-row .t { font-size: var(--fs-ui); color: var(--text); line-height: 1.45 }
-  .hit-row .u { margin-top: 2px; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--net); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .hit-row .u { margin-top: 2px; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--link); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .hit-row .q { margin-top: 4px; font-size: var(--fs-ui); line-height: 1.55; color: var(--muted); border-left: 2px solid var(--border); padding-left: 8px }
 
   .nest { margin-top: 8px; border-left: 2px solid var(--deleg); overflow: hidden }
   .nest-hd { display: flex; align-items: center; gap: 9px; padding: 6px 11px; border-bottom: 1px solid var(--hair) }
-  .nest-hd .who { font: var(--w-med) var(--fs-ui) var(--ui); color: var(--deleg) }
+  .nest-hd .who { font: var(--w-med) var(--fs-ui) var(--ui); color: var(--label-agent) }
   .nest-hd .prof { font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint) }
   .nest-hd .doing { margin-left: auto; max-width: 46% }
   .nest-hd .rt { margin-left: 13px; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; flex: none }
@@ -1587,8 +1587,8 @@
   }
   .pane[data-intake="attach"] .compose { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent) }
   .pane[data-intake="attach"] .compose::after { border-color: var(--accent) }
-  .pane[data-intake="ref"] .compose { box-shadow: 0 0 0 3px color-mix(in srgb, var(--net) 22%, transparent) }
-  .pane[data-intake="ref"] .compose::after { border-color: var(--net) }
+  .pane[data-intake="ref"] .compose { box-shadow: 0 0 0 3px color-mix(in srgb, var(--halo) 22%, transparent) }
+  .pane[data-intake="ref"] .compose::after { border-color: var(--halo) }
   .pane[data-intake="insert"] .compose { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent) }
   .pane[data-intake="insert"] .compose::after { border-color: var(--ok) }
 
@@ -2072,7 +2072,7 @@
   .wallet .walletk:hover { color: var(--text) }
   .wallet .walletk:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px }
   .drow .v .up { color: var(--faint); font-weight: var(--w-reg) }
-  .lk { color: var(--net) }
+  .lk { color: var(--link) }
 
   .drow .v .rate { min-width: 112px }
 
@@ -3135,6 +3135,7 @@
   .probe-ok { margin: 8px 0 0; font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--ok) }
   .unit-field { display: flex; min-width: 0; align-items: stretch; border: 1px solid var(--border); border-radius: var(--r-xs); background: var(--raised); overflow: hidden }
   .unit-field:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+  .unit-field:has(input[aria-invalid="true"]) { border-color: var(--err) }
   .unit-field input { min-width: 0; width: 100%; border: 0 !important; outline: 0 !important; background: transparent !important }
   .unit-field > i { flex: none; display: flex; align-items: center; padding: 0 9px; border-left: 1px solid var(--hair); color: var(--faint); font: var(--w-reg) var(--fs-micro) var(--mono); font-style: normal }
   .addp-footer { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--hair) }
@@ -3911,7 +3912,7 @@
   .md th { color: var(--faint); font: var(--w-med) var(--fs-meta) var(--ui); border-bottom-color: var(--border) }
   .md td { color: var(--muted) }
   .md tr:last-child td { border-bottom: 0 }
-  .md a { color: var(--net); text-decoration: underline; text-underline-offset: 2px }
+  .md a { color: var(--link); text-decoration: underline; text-underline-offset: 2px }
   .md a:hover { color: var(--text) }
   .md a code, .out .txt a code { color: inherit }
   .md img { max-width: 100%; border-radius: var(--r-sm) }
@@ -4363,6 +4364,8 @@
   .onb-why { margin: 0; font: var(--w-reg) var(--fs-ui)/1.65 var(--ui); color: rgb(255 255 255 / .5) }
 
   .panes { position: relative; flex: 1; min-height: 0 }
+  .panes > .pane { transition: opacity var(--m-line) }
+  .panes[aria-busy="true"] > .pane[data-active] { opacity: .6; transition-delay: var(--t-card) }
   .pane {
     position: absolute; inset: 0; min-width: 0; min-height: 0;
     display: flex; flex-direction: column;
@@ -4512,6 +4515,7 @@
   .sessrow[data-on] { background: var(--raised); color: var(--text); font-weight: var(--w-med); box-shadow: inset 0 0 0 1px var(--hair), 0 3px 10px -8px rgb(0 0 0 / .5) }
   .sessrow[data-on] .sesstitle { font-weight: var(--w-med) }
   .sessrow[data-busy] { opacity: .55; pointer-events: none }
+  .sessrow[data-on][data-busy] { opacity: .8 }
   .sessrow .pip { flex: none; opacity: .35 }
   .sessrow[data-live] .pip { opacity: 1; background: var(--net) }
 
@@ -5459,8 +5463,8 @@
 }
 @media (hover: hover) {
   .uhero:hover, .utile:hover, .ucard:hover, .storage .item:hover {
-    border-color: color-mix(in srgb, var(--net) 22%, var(--border));
-    box-shadow: var(--lit), 0 16px 34px -30px color-mix(in srgb, var(--net) 30%, transparent);
+    border-color: color-mix(in srgb, var(--halo) 22%, var(--border));
+    box-shadow: var(--lit), 0 16px 34px -30px color-mix(in srgb, var(--halo) 30%, transparent);
   }
 }
 .ucard-h { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap }

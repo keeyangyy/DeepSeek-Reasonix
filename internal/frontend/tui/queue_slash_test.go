@@ -290,3 +290,41 @@ func TestRenameByIndexTitlesTheNthSavedSession(t *testing.T) {
 		t.Fatalf("out-of-range notice = %q", got)
 	}
 }
+
+// "/resume <n>" continues the nth saved session in place, as 1.x does; a bare
+// /resume still opens the picker.
+func TestResumeByIndexContinuesTheNthSavedSession(t *testing.T) {
+	m, k := queueModel(t, map[string]any{
+		"GET /sessions": []map[string]any{{"name": "a", "path": "/s/a.jsonl", "current": true}, {"name": "b", "path": "/s/b.jsonl"}},
+	})
+	queueSend(m, "/resume 2")
+	if !strings.Contains(k.seen(), `POST /resume {"path":"/s/b.jsonl"}`) {
+		t.Fatalf("resume did not target the second session:\n%s", k.seen())
+	}
+	if m.picker != nil {
+		t.Fatal("an indexed /resume must not open the picker")
+	}
+
+	queueSend(m, "/resume 1")
+	if got := queueLastNotice(m); got != "already in that session" {
+		t.Fatalf("current-session notice = %q", got)
+	}
+	queueSend(m, "/resume 9")
+	if got := queueLastNotice(m); !strings.Contains(got, "1–2") {
+		t.Fatalf("out-of-range notice = %q", got)
+	}
+	m.tr.Running = true
+	queueSend(m, "/resume 2")
+	m.tr.Running = false
+	if got := queueLastNotice(m); got != "finish or cancel the current turn before resuming" {
+		t.Fatalf("mid-turn notice = %q", got)
+	}
+	if n := strings.Count(k.seen(), "POST /resume"); n != 1 {
+		t.Fatalf("refused indexes still reached the kernel (%d resumes):\n%s", n, k.seen())
+	}
+
+	queueSend(m, "/resume")
+	if m.picker == nil {
+		t.Fatal("a bare /resume must open the picker")
+	}
+}

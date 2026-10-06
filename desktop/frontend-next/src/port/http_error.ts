@@ -24,3 +24,13 @@ export class HttpError extends Error {
     this.detailed = detailed;
   }
 }
+
+// A decision submit the kernel never answered within its bounded wait. The
+// request may or may not have landed, so the identity is the class itself:
+// a caller retries and the kernel's stale-decision refusal settles the rest.
+export class KernelBusyError extends Error {
+  constructor() {
+    super("kernel busy or unreachable");
+    this.name = "KernelBusyError";
+  }
+}

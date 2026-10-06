@@ -29,7 +29,8 @@ var claudeHookEvents = map[string]bool{
 }
 
 type claudeHookDocument struct {
-	Hooks map[string][]struct {
+	Modules json.RawMessage `json:"modules"`
+	Hooks   map[string][]struct {
 		Matcher string `json:"matcher"`
 		Match   string `json:"match"`
 		Hooks   []struct {
@@ -154,6 +155,17 @@ func appendClaudeHooksFile(root, rel string, manifest *Manifest) ([]string, []Co
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return compatibilityFailure("hooks", rel, err)
 	}
+	var warnings []string
+	var issues []CompatibilityIssue
+	if reason, declared := claudeModulesGap(raw.Modules); declared {
+		warnings = append(warnings, rel+": "+reason)
+		issues = append(issues, CompatibilityIssue{Capability: "modules", Path: rel, Reason: reason})
+	}
+	w, i := appendClaudeHookMap(rel, raw, manifest)
+	return append(warnings, w...), append(issues, i...)
+}
+
+func appendClaudeHookMap(rel string, raw claudeHookDocument, manifest *Manifest) ([]string, []CompatibilityIssue) {
 	if len(raw.Hooks) == 0 {
 		return nil, nil
 	}
@@ -267,6 +279,23 @@ func appendClaudeHooksFile(root, rel string, manifest *Manifest) ([]string, []Co
 		issues = append(issues, CompatibilityIssue{Capability: "hooks", Path: rel, Reason: gap.reason})
 	}
 	return uniqueSorted(warnings), issues
+}
+
+// claudeModulesGap reports a declared Claude Code "modules" list. Reasonix has
+// no JS/TS module host, so a declared module never runs; the reason carries no
+// package-controlled text.
+func claudeModulesGap(raw json.RawMessage) (string, bool) {
+	var list []json.RawMessage
+	if err := json.Unmarshal(raw, &list); err == nil {
+		if len(list) == 0 {
+			return "", false
+		}
+		return fmt.Sprintf("the package declares %d Claude Code module(s) that Reasonix cannot load, so they will never run", len(list)), true
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false
+	}
+	return "the package declares a Claude Code \"modules\" entry that is not a list; Reasonix cannot load modules, so they will never run", true
 }
 
 func appendUniqueHook(hooks []Hook, candidate Hook) []Hook {

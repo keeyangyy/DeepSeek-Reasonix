@@ -140,6 +140,9 @@ type machineEventRecord struct {
 	Error          bool               `json:"error,omitempty"`
 	RetryAttempt   int                `json:"retry_attempt,omitempty"`
 	RetryMax       int                `json:"retry_max,omitempty"`
+	RetryCause     string             `json:"retry_cause,omitempty"`
+	RetryStatus    int                `json:"retry_status,omitempty"`
+	RetryDelayMS   int64              `json:"retry_delay_ms,omitempty"`
 	CompactionType string             `json:"compaction_type,omitempty"`
 	CompactionMsgs int                `json:"compaction_messages,omitempty"`
 	GuardianResult string             `json:"guardian_result,omitempty"`
@@ -456,6 +459,9 @@ func (s *runOutputSink) machineEventRecordFor(e event.Event, sequence uint64) ma
 	case event.Retrying:
 		record.RetryAttempt = e.RetryAttempt
 		record.RetryMax = e.RetryMax
+		record.RetryCause = string(e.RetryCause)
+		record.RetryStatus = e.RetryStatus
+		record.RetryDelayMS = e.RetryDelayMs
 	}
 	return record
 }

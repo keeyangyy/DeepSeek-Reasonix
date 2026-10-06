@@ -126,7 +126,7 @@ func testModel(t *testing.T) (*model, *recordingKernel) {
 	k := &recordingKernel{}
 	srv := httptest.NewServer(k)
 	t.Cleanup(srv.Close)
-	m := newModel(context.Background(), Options{Client: &Client{HTTP: srv.Client(), Base: srv.URL}})
+	m := newModel(context.Background(), Options{Client: &Client{HTTP: srv.Client(), Base: srv.URL}, QuitCommands: []string{"/quit", "/exit"}})
 	// No stream in these tests: a closed channel answers the wait at once.
 	closed := make(chan Update)
 	close(closed)

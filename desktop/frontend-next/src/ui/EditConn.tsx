@@ -5,7 +5,7 @@ import { checkedFact, clearModelCheckFacts, ModelChoice, type ModelFact } from "
 import type { Port } from "./Providers";
 import { SAVED_NOT_APPLIED, reason } from "../i18n/kernel";
 import { HttpError } from "../port/port";
-import { THINKING, headerLines, parseEffortLevels, parseExtraBody, parseHeaders } from "./provider_compat";
+import { IDLE_TIMEOUT_MAX, IDLE_TIMEOUT_MIN, THINKING, headerLines, parseEffortLevels, parseExtraBody, parseHeaders, parseIdleTimeout } from "./provider_compat";
 import { ModelEfforts } from "./ModelEfforts";
 import type { ModelEffort, ModelLimit } from "../port/port";
 import { ModelLimits, limitTextOf, limitsToSend, type LimitText } from "./ModelLimits";
@@ -39,6 +39,8 @@ export function EditConn({
   const [more, setMore] = useState(declare);
   const [win, setWin] = useState(entry.contextWindow ? String(entry.contextWindow) : "");
   const [maxOut, setMaxOut] = useState(entry.maxOutputTokens ? String(entry.maxOutputTokens) : "");
+  const [idleText, setIdleText] = useState(entry.idleTimeoutSeconds ? String(entry.idleTimeoutSeconds) : "");
+  const idle = parseIdleTimeout(idleText);
   const [limitText, setLimitText] = useState<Record<string, LimitText>>(
     () => Object.fromEntries(Object.entries(entry.modelLimits ?? {}).map(([m, l]) => [m, limitTextOf(l)])),
   );
@@ -185,6 +187,7 @@ export function EditConn({
         vision: vision.filter((m) => picked.includes(m)),
         contextWindow: Number(win.replace(/\D/g, "")) || 0,
         maxOutputTokens: Number(maxOut.replace(/\D/g, "")) || 0,
+        idleTimeoutSeconds: idle.ok ? idle.secs : 0,
         reasoningProtocol: think,
         supportedEfforts: levels,
         defaultEffort: levels.includes(defEffort) ? defEffort : "",
@@ -293,7 +296,7 @@ export function EditConn({
             <small>{t("以及额外请求头、请求体。中转站的推理强度在这里声明")}</small>
           </span>
           <span className="summary-value">
-            {compatSummary(think, heads, extra, levels.length, picked.filter((m) => ownEfforts[m]?.supportedEfforts.length).length) || t("可选")}
+            {compatSummary(think, heads, extra, levels.length, picked.filter((m) => ownEfforts[m]?.supportedEfforts.length).length, idle.ok ? idle.secs : 0) || t("可选")}
           </span>
         </summary>
         {more && (
@@ -347,6 +350,26 @@ export function EditConn({
                 connProtocol={think}
               />
             )}
+            <label className="grow">
+              <span>{t("无响应超时")}</span>
+              <span className="unit-field">
+                <input
+                  aria-label={t("无响应超时")}
+                  data-action="provider.draft"
+                  data-value="idle-timeout"
+                  inputMode="numeric"
+                  value={idleText}
+                  placeholder={entry.idleTimeoutDefault ? t("默认 {n}", { n: entry.idleTimeoutDefault }) : t("默认")}
+                  aria-invalid={!idle.ok || undefined}
+                  onChange={(e) => setIdleText(e.target.value)}
+                />
+                <i>{t("秒")}</i>
+              </span>
+              <i className="tip">
+                {t("等待响应头、以及回包过程中无新内容超过这个时间，就按连接中断处理并重试。本地模型处理长上下文时可能需要调大。")}
+              </i>
+            </label>
+            {!idle.ok && <div className="why">{t("须是 {min} 到 {max} 之间的整数秒；留空使用默认值。", { min: IDLE_TIMEOUT_MIN, max: IDLE_TIMEOUT_MAX })}</div>}
             <label className="grow full">
               <span>{t("额外请求头")}</span>
               <textarea
@@ -385,7 +408,7 @@ export function EditConn({
       )}
 
       <div className="acts">
-        <button className="act" data-action="provider.save" data-primary onClick={save} disabled={busy !== "" || checkingModel !== "" || picked.length === 0 || extraBad}>
+        <button className="act" data-action="provider.save" data-primary onClick={save} disabled={busy !== "" || checkingModel !== "" || picked.length === 0 || extraBad || !idle.ok}>
           {t(saving ? "保存中…" : "保存")}
         </button>
         <button className="act" onClick={onDone} disabled={busy !== "" || checkingModel !== ""}>{t("取消")}</button>
@@ -424,12 +447,13 @@ function catalogDiff(before: string[], found: string[]) {
   };
 }
 
-function compatSummary(think: string, heads: string, extra: string, levels: number, ownModels: number): string {
+function compatSummary(think: string, heads: string, extra: string, levels: number, ownModels: number, idleSecs: number): string {
   const parts: string[] = [];
   const protocol = THINKING.find(([value]) => value === think);
   if (think && protocol) parts.push(t(protocol[1]));
   if (levels) parts.push(t("{n} 个档位", { n: levels }));
   if (ownModels) parts.push(t("{n} 个模型单独设置", { n: ownModels }));
+  if (idleSecs) parts.push(t("{n} 秒无响应超时", { n: idleSecs }));
   const headCount = Object.keys(parseHeaders(heads)).length;
   if (headCount) parts.push(t("{n} 个头", { n: headCount }));
   const body = parseExtraBody(extra);

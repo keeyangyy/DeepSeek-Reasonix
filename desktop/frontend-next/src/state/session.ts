@@ -18,16 +18,17 @@ import { askFromCall, promptOpen, prompted, sealByReceipt } from "./prompts";
 import { nameTurnStart, othersSteer } from "./turn_start";
 import { appendText, foldMessage, sealSay } from "./say";
 import { nextId } from "./ids";
+import { chipLabel, IDLE, RUNNING } from "./chip";
 import { foldStall } from "./stall";
 import { nameQueued } from "./queued";
 import { dropTool, foldLastRead, foldTool, isSubagentProgress, mergeReads, notePhase } from "./fold";
+export { chipLabel };
 export { quoteAmount };
 export { setShowsReceipt, showsReceipt };
 
 // doing is what the status chip prints. These two values are also read back by
 // the reducer, so they get a name: a comparison against a sentence is one copy
 // pass away from never matching again, and nothing fails when it stops.
-const RUNNING = "运行中";
 const WAITING_WORKSPACE = "等待工作区";
 // What the turn is doing between a tool finishing and the model's next packet.
 // The chip used to keep printing the tool that had already returned, so the
@@ -51,7 +52,7 @@ export const initialState: SessionState = {
     estimated: false, coverage: "none", incompleteReason: "", alt: null, turn: 0, rounds: [] },
   waiting: {},
   running: false,
-  doing: "空闲",
+  doing: IDLE,
   steerQueue: [], takenBack: [], subagentPhase: {},
   awaitingTurnStart: [],
   queueMoved: 0,
@@ -202,7 +203,7 @@ export type SessionEvent =
   | { kind: "__error"; text: string }
   | { kind: "__user"; text: string; pending: boolean; id?: string }
   | { kind: "__unsent"; id: string }
-  | { kind: "__queued"; id: string; itemId: string; queued: "steer" | "followup" }
+  | { kind: "__queued"; id: string; itemId: string; queued: "steer" | "followup"; paused?: boolean }
   | { kind: "__decided"; id: string; verdict?: string; answers?: string[][] }
   | { kind: "__forgot"; id: string }
   | { kind: "__runtime_seen"; id: string }
@@ -234,7 +235,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       items: [...s.items, { t: "user", id, text: ev.text, pending: ev.pending }],
     };
   }
-  if (ev.kind === "__queued") return nameQueued(s, ev.id, ev.itemId, ev.queued);
+  if (ev.kind === "__queued") return nameQueued(s, ev.id, ev.itemId, ev.queued, ev.paused);
   // A line the kernel never took is not part of what happened, so it leaves the
   // transcript rather than sitting there looking sent. Either name identifies
   // it: the row the composer minted, or the entry the kernel queued it as —
@@ -502,7 +503,11 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
             attempt: ev.retryAttempt ?? 0,
             max: ev.retryMax ?? 0,
             scope: ev.retryScope,
-            since: s.waiting.retry?.since ?? Date.now(),
+            cause: ev.retryCause,
+            status: ev.retryStatus,
+            delayMs: ev.retryDelayMs,
+            timeoutSecs: ev.retryTimeoutSecs,
+            since: Date.now(),
           },
         },
       };

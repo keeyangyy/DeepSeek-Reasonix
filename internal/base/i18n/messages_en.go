@@ -28,7 +28,8 @@ var English = Messages{
 	ReceiptChangedFmt:       "%d changed",
 	CompactionWhy: map[string]string{
 		"summary_failed":                   "The request that writes the summary failed",
-		"summary_timeout":                  "The request that writes the summary timed out",
+		"summary_timeout":                  "The request that writes the summary stalled: no output for 6 minutes",
+		"summary_ceiling":                  "The request that writes the summary was still running after 30 minutes and was stopped",
 		"summary_truncated":                "The summary was cut off at the output limit and was not used",
 		"summary_input_too_large":          "The content to fold still exceeds one summary request after shortening",
 		"hook_refused":                     "An extension refused this fold",

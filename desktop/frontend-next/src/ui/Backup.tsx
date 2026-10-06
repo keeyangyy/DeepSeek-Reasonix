@@ -15,6 +15,12 @@ const CATEGORY_NOTE: Record<BackupCategory, string> = {
 // Shown only to a signed-in account: a backup lives in the account, so there
 // is nothing to offer before one exists.
 export function Backup({ port }: { port: AgentPort }) {
+  const [connection, setConnection] = useState({ port, generation: 0 });
+  if (connection.port !== port) setConnection({ port, generation: connection.generation + 1 });
+  return <BackupInput key={connection.generation} port={port} />;
+}
+
+function BackupInput({ port }: { port: AgentPort }) {
   const [catalog, setCatalog] = useState<BackupCatalog | null>(null);
   const [error, setError] = useState("");
   const [chosen, setChosen] = useState<Set<BackupCategory>>(new Set());
@@ -171,7 +177,7 @@ export function Backup({ port }: { port: AgentPort }) {
         </ul>
       )}
 
-      {restoring && <BackupRestore port={port} backup={restoring} onClose={() => setRestoring(null)} />}
+      {restoring && <BackupRestore key={restoring.id} port={port} backup={restoring} onClose={() => setRestoring(null)} />}
     </div>
   );
 }

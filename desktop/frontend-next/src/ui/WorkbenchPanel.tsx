@@ -152,6 +152,7 @@ export function WorkbenchPanel({
   // surface steps the list aside.
   const pick = useCallback((key: string) => {
     setShowFiles(false);
+    setFailed("");
     setSelected(key);
   }, []);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set()),
@@ -469,7 +470,10 @@ export function WorkbenchPanel({
     else if (surface.kind === "file")
       setOpenFiles((v) => v.filter((p) => p !== surface.path));
     else setDismissed((v) => new Set(v).add(key));
-    if (selected === key) setSelected("");
+    if (selected === key) {
+      setSelected("");
+      setFailed("");
+    }
     if (!showFiles && surfaces.every((s) => keyOf(s) === key)) onCloseManual();
   };
   const save = async () => {
@@ -554,6 +558,11 @@ export function WorkbenchPanel({
       </header>
       <div className="workbench-body" data-files={showFiles ? "" : undefined}>
         <main className="workbench-canvas">
+          {failed && active?.kind !== "file" && (
+            <div className="workbench-error" role="alert">
+              {failed}
+            </div>
+          )}
           {!active && (
             <div className="workbench-empty">
               <StudioIcon name="file" />

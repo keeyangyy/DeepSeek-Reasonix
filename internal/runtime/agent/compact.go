@@ -52,10 +52,6 @@ const (
 	SummaryTagClose = "</compaction-summary>"
 )
 
-// summaryTimeout bounds one summarizer call so a stalled stream surfaces a clear
-// failure (then a mechanical fold) instead of hanging compaction indefinitely.
-const summaryTimeout = 90 * time.Second
-
 // summarySystemPrompt asks for a structured resume briefing (facts, goal,
 // decisions, files, commands, errors, next step) under fixed headings.
 const summarySystemPrompt = `You are compacting the earlier part of a coding agent's conversation to save context.
@@ -617,10 +613,16 @@ func charsOfMessages(msgs []provider.Message) int {
 // Named returns so defer can attach RequestCount and still return usage.
 func (a *contextWindow) summarize(ctx context.Context, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
 	parent := ctx
-	ctx, cancel := context.WithTimeout(ctx, summaryTimeout)
+	bounds := SummaryBounds
+	ctx, cancel := context.WithTimeoutCause(ctx, bounds.Ceiling, errSummaryCeiling)
 	defer cancel()
 	ctx = provider.WithRequestAttemptCounter(ctx)
-	defer func() { err = classifySummaryError(parent, err) }()
+	defer func() {
+		if err != nil && parent.Err() == nil && errors.Is(context.Cause(ctx), errSummaryCeiling) {
+			err = summaryCeilingHit(bounds.Ceiling)
+		}
+		err = classifySummaryError(parent, err)
+	}()
 	sys := summarySystemPrompt
 	if strings.TrimSpace(instructions) != "" {
 		sys += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + strings.TrimSpace(instructions)
@@ -667,13 +669,17 @@ func (a *contextWindow) summarize(ctx context.Context, region []provider.Message
 		return "", usage, err
 	}
 
-	// Unblock on timeout if the stream stalls while open.
 	var b strings.Builder
+	idle := time.NewTimer(bounds.Idle)
+	defer idle.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return "", usage, ctx.Err()
+		case <-idle.C:
+			return "", usage, summaryStalled(bounds.Idle)
 		case chunk, ok := <-ch:
+			idle.Reset(bounds.Idle)
 			if !ok {
 				if usage != nil && usage.FinishReason == "length" {
 					return "", usage, fmt.Errorf("%w: provider reached the output token limit", errSummaryOutputTruncated)

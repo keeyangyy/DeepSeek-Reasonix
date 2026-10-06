@@ -44,6 +44,45 @@ describe("queued submission and withdrawal", () => {
     await waitFor(() => expect(box().value).toBe(draft && draft !== BODY ? `${draft}\n${BODY}` : BODY));
   });
 
+  it("says the queue is paused when a line lands in a held queue, and says it once", async () => {
+    const port = await open();
+    vi.spyOn(port, "steer").mockImplementation(async (text) => ({ ...(await port.queueFollowup(text)), paused: true }));
+    type(BODY);
+    fireEvent.click(screen.getByRole("button", { name: "插话" }));
+    await screen.findByText("待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送");
+    expect(box().value).toBe("");
+    type("Second");
+    fireEvent.click(screen.getByRole("button", { name: "插话" }));
+    await waitFor(() => expect(port.steer).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+    expect(screen.getAllByText("待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送")).toHaveLength(1);
+  });
+
+  it("says the queue is paused when an idle skill send is held by it", async () => {
+    const port = new MockPort();
+    render(<Pane {...props} port={port} />);
+    vi.spyOn(port, "submit").mockResolvedValue({ itemId: "chip-1", disposition: "queued_followup", paused: true });
+    await waitFor(() => expect(box()).toBeTruthy());
+    type("先看一下 /in");
+    await screen.findByRole("option", { name: /init/ });
+    fireEvent.keyDown(box(), { key: "Enter" });
+    await waitFor(() => expect(box().value).toBe("先看一下 /init "));
+    type("先看一下 /init 再说");
+    fireEvent.keyDown(box(), { key: "Enter" });
+    await screen.findByText("待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送");
+    expect(box().value).toBe("");
+  });
+
+  it("stays quiet when the queue is not paused", async () => {
+    const port = await open();
+    vi.spyOn(port, "steer").mockResolvedValue({ itemId: "steer-1", disposition: "steer_accepted" });
+    type(BODY);
+    fireEvent.click(screen.getByRole("button", { name: "插话" }));
+    await waitFor(() => expect(port.steer).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByText("待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送")).toBeNull();
+  });
+
   it("keeps accepted steering out of the composer", async () => {
     const port = await open();
     vi.spyOn(port, "steer").mockResolvedValue({ itemId: "steer-1", disposition: "steer_accepted" });

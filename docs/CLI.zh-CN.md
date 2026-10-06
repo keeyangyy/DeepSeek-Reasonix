@@ -512,7 +512,7 @@ SSH 下远端进程无法读取本机剪贴板，请使用终端粘贴快捷键�
 | --- | --- |
 | `/model` | 搜索已配置模型并切换当前模型。 |
 | `/provider` | 选择 provider，再选择该 provider 下的模型。 |
-| `/resume` | 搜索最近会话并切换。 |
+| `/resume [n]` | 搜索最近会话并切换；`/resume <n>` 直接切换到列表中第 n 个会话。 |
 | `/status` | 显示模型、effort、cache、Git、后台任务，以及执行设定或余额信息。 |
 | `/preset [balanced\|delivery]` | 查看或切换 Agent 执行设定（不重建 Controller）；`/work-mode` 与 `/profile` 为兼容别名，`economy`、`light` 都解析为 `balanced`。 |
 | `/theme [auto\|light\|dark\|style]` | 查看或切换 CLI 背景模式和强调色。 |

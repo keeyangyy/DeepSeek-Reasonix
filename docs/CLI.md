@@ -601,7 +601,7 @@ the displayed list matches the commands the TUI accepts.
 | --- | --- |
 | `/model` | Search configured models and switch the active model. |
 | `/provider` | Choose a provider, then choose one of its configured models. |
-| `/resume` | Search recent sessions and switch to one. |
+| `/resume [n]` | Search recent sessions and switch to one; `/resume <n>` switches to the nth session of that list directly. |
 | `/status` | Show model, effort, cache, Git, background jobs, and execution setting or balance details. |
 | `/preset [balanced\|delivery]` | View or change the agent execution setting without rebuilding the controller. `/work-mode` and `/profile` remain compatibility aliases; `economy` and `light` resolve to `balanced`. |
 | `/theme [auto\|light\|dark\|style]` | View or change the CLI background mode and accent palette. |

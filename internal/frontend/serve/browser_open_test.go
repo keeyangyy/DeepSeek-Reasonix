@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -92,5 +95,51 @@ func TestBrowserOpenNamesTheTabAFailedNavigationLeftBehind(t *testing.T) {
 	}
 	if tabs := session.Tabs(); len(tabs) != 1 {
 		t.Fatalf("tabs = %+v, want the failed page's tab to exist", tabs)
+	}
+}
+
+func TestBrowserOpenSaysWhichEngineFailureRefusedIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a shell script that exits at once")
+	}
+	// The child that outlives the script keeps the debugging pipe open, so the
+	// exit is observed before the connection error that asks why it failed.
+	exits := filepath.Join(t.TempDir(), "browser")
+	if err := os.WriteFile(exits, []byte("#!/bin/sh\nsleep 1 &\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	locked := t.TempDir()
+	if err := os.WriteFile(filepath.Join(locked, "SingletonLock"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		code string
+		spec browser.LaunchSpec
+	}{
+		{"browser.engine_missing", browser.LaunchSpec{Executable: filepath.Join(t.TempDir(), "no-such-browser"), ProfileDir: t.TempDir()}},
+		{"browser.engine_failed", browser.LaunchSpec{Executable: exits, ProfileDir: t.TempDir()}},
+		{"browser.profile_busy", browser.LaunchSpec{Executable: exits, ProfileDir: locked}},
+	}
+	for _, c := range cases {
+		t.Run(c.code, func(t *testing.T) {
+			session := browser.NewSession(browser.Config{Launch: c.spec, Pool: &browser.Pool{}})
+			ctrl := control.New(control.Options{BrowserSession: session})
+			t.Cleanup(ctrl.Close)
+			srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
+			t.Cleanup(srv.Close)
+
+			resp, err := http.Post(srv.URL+"/browser/open", "application/json", strings.NewReader(`{"url":"about:blank","newTab":true}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var reason Reason
+			if err := json.NewDecoder(resp.Body).Decode(&reason); err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != http.StatusBadRequest || reason.Code != c.code {
+				t.Fatalf("POST /browser/open = %d %+v, want %s", resp.StatusCode, reason, c.code)
+			}
+		})
 	}
 }

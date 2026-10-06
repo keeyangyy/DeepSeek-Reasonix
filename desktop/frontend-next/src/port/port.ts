@@ -1,6 +1,6 @@
-import { HttpError } from "./http_error";
+import { HttpError, KernelBusyError } from "./http_error";
 import type { Attachment, DroppedRef } from "./attachment";
-export { HttpError };
+export { HttpError, KernelBusyError };
 export type { Attachment, DroppedRef };
 
 import type { AccountState, AccountUser, DeviceGrant } from "./account";
@@ -85,6 +85,9 @@ export interface ChipCall {
 export interface Queued {
   itemId: string;
   disposition?: string;
+  // The queue was held when the line arrived: it waits there as a follow-up and
+  // nothing dispatches it until the queue is resumed.
+  paused?: boolean;
 }
 
 /** GET /inbox. What is actually waiting, kernel-side. The optimistic rows this
@@ -474,7 +477,7 @@ export interface AgentPort {
 
   // chips carries skill chips beside the line; without it the line is parsed
   // as typed, so a kernel that predates chips still runs a leading one.
-  submit(text: string, chips?: ChipCall): Promise<void>;
+  submit(text: string, chips?: ChipCall): Promise<Queued | void>;
   // /submit 409s once a turn holds the session. Mid-turn input is durable and
   // goes through the inbox, which delivers it at the next tool boundary. The
   // receipt is what makes it cancellable while it waits there.

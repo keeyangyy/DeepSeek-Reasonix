@@ -77,3 +77,12 @@ describe("refining a prompt before it is sent", () => {
     expect(container.querySelector(".refine-card")).toBeNull();
   });
 });
+
+describe("the refine button's tooltip", () => {
+  it("is still rendered while the button is disabled, so the control explains itself", () => {
+    const { refine } = draw(async () => "x");
+    expect(refine.disabled).toBe(true);
+    const tip = refine.querySelector('[role="tooltip"]');
+    expect(tip?.textContent).toContain("Ctrl+Shift+E");
+  });
+});

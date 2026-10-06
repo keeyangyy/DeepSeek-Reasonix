@@ -51,6 +51,7 @@ var leaves = []string{
 	"internal/safety/redirectguard",
 	"internal/platform/releaseasset",
 	"internal/base/retrieval",
+	"internal/base/scratch",
 	"internal/base/shellparse",
 	"internal/state/store",
 	"internal/state/observation",

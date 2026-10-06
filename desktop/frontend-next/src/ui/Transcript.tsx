@@ -1,10 +1,10 @@
 import { Fragment, memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type RefObject, type SetStateAction } from "react";
-import { decimals } from "../i18n/format";
 import { t } from "../i18n";
 import type { Item, Waiting } from "../state/session";
 import type { ExtensionSurface } from "../port/wire";
 import type { ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../port/port";
 import { RMark } from "./RMark";
+import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
 import { GuardianCard } from "./cards/GuardianCard";
 import { ApprovalCard, type PlanAction } from "./cards/ApprovalCard";
@@ -716,42 +716,6 @@ const Row = memo(function Row({
     </div>
   );
 });
-
-// Counted from the stamp the wait carries rather than from this component's
-// mount: a retry landing in a wait already on screen has to restart the clock,
-// and a tick that only ever added 0.1 drifted from the time it claimed.
-function Await({ since, retry }: { since: number; retry?: Waiting["retry"] }) {
-  const start = retry?.since ?? since;
-  const [secs, setSecs] = useState(() => (Date.now() - start) / 1000);
-  useEffect(() => {
-    const tick = () => setSecs((Date.now() - start) / 1000);
-    tick();
-    const t = setInterval(tick, 100);
-    return () => clearInterval(t);
-  }, [start]);
-  return (
-    <div className="await" data-retry={retry ? "" : undefined}>
-      <i />
-      <i />
-      <i />
-      <span className="t">
-        {/* Which half broke is the kernel's to say, not this window's to guess:
-            never getting an answer and losing one already being written out
-            read nothing alike. */}
-        {retry
-          ? t(
-              retry.scope === "headers"
-                ? "连接在响应头前断了，重试 {attempt}/{max} · {secs}s"
-                : retry.scope === "stream"
-                  ? "回包写到一半断了，重放 {attempt}/{max} · {secs}s"
-                  : "连接已断开，重试 {attempt}/{max} · {secs}s",
-              { attempt: retry.attempt, max: retry.max, secs: decimals(secs, 1) },
-            )
-          : t("等待回包 {secs}s", { secs: decimals(secs, 1) })}
-      </span>
-    </div>
-  );
-}
 
 interface HeroProps {
   needsProject: boolean;

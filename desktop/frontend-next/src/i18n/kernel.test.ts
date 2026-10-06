@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { boot, STORAGE } from "./index";
 import { ACCOUNT_SIGNIN_DISABLED, PROVIDER_EDIT_DISABLED, SAVED_NOT_APPLIED, codes, reason } from "./kernel";
-import { HttpError } from "../port/port";
+import { HttpError, KernelBusyError } from "../port/port";
 
 // Pinned, not defaulted: with nothing stored the window follows the machine, so
 // on an English runner every assertion about a Chinese sentence would be about
@@ -77,6 +77,11 @@ describe("what a reader is told a refusal was", () => {
     const said = reason(new HttpError(502, "/skills/enabled: 502", undefined, false));
     expect(said).toBe("请求未能送达内核（HTTP 502）");
     expect(said).not.toContain("/skills/enabled");
+  });
+
+  it("names a decision the kernel never answered as busy or unreachable", () => {
+    const said = reason(new KernelBusyError());
+    expect(said).toBe("内核繁忙或无法连接，这次回答可能没有被收到，重试前请先确认");
   });
 
   it("keeps a detailed answer the kernel had no code for", () => {

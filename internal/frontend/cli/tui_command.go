@@ -126,6 +126,7 @@ func runTUI(args []string, version string) int {
 		HideTurnUsage: cfg != nil && !cfg.UI.ShowTurnUsage,
 		AutoSubmit:    cfg != nil && cfg.AutoSubmit,
 		CommandMode:   cfg != nil && cfg.UICommandMode(),
+		QuitCommands:  builtinSlashNames("/quit"),
 		Statusline:    statuslineRunner(cfg),
 	})
 	if err != nil {

@@ -314,13 +314,12 @@ func (h *Hub) openRemoteRuntime(w http.ResponseWriter, r *http.Request) {
 		refuseNoRemote(w)
 		return
 	}
-	// A disabled machine is not dialed: the row only exists to be turned back
-	// on, and reaching it would be the one thing the switch promises not to do.
-	if cfg, err := config.Load(); err == nil {
-		if entry, ok := cfg.RemoteHost(req.Host); ok && !entry.IsEnabled() {
-			refuse(w, http.StatusConflict, "remote.disabled", "this machine is turned off in the host book", map[string]any{"host": req.Host})
-			return
-		}
+	if err := h.remoteHostDialable(req.Host); errors.Is(err, errRemoteDisabled) {
+		refuse(w, http.StatusConflict, "remote.disabled", "this machine is turned off in the host book", map[string]any{"host": req.Host})
+		return
+	} else if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
 	}
 	ep, release, err := h.opts.Remote.Attach(operationContext(r), req.Host, req.Workspace)
 	if err != nil {

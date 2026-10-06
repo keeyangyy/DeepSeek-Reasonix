@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { fromHistory, initialState, reduce, type Item, type SessionEvent, type SessionState } from "./session";
+import { describe, expect, it, vi } from "vitest";
+import { chipLabel, fromHistory, initialState, reduce, type Item, type SessionEvent, type SessionState } from "./session";
 import type { HistoryMessage } from "../port/port";
 
 // vitest runs these in Node, where there is no localStorage. The preference
@@ -222,6 +222,18 @@ describe("a line that is still queued", () => {
   const queued = (id: string, itemId: string, kind: "steer" | "followup"): SessionEvent =>
     ({ kind: "__queued", id, itemId, queued: kind }) as SessionEvent;
 
+  it("raises one held-queue notice per window, and only for a paused receipt", () => {
+    const held = (id: string, itemId: string): SessionEvent =>
+      ({ kind: "__queued", id, itemId, queued: "followup", paused: true }) as SessionEvent;
+    const plain = run([typed("row-1", "a"), queued("row-1", "inbox-1", "steer")]);
+    expect(plain.runtime).toEqual([]);
+    const st = run([typed("row-1", "a"), held("row-1", "inbox-1"), typed("row-2", "b"), held("row-2", "inbox-2")]);
+    expect(st.runtime.map((n) => n.code)).toEqual(["queue_paused_hold"]);
+    const gone = run([typed("row-1", "a"), held("row-1", "inbox-1")]);
+    const after = reduce(reduce(gone, { kind: "__runtime_seen", id: gone.runtime[0].id } as SessionEvent), held("row-1", "inbox-1"));
+    expect(after.runtime).toHaveLength(1);
+  });
+
   // The row is on screen before the kernel has answered. The receipt is what
   // gives it a name to be taken back by, and without it the card has a button
   // it cannot press.
@@ -403,10 +415,44 @@ describe("the retry line", () => {
     expect(s.waiting.retry?.attempt).toBe(1);
   });
 
-  it("times the stall from its first attempt, not its latest", () => {
-    const first = run([started(), retrying(1, "stream")]);
-    const second = reduce(first, retrying(2, "stream"));
-    expect(second.waiting.retry?.since).toBe(first.waiting.retry?.since);
+  // The notice fires when an attempt fails, so the clock it starts is the next
+  // attempt's wait: a counter that carried over would claim the whole stall as
+  // one wait.
+  it("restarts the clock for each attempt", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1000);
+      const first = run([started(), retrying(1, "headers")]);
+      vi.setSystemTime(61_000);
+      const second = reduce(first, retrying(2, "headers"));
+      expect(first.waiting.retry?.since).toBe(1000);
+      expect(second.waiting.retry?.since).toBe(61_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("carries the failure class, backoff and answer bound the kernel sent", () => {
+    const s = run([
+      started(),
+      {
+        kind: "retrying",
+        retryAttempt: 1,
+        retryMax: 10,
+        retryScope: "headers",
+        retryCause: "upstream_status",
+        retryStatus: 502,
+        retryDelayMs: 1250,
+        retryTimeoutSecs: 300,
+      } as SessionEvent,
+    ]);
+    expect(s.waiting.retry).toMatchObject({ cause: "upstream_status", status: 502, delayMs: 1250, timeoutSecs: 300 });
+  });
+
+  it("leaves the class unset for a kernel that does not send one", () => {
+    const s = run([started(), retrying(1, "headers")]);
+    expect(s.waiting.retry?.cause).toBeUndefined();
+    expect(s.waiting.retry?.delayMs).toBeUndefined();
   });
 
   it("comes down when the turn ends", () => {
@@ -618,5 +664,24 @@ describe("a receipt that arrives after the delivery it is for", () => {
 
   it("still names a line the kernel has not delivered yet", () => {
     expect(users(run([sent, receipt]))[0]).toMatchObject({ pending: true, itemId: "it1" });
+  });
+});
+
+describe("chipLabel", () => {
+  it("says the turn is running for a client that joined after turn_started", () => {
+    expect(chipLabel(initialState, true)).toBe("运行中");
+    const done = run([{ kind: "turn_started" } as SessionEvent, { kind: "turn_done" } as SessionEvent]);
+    expect(chipLabel(done, true)).toBe("运行中");
+  });
+
+  it("keeps what the stream says once it has said something", () => {
+    const s = reduce(initialState, { kind: "tool_dispatch", tool: { id: "t1", name: "bash" } } as SessionEvent);
+    expect(chipLabel(s, true)).toBe("bash");
+  });
+
+  it("leaves a settled turn and a live one alone", () => {
+    expect(chipLabel(initialState, false)).toBe("空闲");
+    const live = run([{ kind: "turn_started" } as SessionEvent]);
+    expect(chipLabel(live, true)).toBe(live.doing);
   });
 });

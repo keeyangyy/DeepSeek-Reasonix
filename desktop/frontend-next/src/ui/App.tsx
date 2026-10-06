@@ -30,6 +30,9 @@ import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
+import { useSessionSwitch } from "./sessionswitch";
+import { singleFlight } from "./singleflight";
+import { useOpenPane } from "./useOpenPane";
 import { markSettled } from "../boot/gate";
 
 // Start fetching the settings chunk with the shell instead of waiting for the
@@ -58,10 +61,6 @@ const NO_REPORT: PaneReport = {
   wallet: "",
 };
 const PINNED_SESSIONS_KEY = "reasonix:pinned-sessions";
-// Keep a small warm set for instant back-and-forth switching. Older settled
-// panes are cheap to restore from disk and expensive to leave mounted: every
-// hidden pane retains a transcript, observers and markdown tree.
-const WARM_PANES = 4;
 
 function savedPins(): Set<string> {
   try {
@@ -123,6 +122,7 @@ export function App({ hub }: { hub: HubPort }) {
   // is still working. Read through a ref by the report handler, which must stay
   // stable or each frame would re-render every pane.
   const [runs, setRuns] = useState<Record<string, { run: string; live: boolean }>>({});
+  const sw = useSessionSwitch();
   const activeRef = useRef("");
   activeRef.current = active;
   useEffect(() => rememberActivePane(active), [active]);
@@ -188,6 +188,7 @@ export function App({ hub }: { hub: HubPort }) {
     await reloadTree();
     void reloadRemoteTrees();
   }, [hub, reloadTree, reloadRemoteTrees]);
+  const refreshPanes = useMemo(() => singleFlight(reloadPanes), [reloadPanes]);
 
   useEffect(() => {
     void reloadPanes();
@@ -233,13 +234,14 @@ export function App({ hub }: { hub: HubPort }) {
       try {
         const view = await hub.openRemote({ host, workspace, sessionPath });
         await reloadPanes();
+        sw.cancel();
         setActive(view.id);
       } finally {
         setOpening((n) => n - 1);
         void reloadRemotes();
       }
     },
-    [hub, reloadPanes, reloadRemotes],
+    [hub, reloadPanes, reloadRemotes, sw.cancel],
   );
 
   // One port per pane, held across renders — a fresh instance would resubscribe
@@ -315,7 +317,13 @@ export function App({ hub }: { hub: HubPort }) {
   // A transcript can be thousands of pixels tall. Capturing it into a View
   // Transition made a simple sidebar click pay for a full-page texture before
   // the active id changed. Selection feedback should be immediate.
-  const focusPane = useCallback((id: string) => setActive(id), []);
+  const focusPane = useCallback(
+    (id: string) => {
+      sw.cancel();
+      setActive(id);
+    },
+    [sw.cancel],
+  );
   // Settings is the next layer over the whole screen and had entry but no exit: it
   // simply vanished on unmount. A view transition can animate out an element that
   // is absent from the new state, so the tree need not stay mounted.
@@ -328,64 +336,7 @@ export function App({ hub }: { hub: HubPort }) {
     void reloadRemotes();
   }, [reloadRemotes]);
 
-  const openPane = useCallback(
-    async (req: { root?: string; sessionPath?: string }) => {
-      // Blank means never written to and not working: a new session mid-turn has
-      // no path in a stale pane list yet, and taking it over would hide its run.
-      const blank = runtimes.find(
-        (rt) => !rt.sessionPath && !reportsRef.current[rt.id]?.status?.sessionPath && !runsRef.current[rt.id]?.live,
-      );
-      // Asking for a new session when an unused one is already open in that
-      // folder: it is the pane being asked for. Rebuilding it would cost a full
-      // assembly to arrive back where we started.
-      if (blank && !req.sessionPath && blank.root === req.root) {
-        focusPane(blank.id);
-        return;
-      }
-      // Same folder: the pane just rebinds, so nothing is torn down and a draft
-      // in its composer survives. The kernel refuses a path from another
-      // project's session dir, which is why the root has to match.
-      if (blank && req.sessionPath && blank.root === req.root) {
-        await panePorts.get(blank.id)?.resume(req.sessionPath);
-        setTakeover((prev) => ({ ...prev, [blank.id]: (prev[blank.id] ?? 0) + 1 }));
-        focusPane(blank.id);
-        void reloadPanes();
-        return;
-      }
-      // One visible pane plus live background work is the product model. Keep a
-      // few settled panes warm for quick backtracking, then reuse the oldest
-      // idle pane in the same workspace instead of accumulating full hidden
-      // transcripts until the kernel refuses another open.
-      const idle = runtimes.filter((rt) => rt.id !== active && !runsRef.current[rt.id]?.live);
-      const atCapacity = runtimes.length >= WARM_PANES;
-      const reusable = atCapacity && req.sessionPath
-        ? idle.find((rt) => rt.root === req.root && panePorts.has(rt.id))
-        : undefined;
-      if (reusable && req.sessionPath) {
-        await panePorts.get(reusable.id)?.resume(req.sessionPath);
-        setTakeover((prev) => ({ ...prev, [reusable.id]: (prev[reusable.id] ?? 0) + 1 }));
-        focusPane(reusable.id);
-        void reloadPanes();
-        return;
-      }
-      // A different workspace cannot be resumed into the same runtime. Retire
-      // one settled background pane before opening so the row never reaches the
-      // old "nothing happens" max-pane failure.
-      let retired = "";
-      if (atCapacity && idle[0]) {
-        retired = idle[0].id;
-        await hub.close(retired);
-      }
-      const rt = await hub.open(req);
-      // Another folder needs its own runtime, so the blank one is retired
-      // rather than left behind.
-      if (blank && blank.id !== rt.id) await hub.close(blank.id);
-      setRuntimes((prev) => [...prev.filter((pane) => pane.id !== rt.id && pane.id !== blank?.id && pane.id !== retired), rt]);
-      focusPane(rt.id);
-      void reloadPanes();
-    },
-    [hub, reloadPanes, runtimes, panePorts, focusPane, active],
-  );
+  const openPane = useOpenPane({ hub, runtimes, panePorts, active, reportsRef, runsRef, setRuntimes, setActive, setTakeover, reloadPanes: refreshPanes, sw });
 
   // Awaitable because deleting a conversation has to close its pane first and
   // then wait: the kernel refuses to erase a transcript its runtime still holds,
@@ -643,6 +594,7 @@ export function App({ hub }: { hub: HubPort }) {
           readRemoteTree={readRemoteTree}
           reloadTree={reloadTree}
           adder={adder}
+          opening={sw.path}
           onOpen={openPane}
           onOpenRemote={openRemotePane}
           onFocusPane={focusPane}
@@ -685,7 +637,7 @@ export function App({ hub }: { hub: HubPort }) {
             />
           )}
 
-          <div className="panes">
+          <div className="panes" aria-busy={sw.pending || undefined}>
             {runtimes.map((rt) => {
               const port = panePorts.get(rt.id);
               return port ? (
@@ -703,7 +655,7 @@ export function App({ hub }: { hub: HubPort }) {
                   // Panes, not just the tree: the first turn gives this pane a
                   // session path, and until /runtimes reports it the pane still
                   // looks blank — the next history row would take it over.
-                  onSessionChanged={reloadPanes}
+                  onSessionChanged={refreshPanes}
                   pulse={settingsPulse}
                   findPulse={findPulse}
                   alert={rt.id === active ? (errorBar ?? undefined) : undefined}

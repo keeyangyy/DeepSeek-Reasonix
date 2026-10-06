@@ -29,7 +29,8 @@ var Chinese = Messages{
 	ReceiptChangedFmt:       "改动 %d 个文件",
 	CompactionWhy: map[string]string{
 		"summary_failed":                   "生成摘要的请求失败了",
-		"summary_timeout":                  "生成摘要的请求超时了",
+		"summary_timeout":                  "生成摘要的请求停滞了：连续 6 分钟没有任何输出",
+		"summary_ceiling":                  "生成摘要的请求运行满 30 分钟仍未完成，已停止",
 		"summary_truncated":                "摘要在输出上限处被截断，没有采用",
 		"summary_input_too_large":          "待折叠的内容缩减后仍超过单次摘要请求的容量",
 		"hook_refused":                     "扩展拒绝了这次折叠",

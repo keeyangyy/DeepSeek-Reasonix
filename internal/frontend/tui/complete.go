@@ -150,12 +150,14 @@ func (m *model) menuKey(k string) (tea.Cmd, bool) {
 	}
 	n := len(m.menu.c.Items)
 	switch k {
-	case "tab", "down":
+	case "down":
 		m.menu.sel = (m.menu.sel + 1) % n
-	case "shift+tab", "up":
+	case "up":
 		m.menu.sel = (m.menu.sel + n - 1) % n
 	case "esc":
 		m.menu = nil
+	case "tab":
+		return m.acceptCompletion(), true
 	case "enter":
 		if m.menuChoiceTyped() {
 			m.menu = nil

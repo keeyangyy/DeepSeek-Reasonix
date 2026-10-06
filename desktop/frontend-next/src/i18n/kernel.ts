@@ -1,4 +1,4 @@
-import { HttpError } from "../port/port";
+import { HttpError, KernelBusyError } from "../port/port";
 import { t } from "./index";
 
 // What the kernel says when it refuses, in the language the reader uses.
@@ -131,6 +131,7 @@ const SAID: Record<string, string> = {
   "provider.bad_context_window": "上下文长度不能是负数；填 0 表示不自动压缩",
   "provider.bad_token_limit": "Token 上限不能是负数",
   "provider.bad_max_output_tokens": "最大输出 Token 不能是负数",
+  "provider.bad_idle_timeout": "无响应超时须在 {min} 到 {max} 秒之间；留空使用默认值",
   "provider.bad_reasoning_protocol": "无法识别「{protocol}」这种思考协议",
   "provider.default_effort_not_listed": "默认档位「{level}」不在填写的档位里",
   "provider.model_default_effort_not_listed": "{model} 的默认档位「{level}」不在为它选的档位里",
@@ -151,6 +152,9 @@ const SAID: Record<string, string> = {
   // ── 来源：连接与授权 ─────────────────────────────────────────────
   "provider.editing_disabled": "这台服务器不允许修改模型来源",
   "browser.open_failed": "打不开这个网页：{error}",
+  "browser.engine_missing": "没有找到可用的浏览器。请安装 Chrome、Edge 或 Chromium，或在配置里用 [browser] executable 指定路径，新会话才会读到",
+  "browser.engine_failed": "内置浏览器没能启动，稍后再试一次",
+  "browser.profile_busy": "内置浏览器的资料目录正被另一个浏览器占用。关掉其他 Studio 窗口或用同一资料目录的浏览器后再试",
   "notifications.rejected": "通知设置没能保存：{error}",
   "editor.not_installed": "这台机器上没找到 VS Code、Cursor 这类编辑器。装一个，或在配置里用 [desktop] editor 指定路径。",
   "editor.launch_failed": "编辑器没能启动：{error}",
@@ -446,6 +450,7 @@ export function say(reason: Reason | null | undefined, fallback = ""): string {
  *  window's language, anything else prints as itself. One call so no display
  *  site has to know which kind it caught. */
 export function reason(e: unknown): string {
+  if (e instanceof KernelBusyError) return t("内核繁忙或无法连接，这次回答可能没有被收到，重试前请先确认");
   if (e instanceof HttpError && e.reason) return say(e.reason, e.message);
   // Nothing came back but a status: printing message here would put a path and
   // a number in front of the user. The status is the only identity there is.

@@ -58,9 +58,9 @@ function open(visible: boolean) {
     start: () => act(() => emit({ kind: "turn_started" } as WireEvent)),
     // Polls over one second of a running turn, counted from zero so a pane's
     // mount reads are excluded.
-    pollsOverASecond: () => {
+    pollsOverASecond: async () => {
       status.mockClear();
-      act(() => void vi.advanceTimersByTime(1000));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
       return status.mock.calls.length;
     },
   };
@@ -71,16 +71,16 @@ describe("what a pane costs while nobody is looking at it", () => {
   // transcript or scroll position. That is affordable only while the off-screen
   // ones are quiet: an ungated poll costs each a round trip and a full
   // re-render, four times a second, scaling with the number of open panes.
-  it("does not poll a running turn it is not showing", () => {
+  it("does not poll a running turn it is not showing", async () => {
     const hidden = open(false);
     hidden.start();
-    expect(hidden.pollsOverASecond()).toBe(0);
+    expect(await hidden.pollsOverASecond()).toBe(0);
   });
 
-  it("polls the turn it is showing", () => {
+  it("polls the turn it is showing", async () => {
     const shown = open(true);
     shown.start();
-    expect(shown.pollsOverASecond()).toBeGreaterThan(1);
+    expect(await shown.pollsOverASecond()).toBeGreaterThan(1);
   });
 
   // The task list is the kernel's and the transcript cannot answer for it:

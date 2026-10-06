@@ -1412,3 +1412,15 @@ what exists.
 - The action group keeps its switches and connection buttons inside the row,
   with room to wrap when needed. The container boundary scopes this to MCP rows,
   including rows inside packages; wide server rows retain their inline layout.
+
+## Control tooltips
+
+- `.studio-control-tip` is a child of the button it describes, so it inherits
+  that button's `white-space` and sits inside its opacity context. It therefore
+  declares `white-space: normal` and wraps inside `max-width`; any string,
+  Chinese or English, stays inside the box.
+- A disabled host dims its glyph (`> .studio-icon`), never itself: opacity
+  multiplies down the tree, so a dimmed button would fade the tooltip that
+  explains why it is disabled.
+- `perf/tooltip.mjs` measures both in Chromium; `controltip.test.ts` pins the
+  rules statically.

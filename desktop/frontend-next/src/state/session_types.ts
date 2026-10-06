@@ -102,10 +102,20 @@ export interface Metrics {
 
 export interface Waiting {
   ttftSince?: number;
-  // scope is the kernel's own answer to which half of the request broke, and
-  // since is when the stall began rather than when this attempt did — the
-  // attempt counter already says how far into it the run is.
-  retry?: { attempt: number; max: number; scope?: "headers" | "stream"; since: number };
+  // scope, cause, status, delayMs and timeoutSecs are the kernel's own answers:
+  // which half of the request broke, why, how long until the next attempt
+  // starts and how long that attempt waits before it counts as unanswered.
+  // since is when this attempt's notice arrived.
+  retry?: {
+    attempt: number;
+    max: number;
+    scope?: "headers" | "stream";
+    cause?: "connection_closed" | "timeout" | "upstream_status" | "stream_idle" | "upstream_error";
+    status?: number;
+    delayMs?: number;
+    timeoutSecs?: number;
+    since: number;
+  };
 }
 
 /** complete_step moves an item to completed and promotes the next one itself,

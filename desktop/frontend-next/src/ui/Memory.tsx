@@ -17,6 +17,12 @@ const GROUPS: [string, string, string][] = [
 const SCOPE: Record<string, string> = { project: "项目", global: "我的" };
 
 export function Memory({ port }: { port: AgentPort }) {
+  const [connection, setConnection] = useState({ port, generation: 0 });
+  if (connection.port !== port) setConnection({ port, generation: connection.generation + 1 });
+  return <MemoryPanel key={connection.generation} port={port} />;
+}
+
+function MemoryPanel({ port }: { port: AgentPort }) {
   const [items, setItems] = useState<MemoryEntry[] | null>(null);
   const [unread, setUnread] = useState("");
   const [query, setQuery] = useState("");

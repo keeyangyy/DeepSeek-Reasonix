@@ -78,6 +78,7 @@ func TestFailureCodeFollowsTheSentinelThroughWrapping(t *testing.T) {
 		{fmt.Errorf("x: %w", errSummaryOutputTruncated), FailSummaryTruncated},
 		{fmt.Errorf("x: %w", errCompressStaleContext), FailContextChanged},
 		{fmt.Errorf("x: %w", errSummaryTimeout), FailSummaryTimeout},
+		{fmt.Errorf("x: %w", errSummaryCeiling), FailSummaryCeiling},
 		{fmt.Errorf("x: %w", context.DeadlineExceeded), FailUnclassified},
 		{fmt.Errorf("x: %w", context.Canceled), FailCancelled},
 		{fmt.Errorf("x: %w", errCompactionHookRefused), FailHookRefused},

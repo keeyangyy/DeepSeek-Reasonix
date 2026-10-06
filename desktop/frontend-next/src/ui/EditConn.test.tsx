@@ -224,3 +224,72 @@ it("does not call a saved-but-not-applied outcome a failed save", async () => {
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByText("保存失败")).toBeNull();
 });
+
+const idleEntry = (idleTimeoutSeconds?: number): ProviderEntry => ({
+  name: "rich", kind: "openai", baseUrl: "https://gateway.invalid/v1",
+  models: ["alpha"], default: "alpha", hasKey: true, inUse: false, preset: false, canSetVision: false,
+  idleTimeoutSeconds, idleTimeoutDefault: 300,
+});
+
+async function openIdle(entry: ProviderEntry) {
+  const editProvider = vi.fn(async () => {});
+  render(<EditConn entry={entry} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  await userEvent.click(screen.getByText("思考参数与推理档位"));
+  return { editProvider, field: (await screen.findByLabelText("无响应超时")) as HTMLInputElement };
+}
+
+it("shows the stored no-answer timeout in the advanced section and leaves it unchanged when untouched", async () => {
+  const { editProvider, field } = await openIdle(idleEntry(90));
+  expect(field.value).toBe("90");
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({ idleTimeoutSeconds: 90 })));
+});
+
+it("sends an edited no-answer timeout through the provider edit path", async () => {
+  const { editProvider, field } = await openIdle(idleEntry(90));
+  await userEvent.clear(field);
+  await userEvent.type(field, "600");
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({ idleTimeoutSeconds: 600 })));
+});
+
+it("sends 0, the default, when the field is emptied", async () => {
+  const { editProvider, field } = await openIdle(idleEntry(90));
+  expect(field.placeholder).toBe("默认 300");
+  await userEvent.clear(field);
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({ idleTimeoutSeconds: 0 })));
+});
+
+it("accepts both bounds", async () => {
+  for (const edge of ["1", "32767"]) {
+    cleanup();
+    const { editProvider, field } = await openIdle(idleEntry());
+    await userEvent.type(field, edge);
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({ idleTimeoutSeconds: Number(edge) })));
+  }
+});
+
+it("refuses a no-answer timeout the kernel would refuse, and says why", async () => {
+  for (const bad of ["0", "32768", "1.5", "abc"]) {
+    cleanup();
+    const { editProvider, field } = await openIdle(idleEntry());
+    await userEvent.type(field, bad);
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("须是 1 到 32767 之间的整数秒；留空使用默认值。")).toBeTruthy();
+    const save = screen.getByRole("button", { name: "保存" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    await userEvent.click(save);
+    expect(editProvider).not.toHaveBeenCalled();
+  }
+});
+
+it("words the kernel's refusal of the timeout with its bounds", async () => {
+  const editProvider = vi.fn(async () => {
+    throw new HttpError(400, "bad", { code: "provider.bad_idle_timeout", error: "bad", params: { min: 1, max: 32767 } });
+  });
+  render(<EditConn entry={idleEntry()} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  expect(await screen.findByText("无响应超时须在 1 到 32767 秒之间；留空使用默认值")).toBeTruthy();
+});

@@ -21,6 +21,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/platform/account"
 )
 
@@ -300,7 +301,10 @@ type controllerCommand struct {
 
 func (h *Host) connect(ctx context.Context, token string, saved *identity, private *ecdh.PrivateKey) error {
 	url := h.relayURL + "/v1/devices/" + saved.DeviceID + "/connect"
-	headers := http.Header{"Authorization": []string{"Bearer " + saved.DeviceCredential}}
+	headers := http.Header{
+		"Authorization": []string{"Bearer " + saved.DeviceCredential},
+		"User-Agent":    []string{h.userAgent()},
+	}
 	conn, response, err := h.dialer.DialContext(ctx, url, headers)
 	if err != nil {
 		if response != nil && response.StatusCode == http.StatusUnauthorized {
@@ -614,4 +618,13 @@ func wait(ctx context.Context, delay time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+// userAgent is the identity the account client already signs in with, so the
+// relay handshake and the sign-in reach the same edge as the same caller.
+func (h *Host) userAgent() string {
+	if h.client != nil && h.client.UserAgent != "" {
+		return h.client.UserAgent
+	}
+	return provider.ClientUserAgent()
 }

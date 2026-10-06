@@ -19,7 +19,7 @@ This guide is for people who run Reasonix 1.x and want to try or move to 2.x. It
 | | Reasonix 1.x | Reasonix 2.x |
 | --- | --- | --- |
 | Branch | `main-v2` | `studio` (default) |
-| Status | Maintenance / stable | Active development, pre-release |
+| Status | Maintenance / stable | Active development |
 | Desktop app | 1.x desktop, from the [download page](https://reasonix.io/?download=desktop#start) | Reasonix Studio, from the [`studio-v2.*` releases](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true) |
 | CLI | `npm i -g reasonix`, or `brew install esengine/reasonix/reasonix` | Archives attached to each `studio-v2.*` release |
 | Issue label | `v2` | `v3` |

@@ -301,8 +301,9 @@ type Options struct {
 	SubagentGate *SharedHeadlessGate
 	Label        string
 	ModelRef     string
-	Effort       string             // resolved effective provider effort; not a request-scoped override
-	ModelModes   []config.ModelMode // optional modes the session's model declares
+	Effort       string                // resolved effective provider effort; not a request-scoped override
+	ModelModes   []config.ModelMode    // optional modes the session's model declares
+	ModelEntry   *config.ProviderEntry // the resolved entry the session was built on; nil leaves ModelFace unanswered
 	// ProviderFingerprint identifies resolved provider build inputs; empty fails closed.
 	ProviderFingerprint string
 	SystemPrompt        string

@@ -14,6 +14,7 @@ import (
 
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/contract/provider"
 )
 
 // hostGrants are the surfaces a host opens on behalf of its one local client.
@@ -101,10 +102,14 @@ type providerView struct {
 	Preset bool `json:"preset"`
 	// The three no probe can answer: a wrong window moves compaction to the
 	// wrong moment, and a relay without its headers refuses every request.
-	ContextWindow   int               `json:"contextWindow,omitempty"`
-	MaxOutputTokens int               `json:"maxOutputTokens,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	ExtraBody       map[string]any    `json:"extraBody,omitempty"`
+	ContextWindow   int `json:"contextWindow,omitempty"`
+	MaxOutputTokens int `json:"maxOutputTokens,omitempty"`
+	// Stored idle_timeout_seconds; zero is "not set", the built-in default.
+	IdleTimeoutSeconds int `json:"idleTimeoutSeconds,omitempty"`
+	// What a source without one waits, so a form can name the default.
+	IdleTimeoutDefault int               `json:"idleTimeoutDefault"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	ExtraBody          map[string]any    `json:"extraBody,omitempty"`
 	// Which request shape controls thinking here, as declared. Empty is "not
 	// declared", which is a different answer from "none" and the reason the
 	// effort ladder can come out empty on a relay.
@@ -164,6 +169,8 @@ func (s *Server) providers(w http.ResponseWriter, _ *http.Request) {
 			InheritedLimits:    inheritedLimitsOf(p),
 			ContextWindow:      p.ContextWindow,
 			MaxOutputTokens:    p.MaxOutputTokens,
+			IdleTimeoutSeconds: p.IdleTimeoutSeconds,
+			IdleTimeoutDefault: int(provider.StreamIdleTimeout / time.Second),
 			Headers:            p.Headers,
 			ExtraBody:          p.ExtraBody,
 		})

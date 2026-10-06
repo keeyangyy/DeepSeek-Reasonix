@@ -125,7 +125,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			effort = "high"
 		case "disabled":
 			if hasExplicitEfforts && !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v: %w", name, effort, supportedEfforts, provider.ErrEffortRefused)
 			}
 			// DeepSeek can turn thinking off too; route through thinking.type and
 			// drop the depth hint so the wire carries thinking.type=disabled only.
@@ -137,7 +137,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 				// complete effort vocabulary. Honor that list for compatible DeepSeek
 				// request shapes instead of applying the built-in official scale.
 				if !supportsEffort(supportedEfforts, effort) {
-					return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+					return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v: %w", name, effort, supportedEfforts, provider.ErrEffortRefused)
 				}
 				break
 			}
@@ -198,7 +198,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			// Explicit endpoint metadata overrides the generic OpenAI enum and its
 			// legacy max-to-high compatibility clamp.
 			if !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v: %w", name, effort, supportedEfforts, provider.ErrEffortRefused)
 			}
 			break
 		}
@@ -210,7 +210,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			effort = "high"
 		case "low", "medium", "high":
 		default:
-			return nil, fmt.Errorf("openai: provider %q: effort must be low, medium, or high", name)
+			return nil, fmt.Errorf("openai: provider %q: effort must be low, medium, or high: %w", name, provider.ErrEffortRefused)
 		}
 	}
 	requestEfforts := requestEffortVocabulary(effortEndpoint{protocol: protocol,
@@ -351,6 +351,7 @@ func (c *client) sendOpts(hint provider.RequestHint) provider.SendOptions {
 		KeyPresent:     c.apiKey() != "",
 		RetryAuth:      c.learned.authed.Load(),
 		BadRequestHint: hint,
+		HeaderTimeout:  c.idleTimeout,
 	}
 }
 

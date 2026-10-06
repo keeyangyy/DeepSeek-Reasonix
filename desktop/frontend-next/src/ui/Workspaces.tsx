@@ -33,6 +33,9 @@ interface Props {
   folded: Set<string>;
   onFold: (root: string, folded: boolean) => void;
   reload: () => Promise<void>;
+  // The session path being opened, or empty. The row shows it selected and busy
+  // before the kernel answers; the owner clears it on failure.
+  opening?: string;
   onOpen: (req: { root?: string; sessionPath?: string }) => Promise<void>;
   onFocus: (id: string) => void;
   onClose: (ids: string[]) => Promise<void>;
@@ -66,7 +69,7 @@ const SHOWN = 30;
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
-function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, onFold, onOpen, onFocus, onClose, liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
+function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload, onFold, opening = "", onOpen, onFocus, onClose, liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onArchive = async () => {}, onRename, onError, adder, children }: Props) {
   const [busy, setBusy] = useState("");
   // Folding a machine is the reader's own preference, held the way a host row
   // holds it.
@@ -148,13 +151,10 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
       onFocus(session.runtimeId);
       return;
     }
-    setBusy(session.path);
     try {
       await onOpen({ root: ws.root, sessionPath: session.path });
     } catch (e) {
       onError(e);
-    } finally {
-      setBusy("");
     }
   };
 
@@ -429,7 +429,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                 {!shut && (
                   <div className="kids">
                 {(whole.has(ws.root) ? ws.sessions : ws.sessions.slice(0, SHOWN)).map((session) => {
-                    const on = session.runtimeId === active;
+                    const on = opening ? session.path === opening : session.runtimeId === active;
                     const run = session.runtimeId ? runs[session.runtimeId]?.run : undefined;
                     if (confirm === session.path) {
                       return (
@@ -464,7 +464,7 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                         data-live={session.runtimeId ? "" : undefined}
                         data-run={run === "idle" ? undefined : run}
                         data-just-done={session.runtimeId && justDone.has(session.runtimeId) ? "" : undefined}
-                        data-busy={busy === session.path ? "" : undefined}
+                        data-busy={opening === session.path ? "" : undefined}
                         onClick={() => void pick(ws, session)}
                         onContextMenu={(ev) => {
                           if ((ev.target as HTMLElement).closest("input, textarea, [role='menu']")) return;
@@ -633,7 +633,9 @@ function WorkspacesView({ hub, tree, treeRead, runtimes, active, folded, reload,
                               key={copy.path}
                               className="sessrow sesscopy"
                               role="treeitem"
-                              data-busy={busy === copy.path ? "" : undefined}
+                              aria-selected={opening === copy.path}
+                              data-on={opening === copy.path ? "" : undefined}
+                              data-busy={opening === copy.path ? "" : undefined}
                               onClick={() => void pick(ws, copy)}
                               tabIndex={0}
                               onKeyDown={(ev) => {

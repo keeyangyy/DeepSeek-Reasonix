@@ -665,7 +665,7 @@ export class SsePort extends SseFeedback implements AgentPort {
   }
 
   submit(text: string, chips?: ChipCall) {
-    return this.post("/submit", { input: text, ...chips });
+    return this.postMaybe<Queued>("/submit", { input: text, ...chips });
   }
   steer(text: string) {
     return this.post0<Queued>("/inbox/items", { input: text, intent: "steer" });
@@ -723,11 +723,11 @@ export class SsePort extends SseFeedback implements AgentPort {
   // Approve(id, allow, session, persist) — "always" is a session grant, not a
   // persisted config change.
   planDecision(id: string, action: PlanAction) {
-    return this.post("/plan-decision", { id, action: PLAN_ACTIONS[action] });
+    return this.postDecision("/plan-decision", { id, action: PLAN_ACTIONS[action] });
   }
 
   approve(id: string, verdict: ApprovalVerdict) {
-    return this.post("/approve", {
+    return this.postDecision("/approve", {
       id,
       allow: verdict !== "deny",
       // A rule written down also covers the rest of this session, so the answer
@@ -737,7 +737,7 @@ export class SsePort extends SseFeedback implements AgentPort {
     });
   }
   answer(id: string, answers: { questionId: string; selected: string[] }[]) {
-    return this.post("/answer", {
+    return this.postDecision("/answer", {
       id,
       answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected })),
     });

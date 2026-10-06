@@ -63,7 +63,7 @@ Reasonix ships on two lines. See the [version roadmap announcement](https://gith
 
 | Line | Branch | Status | Get it |
 | --- | --- | --- | --- |
-| **Reasonix 2.x** | `studio` (this branch) | Active development, pre-release | [Studio releases](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true) |
+| **Reasonix 2.x** | `studio` (this branch) | Active development | [Studio releases](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true) |
 | **Reasonix 1.x** | [`main-v2`](https://github.com/esengine/DeepSeek-Reasonix/tree/main-v2) | Maintenance / stable | `npm i -g reasonix` · [desktop download](https://reasonix.io/?download=desktop#start) |
 
 - **Want something stable?** Stay on 1.x. It keeps receiving bug fixes,
@@ -106,8 +106,8 @@ Studio, and editor integrations all run the same local Reasonix engine.
 
 Download the package for your platform from the latest
 [Studio release](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true)
-(tagged `studio-v2.*`, published as pre-releases while 2.x is in active
-development):
+(tagged `studio-v2.*`; candidates such as `-rc.N` are marked as
+pre-releases):
 
 | Platform | Package | Architecture |
 | --- | --- | --- |

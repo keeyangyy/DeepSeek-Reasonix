@@ -61,7 +61,7 @@ Reasonix 分为两条版本线，调整的原因见[版本路线公告](https://
 
 | 版本线 | 分支 | 状态 | 获取方式 |
 | --- | --- | --- | --- |
-| **Reasonix 2.x** | `studio`（当前分支） | 活跃开发，预发布 | [Studio 发布页](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true) |
+| **Reasonix 2.x** | `studio`（当前分支） | 活跃开发 | [Studio 发布页](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true) |
 | **Reasonix 1.x** | [`main-v2`](https://github.com/esengine/DeepSeek-Reasonix/tree/main-v2) | 维护 / 稳定 | `npm i -g reasonix` · [桌面端下载](https://reasonix.io/?download=desktop#start) |
 
 - **想要稳定**：继续使用 1.x。它会持续收到 Bug 修复、Provider / API 兼容、
@@ -95,7 +95,7 @@ Reasonix 分为两条版本线，调整的原因见[版本路线公告](https://
 ### Reasonix Studio（2.x）
 
 从最新的 [Studio 发布](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true)
-下载对应平台的安装包（标签为 `studio-v2.*`，2.x 活跃开发期间以预发布形式发布）：
+下载对应平台的安装包（标签为 `studio-v2.*`；`-rc.N` 等候选版本标为预发布）：
 
 | 平台 | 安装包 | 架构 |
 | --- | --- | --- |

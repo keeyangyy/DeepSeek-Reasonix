@@ -240,7 +240,7 @@ func (c *client) sendOpts(hint provider.RequestHint) provider.SendOptions {
 		KeyEnv:         c.keyEnv,
 		KeySource:      c.keySource,
 		KeyPresent:     c.apiKey() != "",
-		RetryAuth:      c.authed.Load(),
+		RetryAuth:      c.authed.Load(), HeaderTimeout: c.idleTimeout,
 	}
 }
 

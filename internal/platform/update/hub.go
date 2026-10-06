@@ -73,7 +73,7 @@ func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 	hub := VersionHub{Current: in.Version, Pinned: PinnedVersion()}
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
 	defer cancel()
-	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog}).Check(ctx)
+	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog, UserAgent: UserAgent(in.Version)}).Check(ctx)
 	hub.Latest, hub.Newer, hub.StalePin = st.Latest, st.Newer, st.StalePin
 	hub.Versions = versionRows(st.Entries, in.Version)
 	if err != nil {

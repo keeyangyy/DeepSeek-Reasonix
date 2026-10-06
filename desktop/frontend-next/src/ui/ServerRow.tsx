@@ -163,7 +163,7 @@ export function ServerRow({
   );
   // 服务是干什么的，只有服务自己说了算：MCP 握手里的那段自述。它没写，这里就
   // 没有 —— 拿名字或配置凑一句出来，等于替它编。
-  const about = (!!m.description || (!tools.length && m.state !== "connecting")) && (
+  const about = (!!m.description || m.remembered || (!tools.length && m.state !== "connecting")) && (
     <div className="srv-ab">
       <span className="ds">{m.description || t("该服务未提供自我说明。")}</span>
       {m.remembered && (

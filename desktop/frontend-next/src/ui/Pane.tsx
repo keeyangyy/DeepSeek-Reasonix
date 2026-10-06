@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { HttpError, type AgentPort, type Checkpoint, type ChipCall, type ContextBreakdown, type JobEntry, type McpEntry, type SessionStatus, type WorkspaceChanges } from "../port/port";
 import type { RuntimeView } from "../port/hub";
 import type { TrajectoryRead } from "../port/wire";
-import { currentStep, fromHistory, initialState, localId, quoteAmount, reduce, stepDone, stepLabel } from "../state/session";
+import { chipLabel, currentStep, fromHistory, initialState, localId, quoteAmount, reduce, stepDone, stepLabel } from "../state/session";
 import { pairCheckpoints } from "../state/checkpoints";
 import { DeckChips, type Deck } from "./DeckChips";
 import { Plan } from "./Plan";
@@ -46,6 +46,7 @@ import { RMark } from "./RMark";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
 import { PostureNote } from "./PostureNote";
+import { useStatusPoll } from "./useStatusPoll";
 import { LiveWork, useLiveWork } from "../state/foldpref";
 
 // PaneReport is what the window's own chrome needs from whichever pane has
@@ -186,9 +187,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     setStatus((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, []);
 
-  const refreshStatus = useCallback(() => {
-    port.status().then(applyStatus).catch(() => {});
-  }, [port, applyStatus]);
+  const refreshStatus = useCallback(() => port.status().then(applyStatus).catch(() => {}), [port, applyStatus]);
 
   const [wallet, refreshWallet] = useWallet(port);
   const hideAmounts = useHidesAmounts();
@@ -368,13 +367,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   // /status is the only source for background jobs and for settings the run does
   // not echo, so a live turn has to re-read it rather than infer from events.
-  useEffect(() => {
-    if (!running || !visible) return;
-    const tick = () => refreshStatus();
-    tick();
-    const t = setInterval(tick, 250);
-    return () => clearInterval(t);
-  }, [running, visible, refreshStatus]);
+  useStatusPoll(running && visible, refreshStatus);
 
   useEffect(() => {
     void port.surfaceSlots().then(setSlots).catch(() => setSlots({}));
@@ -419,7 +412,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           // The row is already on screen; the receipt is what gives it a name
           // to be taken back by while it waits at the tool boundary.
           const queued = chips ? await port.queueFollowup(text, chips) : await port.steer(text);
-          if (queued?.itemId) dispatch({ kind: "__queued", id, itemId: queued.itemId, queued: chips ? "followup" : "steer" } as never);
+          if (queued?.itemId) dispatch({ kind: "__queued", id, itemId: queued.itemId, queued: chips || queued.paused ? "followup" : "steer", paused: queued.paused } as never);
         } else {
           await submitOrQueue(text, id, chips);
         }
@@ -449,12 +442,13 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const submitOrQueue = useCallback(
     async (text: string, id: string, chips?: ChipCall) => {
       try {
-        await port.submit(text, chips);
+        const held = await port.submit(text, chips);
+        if (held?.paused && held.itemId) dispatch({ kind: "__queued", id, itemId: held.itemId, queued: "followup", paused: true } as never);
         refreshStatus();
       } catch (e) {
         if (!(e instanceof HttpError) || e.reason?.code !== "busy.session_running") throw e;
         const queued = await port.queueFollowup(text, chips);
-        if (queued?.itemId) dispatch({ kind: "__queued", id, itemId: queued.itemId, queued: "followup" } as never);
+        if (queued?.itemId) dispatch({ kind: "__queued", id, itemId: queued.itemId, queued: "followup", paused: queued.paused } as never);
       }
     },
     [port, refreshStatus],
@@ -663,7 +657,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             data-idle={running || blocked ? undefined : ""}
           >
             <RMark />
-            <span>{t(s.doing || "运行中")}</span>
+            <span>{t(chipLabel(s, running))}</span>
             <RunTokens sent={sent} received={received} estimated={s.outLive > 0} />
           </div>
         )}

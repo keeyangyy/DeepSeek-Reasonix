@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -36,11 +37,13 @@ func (a *Agent) handleSamplingError(
 		streamSink.Discard()
 		reason := provider.StreamInterruptReason(result.err)
 		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, reason, result.err)
+		delay := streamRetryDelay(attempt)
 		a.svc.sink.Emit(event.Event{
 			Kind: event.Retrying, RetryAttempt: attempt, RetryMax: maxStreamRecoveries,
-			RetryScope: event.RetryScopeStream,
+			RetryScope: event.RetryScopeStream, RetryCause: provider.RetryCauseOfStreamInterrupt(reason),
+			RetryDelayMs: delay.Milliseconds(),
 		})
-		if !streamRetrySleep(ctx, attempt) {
+		if !streamRetrySleep(ctx, delay) {
 			return false, streamedTurn{usage: finalizeSamplingUsage(billable, result.usage), attemptID: attemptID, interrupted: true, err: ctx.Err()}
 		}
 		return true, streamedTurn{}
@@ -185,4 +188,16 @@ func freezeProviderRequest(req provider.Request) provider.Request {
 		out.ResponseFormat = &rf
 	}
 	return out
+}
+
+// headerRetryNotice turns a connection+header backoff into the Retrying event a
+// frontend words, carrying what the provider knew about why it failed.
+func headerRetryNotice(sink event.Sink) provider.RetryNotify {
+	return func(info provider.RetryInfo) {
+		sink.Emit(event.Event{
+			Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max, RetryScope: event.RetryScopeHeaders,
+			RetryCause: info.Cause, RetryStatus: info.Status,
+			RetryDelayMs: info.Delay.Milliseconds(), RetryTimeoutSecs: int(info.Timeout / time.Second),
+		})
+	}
 }
