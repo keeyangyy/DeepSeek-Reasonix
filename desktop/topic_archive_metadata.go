@@ -20,6 +20,7 @@ const topicArchiveMetadataPendingDir = "desktop-topic-archive-pending"
 type topicArchiveMetadataPending struct {
 	TopicID   string                               `json:"topicId"`
 	CreatedAt int64                                `json:"createdAt"`
+	Permanent bool                                 `json:"permanent,omitempty"`
 	Sessions  []topicArchiveMetadataPendingSession `json:"sessions,omitempty"`
 }
 
@@ -33,7 +34,7 @@ func topicArchiveMetadataPendingPath(topicID string) string {
 	return filepath.Join(desktopConfigDir(), topicArchiveMetadataPendingDir, hex.EncodeToString(digest[:])+".json")
 }
 
-func markTopicArchiveMetadataPending(topicID string, targets []topicTrashTarget) error {
+func markTopicArchiveMetadataPending(topicID string, targets []topicTrashTarget, mode removalMode) error {
 	topicID = strings.TrimSpace(topicID)
 	if topicID == "" {
 		return fmt.Errorf("topicID is required")
@@ -47,7 +48,10 @@ func markTopicArchiveMetadataPending(topicID string, targets []topicTrashTarget)
 		sessions = append(sessions, topicArchiveMetadataPendingSession{Dir: target.dir, SessionPath: target.sessionPath})
 	}
 	body, err := json.MarshalIndent(topicArchiveMetadataPending{
-		TopicID: topicID, CreatedAt: time.Now().UnixMilli(), Sessions: sessions,
+		TopicID:   topicID,
+		CreatedAt: time.Now().UnixMilli(),
+		Permanent: mode == removalPermanent,
+		Sessions:  sessions,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -104,13 +108,17 @@ func reconcileTopicArchiveMetadataPending(deleteTopic func(string) error) error 
 	var errs []error
 	for _, item := range pending {
 		itemFailed := false
+		mode := removalToTrash
+		if item.Permanent {
+			mode = removalPermanent
+		}
 		for _, target := range item.Sessions {
 			sessionPath, key, err := validateSessionPath(target.Dir, target.SessionPath)
 			if err == nil {
-				err = agent.MarkCleanupPending(sessionPath, "delete")
+				err = agent.MarkCleanupPending(sessionPath, cleanupPendingOperation(mode))
 			}
 			if err == nil {
-				err = reconcileDesktopTrashSessionArtifacts(target.Dir, sessionPath, key)
+				err = removeSessionArtifactsByMode(mode, target.Dir, sessionPath, key)
 			}
 			if err != nil {
 				errs = append(errs, err)
