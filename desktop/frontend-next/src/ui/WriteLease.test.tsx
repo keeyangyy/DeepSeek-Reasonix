@@ -65,4 +65,30 @@ describe("the write-lease mode", () => {
     await group();
     expect(screen.getByText("实际生效")).toBeTruthy();
   });
+
+  it("says so when the setting cannot be read", async () => {
+    const p = port();
+    p.writeLease = async () => {
+      throw new Error("no config");
+    };
+    render(<WriteLease port={p} onChanged={() => {}} />);
+    expect(await screen.findByText("无法读取写锁档位。")).toBeTruthy();
+  });
+
+  it("disables every choice while a save is in flight", async () => {
+    const p = port();
+    let open: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    p.saveWriteLease = async (mode: string) => {
+      await gate;
+      return { mode, effective: mode, path: "~/.reasonix/config.toml" };
+    };
+    render(<WriteLease port={p} onChanged={() => {}} />);
+    await group();
+    await userEvent.click(option("乐观"));
+    await waitFor(() => expect((option("严格") as HTMLButtonElement).disabled).toBe(true));
+    open();
+  });
 });

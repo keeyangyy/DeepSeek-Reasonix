@@ -65,6 +65,7 @@ export const EN_KERNEL: Record<string, string> = {
   "本次请求未说明范围，未做任何修改": "The request did not say which scope, so nothing changed",
   "记忆写入设置未能保存：{detail}": "The memory-write setting was not saved: {detail}",
   "本次请求未说明开关状态，未做任何修改": "The request did not say on or off, so nothing changed",
+  "本次请求未说明档位，未做任何修改": "The request did not say which write-lease mode, so nothing changed",
   "无法解析该服务器声明：{detail}": "That server declaration could not be read: {detail}",
   "未能安装该服务器：{detail}": "That server could not be installed: {detail}",
   "未能移除该服务器：{detail}": "That server could not be removed: {detail}",
