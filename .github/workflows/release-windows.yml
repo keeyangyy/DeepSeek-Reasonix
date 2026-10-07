@@ -183,13 +183,33 @@ jobs:
           mv ../../dist-zip/ReasonixStudio-windows-amd64.zip ../../dist/
           ls -la ../../dist/ReasonixStudio-*
 
+      # The updater verifies what it installs, and Studio's key cannot vouch for
+      # the fork's bytes: an unsigned release is one its own builds must refuse.
+      # The installer carries the update switch this channel runs it with.
+      - name: Sign the Windows artifacts
+        working-directory: desktop
+        shell: bash
+        env:
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINISIGN_PRIVATE_KEY:-}" ]; then
+            echo "::error::MINISIGN_PRIVATE_KEY is unset, so this release cannot be signed"
+            exit 1
+          fi
+          go run ./cmd/sign sign ../dist/ReasonixStudio-windows-amd64.zip ../dist/ReasonixStudio-windows-amd64-installer.exe
+          ls -la ../dist/*.minisig
+
       - name: Upload the Windows artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: reasonix-studio-windows-amd64
           path: |
             dist/ReasonixStudio-windows-amd64.zip
+            dist/ReasonixStudio-windows-amd64.zip.minisig
             dist/ReasonixStudio-windows-amd64-installer.exe
+            dist/ReasonixStudio-windows-amd64-installer.exe.minisig
           if-no-files-found: error
           retention-days: 14
 
@@ -212,6 +232,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.verify.outputs.tag }}
 
+      # The manifest is written here, from the renamed assets, by the same tool
+      # the release pipeline uses: it needs Go, not the Windows toolchain.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: reasonix-studio-windows-amd64
@@ -226,8 +253,10 @@ jobs:
           set -euo pipefail
           zip_asset="ReasonixStudio-windows-amd64-${VERSION}.zip"
           exe_asset="ReasonixStudio-windows-amd64-installer-${VERSION}.exe"
-          mv dist/ReasonixStudio-windows-amd64.zip "dist/${zip_asset}"
-          mv dist/ReasonixStudio-windows-amd64-installer.exe "dist/${exe_asset}"
+          # The manifest resolves a platform's artifact by name, and the name it
+          # expects carries no version (ReasonixStudio-windows-amd64-installer.exe):
+          # a versioned name here leaves the platform lookup empty.
+          (cd desktop && go run ./cmd/studio-manifest ../dist "$VERSION" "$RELEASE_TAG")
           # release-manual.yml creates the release as a draft before this
           # pipeline starts, so a public release is never visible without its
           # assets. Create the draft here too when this workflow is dispatched
@@ -241,13 +270,50 @@ jobs:
           else
             echo "Release $RELEASE_TAG already exists; uploading/overwriting assets."
           fi
-          # Drop the unversioned asset names from earlier runs so re-running the
-          # same tag never leaves both old and new names behind.
-          gh release delete-asset "$RELEASE_TAG" ReasonixStudio-windows-amd64.zip --yes >/dev/null 2>&1 || true
-          gh release delete-asset "$RELEASE_TAG" ReasonixStudio-windows-amd64-installer.exe --yes >/dev/null 2>&1 || true
-          gh release upload "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" --clobber
+          # Drop the versioned asset names an earlier revision of this workflow
+          # left behind, so re-running a tag never carries both namings.
+          gh release delete-asset "$RELEASE_TAG" "${zip_asset}" --yes >/dev/null 2>&1 || true
+          gh release delete-asset "$RELEASE_TAG" "${exe_asset}" --yes >/dev/null 2>&1 || true
+          gh release upload "$RELEASE_TAG" \
+            dist/ReasonixStudio-windows-amd64.zip dist/ReasonixStudio-windows-amd64.zip.minisig \
+            dist/ReasonixStudio-windows-amd64-installer.exe dist/ReasonixStudio-windows-amd64-installer.exe.minisig \
+            dist/latest.json --clobber
           # Publish only now that both assets are attached.
           gh release edit "$RELEASE_TAG" --draft=false
+
+      # The fork's own catalog lists its releases to the running build, and it
+      # sits under a fixed tag so the address never changes. The list is capped
+      # at what the version panel shows; the kernel adds the running build's own
+      # row regardless.
+      - name: Update the fork's own catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          anchor=studio-latest
+          mkdir -p catalog
+          existing=-
+          if gh release download "$anchor" -p versions.json -D catalog --clobber 2>/dev/null; then
+            existing=catalog/versions.json
+          else
+            echo "No catalog yet; starting a new one."
+          fi
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # The shared script writes Studio's own manifest address; this fork
+          # serves its manifests from its own releases instead.
+          bash scripts/update-versions-index.sh "$existing" "$VERSION" "$RELEASE_TAG" studio "$now" 3 \
+            | sed "s#https://dl.reasonix.io/#https://github.com/${GITHUB_REPOSITORY}/releases/download/#g" \
+            > catalog/versions.json
+          jq -e --arg v "$VERSION" '.versions | map(select(.version == $v)) | length == 1' catalog/versions.json >/dev/null
+          if ! gh release view "$anchor" >/dev/null 2>&1; then
+            gh release create "$anchor" --latest=false --target studio-mine \
+              --title "Studio catalog (this fork)" \
+              --notes "The fork's own Studio catalog. Rewritten on every release; the app reads it at a fixed address."
+          fi
+          gh release upload "$anchor" catalog/versions.json --clobber
+          jq -r '.versions[].version' catalog/versions.json
 
       - name: Summarize release
         env:
