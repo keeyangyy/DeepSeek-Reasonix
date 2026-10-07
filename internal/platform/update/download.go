@@ -112,7 +112,8 @@ func (u *Updater) DownloadManifest(ctx context.Context, m *Manifest, r Report) (
 	}
 	// Signature first: the digest is only the manifest's claim about the bytes,
 	// and the manifest is only trustworthy once its artifact has been verified.
-	if err := verifyArtifact(data, sig); err != nil {
+	// The key is the one this catalog declared, or Studio's when it named none.
+	if err := verifyArtifact(u.opts.PublicKey, data, sig); err != nil {
 		return Cached{}, fmt.Errorf("%w: %w", ErrVerify, err)
 	}
 	c, err := cache.Save(m.Version, asset, data, kind, sig)

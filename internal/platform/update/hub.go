@@ -12,10 +12,28 @@ import (
 )
 
 // StudioCatalog is Studio's own rollback catalog, published by
-// release-studio.yml. It is a constant rather than something a caller names: a
-// catalog that could be pointed elsewhere is one whose entries would offer to
-// "update" Studio into a different product.
+// release-studio.yml. It stays a constant rather than something a caller
+// names: a catalog that could be pointed elsewhere is one whose entries would
+// offer to "update" Studio into a different product. A build that publishes its
+// own releases declares a second catalog in Install.Mine, beside this one.
 const StudioCatalog = StudioMirror + "/studio/versions.json"
+
+// MineCatalog is a second catalog a build declares beside Studio's: the same
+// shape, its own signing key, its own row budget. It exists so a build that
+// ships its own releases is listed where the running build is, while neither
+// catalog can answer for the other's artifacts.
+type MineCatalog struct {
+	// Name marks the rows this catalog contributes.
+	Name string
+	// URL is that catalog's versions.json.
+	URL string
+	// PublicKey is the minisign key this catalog's artifacts are signed with.
+	// Empty means Studio's own key, never "any signature will do".
+	PublicKey string
+	// MaxEntries caps how many of this catalog's versions are listed (0 = no
+	// cap). The running build's own row is added regardless of the cap.
+	MaxEntries int
+}
 
 // Install is what a shell knows about itself that the kernel cannot work out.
 // A Go process inside an Electron bundle resolves neither half: os.Executable()
@@ -25,6 +43,9 @@ const StudioCatalog = StudioMirror + "/studio/versions.json"
 type Install struct {
 	Version string
 	Layout  Layout
+	// Mine is the build's own catalog, listed beside Studio's. nil keeps the
+	// panel upstream-only.
+	Mine *MineCatalog
 }
 
 // VersionEntry is one published release as a version panel shows it.
@@ -35,6 +56,8 @@ type VersionEntry struct {
 	Notes       string `json:"notes"`
 	Current     bool   `json:"current"`
 	Older       bool   `json:"older"`
+	// Source names the catalog that published this row; "" is Studio's own.
+	Source string `json:"source,omitempty"`
 }
 
 // VersionHub is everything a version panel renders from. Err is carried beside
@@ -67,19 +90,72 @@ func Hub(ctx context.Context, in Install) VersionHub {
 }
 
 // hubOver is Hub with the route already decided, so a test can answer the
-// catalog without reaching the network. The catalog URL stays a constant: what
-// is injectable here is how the fetch travels, never where it lands.
+// catalogs without reaching the network. Where they land is not injectable:
+// Studio's catalog is a constant, and a build's own is its release point. Both
+// merge newest first, and one that cannot be reached leaves the other's rows
+// and the running build's own row standing.
 func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 	hub := VersionHub{Current: in.Version, Pinned: PinnedVersion()}
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
 	defer cancel()
+
 	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog, UserAgent: UserAgent(in.Version)}).Check(ctx)
-	hub.Latest, hub.Newer, hub.StalePin = st.Latest, st.Newer, st.StalePin
-	hub.Versions = versionRows(st.Entries, in.Version)
+	entries, latest := sourceEntries(st.Entries, ""), st.Latest
 	if err != nil {
 		hub.Err = err.Error()
 	}
+
+	if mine := in.Mine; mine != nil && strings.TrimSpace(mine.URL) != "" {
+		opts := Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: mine.URL, PublicKey: mine.PublicKey, UserAgent: UserAgent(in.Version)}
+		mst, merr := New(opts).Check(ctx)
+		entries = append(entries, sourceEntries(capEntries(mst.Entries, mine.MaxEntries), mine.Name)...)
+		if merr != nil {
+			hub.Err = joinCatalogErrors(hub.Err, mine.Name, merr)
+		}
+		if CompareVersions(mst.Latest, latest) > 0 {
+			latest = mst.Latest
+		}
+	}
+
+	// One offer for the merged list: "newer" is a fact about the versions this
+	// panel can install, not about either catalog on its own.
+	offer := OfferFor(in.Version, latest, hub.Pinned)
+	hub.Latest, hub.Newer, hub.StalePin = latest, offer.Newer, st.StalePin || offer.StalePin
+	hub.Versions = versionRowsFor(entries, in.Version)
 	return hub.nonNil()
+}
+
+// sourcedEntry is one catalog entry with the catalog it came from.
+type sourcedEntry struct {
+	entry  IndexEntry
+	source string
+}
+
+func sourceEntries(entries []IndexEntry, source string) []sourcedEntry {
+	out := make([]sourcedEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, sourcedEntry{entry: e, source: source})
+	}
+	return out
+}
+
+// capEntries keeps at most max entries (0 = all). A catalog is newest first, so
+// a budget drops its oldest rows, never its newest.
+func capEntries(entries []IndexEntry, max int) []IndexEntry {
+	if max <= 0 || len(entries) <= max {
+		return entries
+	}
+	return entries[:max]
+}
+
+// joinCatalogErrors keeps a second catalog's failure visible beside the first,
+// named by the source it came from.
+func joinCatalogErrors(existing, source string, err error) string {
+	line := source + ": " + err.Error()
+	if existing == "" {
+		return line
+	}
+	return existing + "; " + line
 }
 
 // versionRows merges the running build into the catalog, newest first. The
@@ -88,10 +164,23 @@ func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 // statement of what runs and its only handle for pinning, so it cannot depend
 // on the network.
 func versionRows(entries []IndexEntry, current string) []VersionEntry {
+	return versionRowsFor(sourceEntries(entries, ""), current)
+}
+
+// versionRowsFor is versionRows over entries that remember their catalog, so a
+// row can say which release point published it. A version two catalogs both
+// carry is listed once, under the first that named it.
+func versionRowsFor(entries []sourcedEntry, current string) []VersionEntry {
 	rows := make([]VersionEntry, 0, len(entries)+1)
 	seen := false
-	for _, e := range entries {
-		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt}
+	listed := make(map[string]bool, len(entries))
+	for _, s := range entries {
+		e := s.entry
+		if listed[e.Version] {
+			continue
+		}
+		listed[e.Version] = true
+		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt, Source: s.source}
 		if SameVersion(e.Version, current) {
 			row.Current, seen = true, true
 		} else {

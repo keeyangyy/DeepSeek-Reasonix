@@ -27,13 +27,14 @@ type Installer interface {
 // it is a user setting the shells own, and keeping it out makes the policy
 // testable without a config file.
 type Options struct {
-	Current  string       // running version
-	Pinned   string       // release the user pinned, or ""
-	IndexURL string       // this line's catalog; required
-	HTTP     *http.Client // carries the caller's proxy and timeouts
-	Fallback *http.Client // IPv4-pinned route, tried from the second attempt
-	CacheDir string       // where a verified artifact waits for its install
-	Kind     string       // artifact this install applies; empty is the tarball
+	Current   string       // running version
+	Pinned    string       // release the user pinned, or ""
+	IndexURL  string       // this line's catalog; required
+	PublicKey string       // minisign key this catalog's artifacts use; "" is Studio's
+	HTTP      *http.Client // carries the caller's proxy and timeouts
+	Fallback  *http.Client // IPv4-pinned route, tried from the second attempt
+	CacheDir  string       // where a verified artifact waits for its install
+	Kind      string       // artifact this install applies; empty is the tarball
 	// UserAgent identifies updater traffic. Go's default is what edge bot
 	// protection scores worst (#6005), so a build that leaves this empty is
 	// asking to be 403'd by its own CDN.
