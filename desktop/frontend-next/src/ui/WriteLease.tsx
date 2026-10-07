@@ -65,6 +65,7 @@ export function WriteLease({ port, onChanged }: { port: AgentPort; onChanged: ()
               data-action="write-lease.mode"
               data-value={mode}
               aria-checked={state.mode === mode}
+              tabIndex={state.mode === mode ? 0 : -1}
               disabled={busy}
               onClick={() => void pick(mode)}
             >
