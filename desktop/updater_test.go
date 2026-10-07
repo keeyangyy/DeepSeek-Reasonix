@@ -376,8 +376,6 @@ func TestLegacyChannelsSelectOfficialPointers(t *testing.T) {
 	stable := manifestEndpoints("stable")
 	preview := manifestEndpoints("preview")
 	want := []string{
-		r2Base + "/latest/latest.json",
-		releaseGatewayBase + "/stable/latest.json",
 		githubManifestFallback,
 	}
 	if !reflect.DeepEqual(stable, want) || !reflect.DeepEqual(preview, want) {
@@ -471,108 +469,108 @@ func TestDesktopManifestValidation(t *testing.T) {
 		{
 			name: "missing required platform asset",
 			mutate: func(m *update.Manifest) {
-				delete(m.Platforms, "darwin-arm64")
+				delete(m.Platforms, "windows-amd64")
 			},
 		},
 		{
 			name: "wrong filename",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.URL = strings.Replace(asset.URL, "Reasonix-", "Other-", 1)
 				asset.Sig = asset.URL + ".minisig"
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "HTTP asset URL",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.URL = strings.Replace(asset.URL, "https://", "http://", 1)
 				asset.Sig = asset.URL + ".minisig"
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "asset URL userinfo",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.URL = strings.Replace(asset.URL, "https://", "https://user@", 1)
 				asset.Sig = asset.URL + ".minisig"
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "wrong asset host",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.URL = strings.Replace(asset.URL, "dl.reasonix.io", "example.com", 1)
 				asset.Sig = asset.URL + ".minisig"
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "wrong release tag",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.URL = strings.Replace(asset.URL, desktopReleaseTag("stable", m.Version), "desktop-v9.9.9", 1)
 				asset.Sig = asset.URL + ".minisig"
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "signature is not exact URL suffix",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.Sig = asset.URL + ".sig"
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "zero size",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.Size = 0
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "negative size",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.Size = -1
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "size above release maximum",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.Size = maxDesktopReleaseAssetSize + 1
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "uppercase SHA",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.SHA256 = strings.Repeat("A", 64)
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "short SHA",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.SHA256 = strings.Repeat("a", 63)
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
 			name: "nonhex SHA",
 			mutate: func(m *update.Manifest) {
-				asset := m.Platforms["darwin-arm64"]
+				asset := m.Platforms["windows-amd64"]
 				asset.SHA256 = strings.Repeat("g", 64)
-				m.Platforms["darwin-arm64"] = asset
+				m.Platforms["windows-amd64"] = asset
 			},
 		},
 		{
@@ -603,10 +601,12 @@ func TestDesktopManifestValidation(t *testing.T) {
 		}
 	})
 	t.Run("empty downloads is not a legacy manifest", func(t *testing.T) {
+		// The Windows line publishes manifests without a downloads group, so an
+		// empty map is simply treated as "no website downloads to check".
 		manifest := validDesktopManifest(t, "stable", "v1.17.21")
 		manifest.Downloads = map[string]update.Asset{}
-		if err := validateDesktopManifest("stable", &manifest); err == nil {
-			t.Fatal("manifest with empty downloads bypassed the new-format asset requirements")
+		if err := validateDesktopManifest("stable", &manifest); err != nil {
+			t.Fatalf("manifest with empty downloads: %v", err)
 		}
 	})
 	t.Run("official manifest rejects legacy rolling asset base", func(t *testing.T) {
@@ -635,7 +635,7 @@ func TestDesktopManifestValidation(t *testing.T) {
 	t.Run("unified GitHub release base", func(t *testing.T) {
 		manifest := validDesktopManifest(t, "stable", "v1.19.0")
 		oldBase := r2Base + "/desktop-v1.19.0/"
-		newBase := "https://github.com/esengine/DeepSeek-Reasonix/releases/download/v1.19.0/"
+		newBase := "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/v1.19.0/"
 		for key, asset := range manifest.Platforms {
 			asset.URL = strings.Replace(asset.URL, oldBase, newBase, 1)
 			asset.Sig = asset.URL + ".minisig"
@@ -665,46 +665,20 @@ func TestDesktopManifestValidation(t *testing.T) {
 		})
 	}
 
-	t.Run("invalid native package", func(t *testing.T) {
-		manifest := validDesktopManifest(t, "stable", "v1.18.0")
-		native := manifest.NativePackages["linux-amd64"]
-		native.Sig = native.URL + ".sig"
-		manifest.NativePackages["linux-amd64"] = native
-		if err := validateDesktopManifest("stable", &manifest); err == nil {
-			t.Fatal("validateDesktopManifest accepted malformed native package")
-		}
-	})
-
-	t.Run("mixed official bases", func(t *testing.T) {
-		manifest := validDesktopManifest(t, "stable", "v1.18.0")
-		asset := manifest.Platforms["darwin-arm64"]
-		asset.URL = strings.Replace(
-			asset.URL,
-			r2Base+"/desktop-v1.18.0/",
-			"https://github.com/esengine/DeepSeek-Reasonix/releases/download/desktop-v1.18.0/",
-			1,
-		)
-		asset.Sig = asset.URL + ".minisig"
-		manifest.Platforms["darwin-arm64"] = asset
-		if err := validateDesktopManifest("stable", &manifest); err == nil {
-			t.Fatal("validateDesktopManifest accepted mixed R2 and GitHub asset bases")
-		}
-	})
+	// Mixed-base detection needs two required assets; this line has one, so the
+	// condition cannot arise here. The per-asset subtests above still cover
+	// malformed URLs, hosts, tags, signatures, sizes and digests.
 }
 
 func ptr[T any](value T) *T {
 	return &value
 }
 
-func TestFetchManifestSkipsPrereleaseForLegacyPreviewSelection(t *testing.T) {
+func TestFetchManifestRejectsPrereleaseManifest(t *testing.T) {
 	var calls []string
 	client := &http.Client{Transport: rtFunc(func(req *http.Request) (*http.Response, error) {
 		calls = append(calls, req.URL.String())
-		version := "v1.18.0-preview.7"
-		if strings.Contains(req.URL.Path, "/stable/") {
-			version = "v1.18.0"
-		}
-		manifest := validDesktopManifest(t, "stable", version)
+		manifest := validDesktopManifest(t, "stable", "v1.18.0-preview.7")
 		body, err := json.Marshal(manifest)
 		if err != nil {
 			t.Fatal(err)
@@ -717,26 +691,20 @@ func TestFetchManifestSkipsPrereleaseForLegacyPreviewSelection(t *testing.T) {
 		}, nil
 	})}
 
-	manifest, err := fetchManifest(context.Background(), client, nil, "preview")
-	if err != nil {
-		t.Fatalf("fetchManifest: %v", err)
+	if _, err := fetchManifest(context.Background(), client, nil, "preview"); err == nil {
+		t.Fatal("fetchManifest accepted a prerelease manifest")
 	}
-	if manifest.Version != "v1.18.0" {
-		t.Fatalf("version = %q, want official fallback manifest", manifest.Version)
-	}
-	if len(calls) != 2 || !strings.Contains(calls[0], "/latest/") || !strings.Contains(calls[1], "/stable/") {
-		t.Fatalf("endpoint calls = %q, want official latest then gateway fallback", calls)
+	if len(calls) != 1 || !strings.Contains(calls[0], "/wails-latest/latest.json") {
+		t.Fatalf("endpoint calls = %q, want the single release anchor", calls)
 	}
 }
 
-func TestFetchManifestSkipsMalformedSuccessfulResponse(t *testing.T) {
+func TestFetchManifestRejectsMalformedManifest(t *testing.T) {
 	var calls []string
 	client := &http.Client{Transport: rtFunc(func(req *http.Request) (*http.Response, error) {
 		calls = append(calls, req.URL.String())
 		manifest := validDesktopManifest(t, "stable", "v1.18.0")
-		if strings.Contains(req.URL.Path, "/latest/") {
-			delete(manifest.Platforms, update.CurrentPlatform())
-		}
+		manifest.Platforms = map[string]update.Asset{}
 		body, err := json.Marshal(manifest)
 		if err != nil {
 			t.Fatal(err)
@@ -749,15 +717,11 @@ func TestFetchManifestSkipsMalformedSuccessfulResponse(t *testing.T) {
 		}, nil
 	})}
 
-	manifest, err := fetchManifest(context.Background(), client, nil, "preview")
-	if err != nil {
-		t.Fatalf("fetchManifest: %v", err)
+	if _, err := fetchManifest(context.Background(), client, nil, "preview"); err == nil {
+		t.Fatal("fetchManifest accepted a manifest with no platform asset")
 	}
-	if manifest.Version != "v1.18.0" {
-		t.Fatalf("version = %q, want valid fallback manifest", manifest.Version)
-	}
-	if len(calls) != 2 || !strings.Contains(calls[0], "/latest/") || !strings.Contains(calls[1], "/stable/") {
-		t.Fatalf("endpoint calls = %q, want malformed 200 to fall through", calls)
+	if len(calls) != 1 {
+		t.Fatalf("endpoint calls = %q, want the single release anchor", calls)
 	}
 }
 

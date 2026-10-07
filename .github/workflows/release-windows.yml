@@ -134,6 +134,41 @@ jobs:
           # Publish only now that both assets are attached.
           gh release edit "$RELEASE_TAG" --draft=false
 
+      - name: Publish the signed update manifest to the release anchor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.version }}
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version="$(printf '%s' "$RELEASE_TAG" | sed 's/^v//')"
+          # The desktop updater looks up a *versionless* filename
+          # (requiredDesktopUpdaterAssets in desktop/updater.go), while the
+          # human-facing asset above carries the version. Publish both names.
+          cp "dist/Reasonix-windows-amd64-installer-${version}.exe" dist/Reasonix-windows-amd64-installer.exe
+          # The manifest input directory must hold only the updater artifact:
+          # the website download (.zip) would add a downloads group to the
+          # manifest, and this line publishes no such group.
+          rm -rf manifest-input
+          mkdir -p manifest-input
+          cp dist/Reasonix-windows-amd64-installer.exe manifest-input/
+          ( cd desktop && go run ./cmd/sign sign ../dist/Reasonix-windows-amd64-installer.exe )
+          ( cd desktop && go run ./cmd/sign manifest ../manifest-input "$RELEASE_TAG" "$RELEASE_TAG" )
+          gh release upload "$RELEASE_TAG" \
+            dist/Reasonix-windows-amd64-installer.exe \
+            dist/Reasonix-windows-amd64-installer.exe.minisig \
+            --clobber
+          # The anchor is a fixed tag whose contents every release of this line
+          # overwrites, so the updater never follows the repository-wide latest
+          # badge -- which the studio and legacy 1.39 lines also claim.
+          if ! gh release view wails-latest >/dev/null 2>&1; then
+            gh release create wails-latest --latest=false \
+              --title "wails-mine update anchor" \
+              --notes "Update-check anchor for the wails-mine (1.38.x) line. latest.json here is overwritten by every release of that line; do not delete."
+          fi
+          gh release upload wails-latest manifest-input/latest.json --clobber
+
       - name: Summarize release
         env:
           RELEASE_TAG: ${{ needs.verify.outputs.version }}
