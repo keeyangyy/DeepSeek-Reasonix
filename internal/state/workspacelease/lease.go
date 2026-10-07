@@ -70,9 +70,9 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
-	// skipWriteSerialization drops the exclusive write lease: writers that could
-	// not declare write paths stop taking the workspace lock. The zero value keeps
-	// upstream behaviour, so a directly constructed Owner is unaffected.
+	// skipWriteSerialization drops this session's cross-session write lease
+	// entirely: no call takes the workspace lock, so opaque writers stop
+	// blocking other sessions. The zero value keeps upstream behaviour.
 	skipWriteSerialization bool
 
 	mu            sync.Mutex

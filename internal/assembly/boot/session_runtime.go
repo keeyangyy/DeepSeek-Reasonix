@@ -29,11 +29,12 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 		jobs.WithStalledWarningAfter(time.Duration(cfg.BackgroundJobStalledWarningSeconds()) * time.Second),
 		jobs.WithSessionOwnershipProbe(sessionstore.SessionLeaseHeldByCurrentRuntime),
 	}
-	// Serialization is a user setting: when it is off, writers that declare no
-	// write_paths stop taking the cross-session workspace lease. Passing no
-	// option keeps the lease exactly as upstream has it.
+	// The lease mode is a user setting. "off" takes no cross-session lease at
+	// all; "optimistic" and "strict" differ in the whole-workspace gate the
+	// subagent scheduler reads, not here. Passing no option keeps the lease
+	// exactly as upstream has it.
 	var leaseOptions []workspacelease.Option
-	if !cfg.Agent.SerializeOpaqueWriters {
+	if cfg.Agent.SkipWriteLease() {
 		leaseOptions = append(leaseOptions, workspacelease.WithoutWriteSerialization())
 	}
 	lease, err := workspacelease.New(root, config.WorkspaceLeaseDir(), func(w workspacelease.Wait) {

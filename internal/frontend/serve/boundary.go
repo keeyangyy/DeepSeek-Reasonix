@@ -20,8 +20,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sandbox", s.saveSandboxSettings)
 	mux.HandleFunc("GET /browser-tools", s.browserToolsSettings)
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
-	mux.HandleFunc("GET /opaque-writers", s.opaqueWriterSettings)
-	mux.HandleFunc("POST /opaque-writers", s.saveOpaqueWriterSettings)
+	mux.HandleFunc("GET /write-lease", s.writeLeaseSettings)
+	mux.HandleFunc("POST /write-lease", s.saveWriteLeaseSettings)
 	mux.HandleFunc("GET /remember-approval", s.rememberApprovalSettings)
 	mux.HandleFunc("POST /remember-approval", s.saveRememberApprovalSettings)
 	// The file every one of these is written to, for when it is the thing that
@@ -177,39 +177,38 @@ func (s *Server) saveBrowserToolsSettings(w http.ResponseWriter, r *http.Request
 	writeJSON(w, s.ctl().BrowserToolsSettings())
 }
 
-func (s *Server) opaqueWriterSettings(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, s.ctl().OpaqueWriterSerializationSettings())
+func (s *Server) writeLeaseSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.ctl().WriteLeaseSettings())
 }
 
-// saveOpaqueWriterSettings rides the provider-edit grant: switching it off drops
-// the cross-session workspace lock those tools would otherwise take, so two
-// sessions on one workspace can run a build at the same time.
-func (s *Server) saveOpaqueWriterSettings(w http.ResponseWriter, r *http.Request) {
+// saveWriteLeaseSettings rides the provider-edit grant: the mode decides how far
+// the cross-session workspace lock reaches, so "optimistic" (or "off") is what
+// lets two sessions on one workspace run a build at the same time.
+func (s *Server) saveWriteLeaseSettings(w http.ResponseWriter, r *http.Request) {
 	if !s.grants.at(r).providerEdit {
-		refuse(w, http.StatusForbidden, "opaque_writers.editing_disabled", "write serialization editing is not enabled on this server", nil)
+		refuse(w, http.StatusForbidden, "write_lease.editing_disabled", "write-lease editing is not enabled on this server", nil)
 		return
 	}
 	var body struct {
-		Enabled *bool `json:"enabled"`
+		Mode *string `json:"mode"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
 		badBody(w)
 		return
 	}
-	if body.Enabled == nil {
-		refuse(w, http.StatusBadRequest, "opaque_writers.no_enabled", "enabled is required", nil)
+	if body.Mode == nil || *body.Mode == "" {
+		refuse(w, http.StatusBadRequest, "write_lease.no_mode", "mode is required", nil)
 		return
 	}
-	if err := s.ctl().SaveOpaqueWriterSerialization(*body.Enabled); err != nil {
-		// A boolean cannot be a bad request: what is left is the file or the disk.
-		saveFailed(w, http.StatusInternalServerError, "opaque_writers.save_failed", err)
+	if err := s.ctl().SaveWriteLease(*body.Mode); err != nil {
+		saveFailed(w, http.StatusInternalServerError, "write_lease.save_failed", err)
 		return
 	}
 	if err := s.rebuildInPlace(r.Context()); err != nil {
 		rebuildFailed(w, err)
 		return
 	}
-	writeJSON(w, s.ctl().OpaqueWriterSerializationSettings())
+	writeJSON(w, s.ctl().WriteLeaseSettings())
 }
 
 func (s *Server) rememberApprovalSettings(w http.ResponseWriter, _ *http.Request) {
