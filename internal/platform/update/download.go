@@ -48,11 +48,40 @@ func (r Report) phase(name string) {
 // catalog is the only way in: an entry names that release's <tag>/latest.json,
 // which never moves, so an older version resolves exactly as the newest does.
 func (u *Updater) ManifestFor(ctx context.Context, version string) (*Manifest, error) {
+	return u.manifestFor(ctx, version)
+}
+
+// manifestFor is ManifestFor across every catalog this updater declares. The
+// version is answered by the catalog that lists it, and the manifest remembers
+// that catalog's key: a build's own releases are verified against the build's
+// key, and only the catalog that named a version may vouch for its bytes.
+func (u *Updater) manifestFor(ctx context.Context, version string) (*Manifest, error) {
 	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL, u.opts.UserAgent)
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range idx.Versions {
+	m, err := u.manifestIn(ctx, idx.Versions, version, u.opts.PublicKey)
+	if err != nil || m != nil {
+		return m, err
+	}
+	if mine := u.opts.Mine; mine != nil && mine.URL != "" && mine.URL != u.opts.IndexURL {
+		idx, err := FetchIndex(ctx, u.opts.HTTP, mine.URL, u.opts.UserAgent)
+		if err != nil {
+			return nil, err
+		}
+		m, err := u.manifestIn(ctx, idx.Versions, version, mine.PublicKey)
+		if err != nil || m != nil {
+			return m, err
+		}
+	}
+	return nil, fmt.Errorf("update: %s is not in the published catalog", version)
+}
+
+// manifestIn resolves version out of one catalog's entries, remembering the key
+// that catalog signs with. A nil manifest and nil error means this catalog does
+// not list it.
+func (u *Updater) manifestIn(ctx context.Context, entries []IndexEntry, version, key string) (*Manifest, error) {
+	for _, e := range entries {
 		if !SameVersion(e.Version, version) {
 			continue
 		}
@@ -66,9 +95,20 @@ func (u *Updater) ManifestFor(ctx context.Context, version string) (*Manifest, e
 		if !SameVersion(m.Version, version) {
 			return nil, fmt.Errorf("update: %s resolves to a manifest for %s", version, m.Version)
 		}
+		m.sourceKey = key
 		return m, nil
 	}
-	return nil, fmt.Errorf("update: %s is not in the published catalog", version)
+	return nil, nil
+}
+
+// artifactKey is the key that verifies m's artifacts: the one the catalog that
+// published it signs with, or this updater's own when the manifest came from
+// somewhere that named none.
+func (u *Updater) artifactKey(m *Manifest) string {
+	if m != nil && m.sourceKey != "" {
+		return m.sourceKey
+	}
+	return u.opts.PublicKey
 }
 
 // Download fetches one published version's artifact for this platform, verifies
@@ -110,10 +150,10 @@ func (u *Updater) DownloadManifest(ctx context.Context, m *Manifest, r Report) (
 	if err != nil {
 		return Cached{}, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
-	// Signature first: the digest is only the manifest's claim about the bytes,
-	// and the manifest is only trustworthy once its artifact has been verified.
-	// The key is the one this catalog declared, or Studio's when it named none.
-	if err := verifyArtifact(u.opts.PublicKey, data, sig); err != nil {
+	// Signature first: the digest is only the manifest's claim about the bytes.
+	// The key is the one the catalog that published this version declared, or
+	// Studio's when it named none.
+	if err := verifyArtifact(u.artifactKey(m), data, sig); err != nil {
 		return Cached{}, fmt.Errorf("%w: %w", ErrVerify, err)
 	}
 	c, err := cache.Save(m.Version, asset, data, kind, sig)

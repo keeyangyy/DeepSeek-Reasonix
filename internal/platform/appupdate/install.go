@@ -331,6 +331,7 @@ func (c *capability) updater(target, cacheDir, kind string) (*update.Updater, er
 		Fallback: v4,
 		CacheDir: cacheDir,
 		IndexURL: update.StudioCatalog,
+		Mine:     c.opts.Mine,
 		Kind:     kind,
 		// Go's default user agent is what release-edge bot protection scores
 		// worst (#6005), and a 403 there looks like "no versions" to the panel.
