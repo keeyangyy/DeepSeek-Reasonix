@@ -4,13 +4,8 @@ import "strings"
 
 // Write-lease modes, set in [agent] write_lease. They differ only in how far
 // the cross-session lease reaches writers whose extent the host cannot read:
-//
-//	strict      every writer whose extent could overlap another's serializes,
-//	            which is upstream's behaviour and the default.
-//	optimistic  exclusion is kept between writers that declare write_paths; a
-//	            writer that declares none (bash, MCP, computer_act) stops
-//	            holding the whole workspace.
-//	off         this session takes no cross-session write lease at all.
+// strict serializes every such writer, optimistic excludes only declared
+// write_paths from each other, off takes no cross-session lease at all.
 const (
 	WriteLeaseStrict     = "strict"
 	WriteLeaseOptimistic = "optimistic"
@@ -44,8 +39,7 @@ func (a AgentConfig) WriteLeaseMode() string {
 }
 
 // SerializeWholeWorkspace reports whether a writer that declares no write_paths
-// still claims the whole workspace for exclusive use. Only "optimistic" lets it
-// run without that hold.
+// still claims the whole workspace for exclusive use.
 func (a AgentConfig) SerializeWholeWorkspace() bool {
 	return a.WriteLeaseMode() != WriteLeaseOptimistic
 }
