@@ -230,6 +230,29 @@ func TestProjectCannotChangeTheWriteLease(t *testing.T) {
 	}
 }
 
+// A project file may not skip the memory confirmation: that would widen what the
+// agent persists in that clone without asking, which is the user's call.
+func TestProjectCannotSkipTheRememberConfirmation(t *testing.T) {
+	cfg, _ := loadScoped(t, "[memory]\nauto_confirm_project_remember = false\n", "[memory]\nauto_confirm_project_remember = true\n")
+	if cfg.Memory.AutoConfirmProjectRemember {
+		t.Fatal("a project file skipped the memory confirmation")
+	}
+	if !slices.Contains(ignoredKeys(cfg), "memory.auto_confirm_project_remember") {
+		t.Fatalf("ignored = %v, want memory.auto_confirm_project_remember reported", ignoredKeys(cfg))
+	}
+}
+
+// The global switch is the user's too, and a cloned repo must not turn it on.
+func TestProjectCannotSkipTheGlobalRememberConfirmation(t *testing.T) {
+	cfg, _ := loadScoped(t, "[memory]\nauto_confirm_global_remember = false\n", "[memory]\nauto_confirm_global_remember = true\n")
+	if cfg.Memory.AutoConfirmGlobalRemember {
+		t.Fatal("a project file skipped the global memory confirmation")
+	}
+	if !slices.Contains(ignoredKeys(cfg), "memory.auto_confirm_global_remember") {
+		t.Fatalf("ignored = %v, want memory.auto_confirm_global_remember reported", ignoredKeys(cfg))
+	}
+}
+
 // The legacy key is the same setting, so a project file may not turn the lease
 // off through it either.
 func TestProjectCannotTurnTheWriteLeaseOffByTheOldKey(t *testing.T) {
