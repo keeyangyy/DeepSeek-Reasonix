@@ -254,3 +254,46 @@ func (m *model) keyCmd(msg tea.KeyPressMsg) tea.Cmd {
 	_, cmd := m.Update(msg)
 	return cmd
 }
+
+var (
+	ctrlN = tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl}
+	ctrlP = tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
+)
+
+// 1.x moved through a list with Ctrl+N / Ctrl+P as well as the arrows, and
+// both lines' docs say so.
+func TestCtrlNAndCtrlPMoveTheMenuHighlight(t *testing.T) {
+	m, _ := testModel(t)
+	menuFor(m, "/z", Completion{Kind: "slash", To: 2, Items: []CompletionItem{
+		{Label: "/zebra", Insert: "/zebra"}, {Label: "/zulu", Insert: "/zulu"}, {Label: "/zeta", Insert: "/zeta"},
+	}})
+	m.Update(ctrlN)
+	m.Update(ctrlN)
+	if m.menu == nil || m.menu.sel != 2 {
+		t.Fatalf("menu after two Ctrl+N = %+v, want the third row", m.menu)
+	}
+	m.Update(ctrlP)
+	if m.menu.sel != 1 {
+		t.Fatalf("highlight after Ctrl+P = %d, want 1", m.menu.sel)
+	}
+	if m.composer.Value() != "/z" {
+		t.Fatalf("moving the highlight changed the composer: %q", m.composer.Value())
+	}
+}
+
+func TestCtrlNAndCtrlPMoveThePickerSelection(t *testing.T) {
+	m, _ := testModel(t)
+	run(m, m.openPicker())
+	if m.picker == nil || m.picker.sel != 1 || len(m.picker.shown()) < 3 {
+		t.Fatalf("picker = %+v, want it on the second of at least three rows", m.picker)
+	}
+	m.Update(ctrlN)
+	if m.picker.sel != 2 {
+		t.Fatalf("selection after Ctrl+N = %d, want 2", m.picker.sel)
+	}
+	m.Update(ctrlP)
+	m.Update(ctrlP)
+	if m.picker.sel != 0 || m.picker.query != "" {
+		t.Fatalf("picker after two Ctrl+P = sel %d, query %q; want 0 and no filter", m.picker.sel, m.picker.query)
+	}
+}

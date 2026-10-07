@@ -24,6 +24,7 @@ func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
 		Title   string `json:"title,omitempty"`
 		Turns   int    `json:"turns,omitempty"`
 		Current bool   `json:"current,omitempty"`
+		Unread  bool   `json:"unread,omitempty"`
 		// Modified is when the conversation last changed, for a picker to date it.
 		Modified time.Time `json:"modified"`
 	}
@@ -60,6 +61,7 @@ func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
 			Turns:    si.Turns,
 			Title:    title,
 			Current:  sessionstore.CanonicalSessionPath(si.Path) == current,
+			Unread:   si.Unread,
 			Modified: modified,
 		})
 	}

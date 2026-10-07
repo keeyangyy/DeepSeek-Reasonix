@@ -126,9 +126,9 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	switch k := msg.String(); k {
 	case "esc":
 		m.picker = nil
-	case "up":
+	case "up", "ctrl+p":
 		p.sel = max(p.sel-1, 0)
-	case "down", "tab":
+	case "down", "tab", "ctrl+n":
 		p.sel = min(p.sel+1, max(len(items)-1, 0))
 	case "enter":
 		if p.sel < len(items) {

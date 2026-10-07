@@ -27,16 +27,27 @@ type skillSet struct {
 	// catalog is what the model has of the listing. It rides the turn, never
 	// the prefix, which a per-project catalog would diverge.
 	catalog projectionDebt
+	// pathHits is the workspace files the host has seen the session touch; a
+	// skill that declares `paths:` is eligible once one of them matches.
+	pathHits *skill.PathHits
 }
 
-func newSkillSet(enabled, all []skill.Skill, store, allStore *skill.Store, noImplicit bool) skillSet {
-	return skillSet{enabled: enabled, all: all, store: store, allStore: allStore, noImplicitInvocation: noImplicit}
+func newSkillSet(enabled, all []skill.Skill, store, allStore *skill.Store, noImplicit bool, workspaceRoot string) skillSet {
+	hits := store.PathHits()
+	if hits == nil {
+		hits = skill.NewPathHits(workspaceRoot)
+	}
+	return skillSet{enabled: enabled, all: all, store: store, allStore: allStore, noImplicitInvocation: noImplicit, pathHits: hits}
 }
 
 // skillsAllOffBlock replaces the listing when every skill is switched off: an
 // absence the model must be told about, since the listing it already has would
 // otherwise keep standing as current.
 const skillsAllOffBlock = "# Skills\n\nEvery skill this project had is switched off. The listing you were sent earlier no longer holds, and `run_skill` has nothing to reach."
+
+// skillsNoneEligibleBlock replaces the listing when skills exist but none is
+// eligible for the files this session has touched.
+const skillsNoneEligibleBlock = "# Skills\n\nNone of this project's skills apply to the files this session has touched. The listing you were sent earlier no longer holds."
 
 // owedCatalog returns the listing this turn owes, empty when the model already
 // has the current one. It asks the canonical registry rather than a flag, so a
@@ -46,11 +57,15 @@ func (s *skillSet) owedCatalog() string {
 	if s.noImplicitInvocation {
 		return ""
 	}
-	block := skill.IndexBlock(s.list())
+	listed := s.list()
+	block := skill.IndexBlock(s.pathHits.Visible(listed))
 	if block == "" && s.catalog.sent() {
 		// Silence would leave the listing the model already has standing as
 		// current. Every skill being switched off is a fact, not an absence.
 		block = skillsAllOffBlock
+		if skill.IndexBlock(listed) != "" {
+			block = skillsNoneEligibleBlock
+		}
 	}
 	return s.catalog.owed(block)
 }
@@ -273,3 +288,8 @@ func (c *Controller) canonicalSkillName(name string) (string, error) {
 	}
 	return "", &skill.NotFoundError{Name: name}
 }
+
+// TouchedPaths lists the workspace files this session's completed tool calls
+// named, sorted: the facts a skill's `paths:` globs are judged against. It is a
+// read-only diagnostic view of the set.
+func (c *Controller) TouchedPaths() []string { return c.skills.pathHits.Seen() }

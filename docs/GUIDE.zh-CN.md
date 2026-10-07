@@ -311,7 +311,9 @@ Goal、由 `todo_write` 工具驱动的实时 Todo 面板、扩展发布的 stat
 远程模块让 Reasonix 在远端主机上运行,并通过你自己的 SSH 连接访问它 —— 即 VS Code
 Remote-SSH 式的体验。它在远端主机上引导一个常驻的 headless `reasonix serve`,把本地一个
 回环端口转发过去,再经隧道打开现有的 serve Web 客户端。agent、工具与文件全部原生运行在远端
-主机上,保真度 100%,不经过有损的文件代理。V1 支持 Linux 与 macOS 远端主机。
+主机上,保真度 100%,不经过有损的文件代理。
+
+支持 Linux、macOS 与 Windows 远端主机;Windows 主机需要 PowerShell 和 OpenSSH,无论其 `DefaultShell` 指定的是 cmd、PowerShell 还是 Git Bash。
 
 主机保存在 `config.toml` 的用户级 `[remote]` 段。与 `[secrets]` 一样,项目级
 `reasonix.toml` 无法注入或覆盖远程主机 —— 克隆的仓库永远无法左右 Reasonix 向何处发起 SSH
@@ -404,6 +406,22 @@ API Key 的主机上打开工作区可以直接用。设了 `provider = "remote"
 Provider。
 短暂的 SSH 中断不会关闭远程窗口；桌面端会在后台重连、重新挂载回环转发，并让窗口重新加载已恢复的
 Serve。认证失败或主机密钥错误属于终止性故障，此时会关闭已经不可用的远程窗口。
+
+### 远端 serve 的生命周期
+
+- 主机上的 `reasonix serve` 进程是常驻的。退出桌面或链路断开都不会终止它,下次连接会直接接入。
+- pane 在这个 serve 上的会话不会比桌面活得久。每个 pane 在远端各自驱动一个 runtime;关闭 pane
+  或退出桌面时,Studio 会先向远端 serve 发 `POST /runtimes/{id}/close`,再拆隧道。
+- 这次关闭会取消进行中的回合并释放会话租约,别的窗口随后就能打开这个会话。被关闭的只有该 pane
+  的 runtime:serve 进程继续运行,下次连接可以接入;其他客户端开的 runtime 也不受影响,无论这个
+  serve 是怎么启动的。
+- `provider = "remote"` 只决定模型凭据从哪来,不会让 pane 脱离桌面。
+- 工作区上已在运行的 serve 会被接入而不是被替换,不论它由 `reasonix remote serve start`、另一个
+  窗口还是手工执行 `reasonix serve --port-file` 启动。之后的连接不会删除它的 port 与 pid 文件,
+  也不会停掉它。
+- `serve start` 不使用 broker,所以 `provider = "local"` 的主机无法接入它:这次连接会失败并给出
+  说明,serve 保持运行。请把该主机设为 `provider = "remote"`(此时远端需自备凭据),或用
+  `reasonix remote serve stop <host>` 停掉该 serve。
 
 ## 自定义 OpenAI-compatible provider
 

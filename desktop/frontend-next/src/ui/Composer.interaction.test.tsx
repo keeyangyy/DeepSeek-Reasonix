@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "./testkit";
 import { Composer } from "./Composer";
 import { MockPort } from "../port/mock";
+import { HttpError } from "../port/port";
 import type { AgentPort, ApprovalMode, Attachment, Completion, ModelEntry, Preset, SessionStatus } from "../port/port";
 import { draftKey } from "./drafts";
 
@@ -417,8 +418,32 @@ describe("composer attachments", () => {
     });
     expect(await screen.findByText("good.txt")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "添加失败 · 重试" })).toBeTruthy();
+    expect(screen.getByText("too large")).toBeTruthy();
     expect(screen.getByRole("button", { name: "移除 bad.txt" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows why an attachment failed on the chip, in the window's language, and retries it", async () => {
+    const port = new MockPort();
+    const attach = vi
+      .fn<(blob: Blob, name: string) => Promise<Attachment>>()
+      .mockRejectedValueOnce(
+        new HttpError(415, "pasted data is not a supported image", {
+          code: "attachment.unsupported_image",
+          params: { format: ".ico", supported: "PNG, JPEG, GIF, WebP" },
+        }),
+      )
+      .mockResolvedValue({ path: ".reasonix/attachments/a.png", ref: "@.reasonix/attachments/a.png", image: true });
+    (port as unknown as { attach: typeof attach }).attach = attach;
+    const { container } = draw({ port });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "favicon.ico", { type: "image/x-icon" })] } });
+    const why = await screen.findByText("这个文件的格式暂不支持（.ico）。支持的图片格式：PNG, JPEG, GIF, WebP。可以先转换格式再添加。");
+    expect(why.closest("li")?.querySelector("button.retry")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "添加失败 · 重试" }));
+    await waitFor(() => expect(screen.queryByText(/格式暂不支持/)).toBeNull());
+    expect(attach).toHaveBeenCalledTimes(2);
   });
 
   it("keeps image routing guidance outside the horizontal attachment rail", async () => {

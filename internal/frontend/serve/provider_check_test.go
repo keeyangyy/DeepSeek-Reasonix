@@ -37,8 +37,8 @@ func TestCheckProviderReportsWhatTheEndpointSaid(t *testing.T) {
 	if got.OK {
 		t.Fatalf("an unreachable endpoint reported ok: %+v", got)
 	}
-	if got.Error == "" {
-		t.Fatal("a failed probe must carry the endpoint's own words")
+	if got.Code != codeProbeUnreachable {
+		t.Fatalf("code = %q, want the typed identity of an unreachable endpoint", got.Code)
 	}
 	if len(got.Models) != 0 {
 		t.Fatalf("a failed probe reported models: %v", got.Models)

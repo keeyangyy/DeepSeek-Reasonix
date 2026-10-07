@@ -28,6 +28,7 @@ import { Sidebar } from "./Sidebar";
 import { Sky } from "./Sky";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
+import { isUnread, useViewed } from "./unread";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
 import { useSessionSwitch } from "./sessionswitch";
@@ -317,12 +318,15 @@ export function App({ hub }: { hub: HubPort }) {
   // A transcript can be thousands of pixels tall. Capturing it into a View
   // Transition made a simple sidebar click pay for a full-page texture before
   // the active id changed. Selection feedback should be immediate.
+  const reloadBooks = useCallback(() => Promise.all([reloadTree(), reloadRemoteTrees()]), [reloadTree, reloadRemoteTrees]);
+  const viewed = useViewed({ runtimes, ports: panePorts, active, tree, remote: remoteTrees, reload: reloadBooks });
   const focusPane = useCallback(
     (id: string) => {
       sw.cancel();
       setActive(id);
+      viewed.view(id);
     },
-    [sw.cancel],
+    [sw.cancel, viewed.view],
   );
   // Settings is the next layer over the whole screen and had entry but no exit: it
   // simply vanished on unmount. A view transition can animate out an element that
@@ -421,8 +425,15 @@ export function App({ hub }: { hub: HubPort }) {
   );
 
   const tabs = useMemo(
-    () => runtimes.map((rt, i) => ({ rt, title: titleFor(rt, i), run: runs[rt.id]?.run ?? "idle", live: runs[rt.id]?.live ?? false })),
-    [runtimes, titleFor, runs],
+    () =>
+      runtimes.map((rt, i) => ({
+        rt,
+        title: titleFor(rt, i),
+        run: runs[rt.id]?.run ?? "idle",
+        live: runs[rt.id]?.live ?? false,
+        unread: isUnread(rt, viewed.tree, viewed.remote),
+      })),
+    [runtimes, titleFor, runs, viewed.tree, viewed.remote],
   );
   // The folder only earns tab space when the panes actually span more than one.
   const manyRoots = useMemo(() => new Set(runtimes.map((rt) => rt.root)).size > 1, [runtimes]);
@@ -578,7 +589,7 @@ export function App({ hub }: { hub: HubPort }) {
         <Sidebar
           hub={hub}
           collapsed={!rail}
-          tree={tree}
+          tree={viewed.tree}
           treeRead={treeRead}
           runtimes={runtimes}
           runs={runs}
@@ -588,7 +599,7 @@ export function App({ hub }: { hub: HubPort }) {
           pinned={pinnedSessions}
           onPin={togglePinnedSession}
           remotes={remotes}
-          remoteTrees={remoteTrees}
+          remoteTrees={viewed.remote}
           reloadRemotes={reloadRemotes}
           reloadRemoteTrees={reloadRemoteTrees}
           readRemoteTree={readRemoteTree}
@@ -652,6 +663,7 @@ export function App({ hub }: { hub: HubPort }) {
                   onFocus={() => focusPane(rt.id)}
                   visible={rt.id === active}
                   onReport={onReport}
+                  onTurnDone={viewed.turnDone}
                   // Panes, not just the tree: the first turn gives this pane a
                   // session path, and until /runtimes reports it the pane still
                   // looks blank — the next history row would take it over.

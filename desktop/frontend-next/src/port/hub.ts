@@ -44,6 +44,8 @@ export interface TreeSession {
   // Set when Reasonix 1.x kept this transcript: it is read here and never
   // written, so the row says which line it came from.
   legacy?: boolean;
+  // A turn finished since the person last looked. Absent means seen.
+  unread?: boolean;
   // Conflict-recovery copies of this same conversation. A save that keeps
   // conflicting writes one per turn, all under one title.
   copies?: TreeSession[];

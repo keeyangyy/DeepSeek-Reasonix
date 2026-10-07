@@ -126,7 +126,6 @@ func resolveProviders(opts Options, cfg *config.Config, proxySpec netclient.Prox
 	if err != nil {
 		return ps, fmt.Errorf("boot: %w", err)
 	}
-	installSidecarStreamRouters(mgr, merged)
 	ps.effective, ps.extension = merged, merged
 	return ps, nil
 }

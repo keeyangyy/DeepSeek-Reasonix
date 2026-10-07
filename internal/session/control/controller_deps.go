@@ -158,7 +158,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		modelModes:                 opts.ModelModes,
 		modelFace:                  faceOfEntry(opts.ModelEntry),
 		sessionDir:                 opts.SessionDir,
-		skills:                     newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation),
+		skills:                     newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation, opts.WorkspaceRoot),
 		skillRunner:                opts.SkillRunner,
 		readOnlySkillRunner:        opts.ReadOnlySkillRunner,
 		skillProfile:               opts.SkillProfile,

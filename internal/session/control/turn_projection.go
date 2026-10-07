@@ -53,6 +53,7 @@ func (c *Controller) turnBlocksFor(source string, includeOwed bool, notes []stri
 			turnBlock{hookContextTag, c.drainHookContextBlock()},
 			turnBlock{"available-skills", wrapTurnBlock("available-skills", c.skills.owedCatalog())},
 			turnBlock{"project-instructions", wrapTurnBlock("project-instructions", c.memory.owedInstructions())},
+			turnBlock{"mcp-prompt-failure", wrapTurnBlock("mcp-prompt-failure", c.mcp.promptFailures.owed())},
 		)
 	}
 	return append(blocks,
@@ -156,4 +157,5 @@ func (c *Controller) runWithRunner(ctx context.Context, input string) error {
 func (c *Controller) settleTurnProjections() {
 	c.skills.catalog.settle()
 	c.memory.instructions.settle()
+	c.mcp.promptFailures.settle()
 }

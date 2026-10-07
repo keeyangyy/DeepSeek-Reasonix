@@ -455,11 +455,11 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
                     <span className="nm" title={c.a?.path ?? c.name}>{c.name}</span>
                     {c.state === "adding" && <span className="sz live">{t("正在添加…")}</span>}
                     {c.state === "ready" && <span className="sz">{isPicture(c) ? t("图片") : t("文件")}</span>}
+                    {c.state === "failed" && c.error && <span className="why" title={c.error}>{c.error}</span>}
                     {c.state === "failed" && (
         <button
                         className="retry"
                         data-action="session.attach"
-                        title={c.error}
                         onClick={() => {
                           if (!c.blob) return;
                           setShots((prev) => prev.map((x) => (x === c ? { ...c, state: "adding", error: "" } : x)));

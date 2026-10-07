@@ -161,8 +161,9 @@ const JOBS = Number(query.get("jobs") ?? 0);
 // ?treems= holds every tree read back until that long after load, so the
 // window can be seen before the kernel has named a single folder.
 const TREE_AT = performance.now() + Number(query.get("treems") ?? 0);
-// ?panes=0 opens the window with no conversation open.
-const NO_PANES = query.get("panes") === "0";
+// ?panes=0 opens the window with no conversation open; ?panes=N opens N.
+const PANES = query.has("panes") ? Number(query.get("panes")) : 1;
+const NO_PANES = PANES === 0;
 
 class BenchHub extends MockHub {
   readonly feeds = new Map<string, BenchPort>();
@@ -174,7 +175,17 @@ class BenchHub extends MockHub {
   }
 
   runtimes(): Promise<RuntimeView[]> {
-    return NO_PANES ? Promise.resolve([]) : super.runtimes();
+    if (NO_PANES) return Promise.resolve([]);
+    if (PANES <= 1) return super.runtimes();
+    return Promise.resolve(
+      Array.from({ length: PANES }, (_, i) => ({
+        id: `r${i + 1}`,
+        base: i === 0 ? "" : `/rt/r${i + 1}`,
+        root: "~/projects/DeepSeek-Reasonix",
+        name: "DeepSeek-Reasonix",
+        sessionPath: `/sessions/pane-${i + 1}.jsonl`,
+      })),
+    );
   }
 
   tree(): Promise<TreeWorkspace[]> {

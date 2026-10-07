@@ -94,6 +94,8 @@ var Chinese = Messages{
 	NoticeUnappliedSteerFmt: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：\n%s",
 	TUIQuestion:             "提问",
 	TUISubagentCallsFmt:     "%d 次子代理调用",
+	TUIChartMoreRowsFmt:     "… 还有 %d 行",
+	TUIChartMoreColsFmt:     "… 还有 %d 列",
 	TUIStallTokensFmt:       "自上次有可观察的进展以来已用约 %d 倍上下文的输入（%d tokens）。是否继续由你决定。",
 	TUIStallRepeating:       "模型在重复输出同一段文字。是否继续由你决定。",
 	TUIStallIdleFmt:         "已连续 %d 轮工具调用没有可观察的进展：没有文件改动、检查或任务步骤变化，也没有新读取。是否继续由你决定。",

@@ -115,8 +115,9 @@ export interface ProviderProbe {
   noProxy: boolean;
 }
 
-// What re-probing a saved provider found. `error` carries the endpoint's own
-// words, because "401" and "no chat models" send the user to different fixes.
+// What re-probing a saved provider found. A failure carries `code`, the dotted
+// identity the add flow's refusals use, because "401" and "no chat models" send
+// the user to different fixes; the endpoint's own words ride along as `detail`.
 export interface ProviderCheck {
   ok: boolean;
   kind?: string;
@@ -131,7 +132,12 @@ export interface ProviderCheck {
   vision?: string[];
   ambiguous?: boolean;
   noProxy?: boolean;
-  error?: string;
+  code?: string;
+  // Only the numbers the code's sentence needs: `status`, `count`.
+  params?: Record<string, number>;
+  httpStatus?: number;
+  // The endpoint's error text, for display; never an input to `code`.
+  detail?: string;
 }
 
 export type ProviderModelCheckStatus = "available" | "unavailable" | "unknown";

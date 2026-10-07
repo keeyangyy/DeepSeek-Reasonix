@@ -192,7 +192,7 @@ export interface AgentPort {
   // The community market: a source like a pasted address, not a trust root.
   // Install is the same plan-then-apply pair, pinned to the reviewed digest.
   marketList(q: MarketQuery): Promise<MarketList>;
-  marketDetail(slug: string): Promise<MarketDetail>;
+  marketDetail(slug: string, opts?: { refresh?: boolean }): Promise<MarketDetail>;
   planMarket(req: MarketRequest): Promise<MarketPlan>;
   installMarket(req: MarketRequest): Promise<MarketPlan>;
   // Publishing spends the account session; both refuse when signed out.
@@ -406,6 +406,9 @@ export interface AgentPort {
   sessions(): Promise<SessionEntry[]>;
   resume(path: string): Promise<void>;
   newSession(): Promise<void>;
+  // Clears the unread mark on the conversation this pane has open. Unmarked
+  // sessions are a no-op on the kernel, and an older kernel answers 404.
+  markSessionViewed(): Promise<void>;
   deleteSession(name: string): Promise<void>;
   status(): Promise<SessionStatus>;
   /** The provider's wallet, or null when this provider has no wallet endpoint —

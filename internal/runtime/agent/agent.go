@@ -544,6 +544,7 @@ func (a *Agent) Session() *sessionstore.Session {
 // running turn (it only fires while idle); sessMu guards the pointer swap itself.
 func (a *Agent) SetSession(s *sessionstore.Session) {
 	a.sess.reset(s)
+	a.replayTouchedPaths(s)
 	// The replaced conversation's task is over, but the ledger and the bill
 	// answer to beginRunTurn's scope check rather than to this seam.
 	if s != nil {

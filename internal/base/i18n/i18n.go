@@ -90,6 +90,8 @@ type Messages struct {
 	NoticeUnappliedSteerFmt string // guidance that arrived too late for its turn — %s the guidance
 	TUIQuestion             string // an answered question that carried no prompt
 	TUISubagentCallsFmt     string // calls a sub-agent made under its task — %d count
+	TUIChartMoreRowsFmt     string // rows of a chart table past the preview — %d count
+	TUIChartMoreColsFmt     string // columns of a chart table that did not fit — %d count
 	TUIStallTokensFmt       string // progress watch: %d context windows (%d tokens) with nothing observable
 	TUIStallRepeating       string // progress watch: the model repeats itself
 	TUIStallIdleFmt         string // progress watch: %d tool rounds with nothing observable

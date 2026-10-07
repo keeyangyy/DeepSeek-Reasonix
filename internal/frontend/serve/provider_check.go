@@ -38,9 +38,14 @@ type providerCheck struct {
 	Vision    []string `json:"vision,omitempty"`
 	Ambiguous bool     `json:"ambiguous,omitempty"`
 	NoProxy   bool     `json:"noProxy,omitempty"`
-	// Error carries the endpoint's own words. "401" and "no chat models" send
-	// the user to different fixes, so the message is the answer here.
-	Error string `json:"error,omitempty"`
+	// Code is why the check failed, as the dotted identity the add flow's
+	// refusals use. Params carry only the numbers its sentence needs.
+	Code   string         `json:"code,omitempty"`
+	Params map[string]int `json:"params,omitempty"`
+	// HTTPStatus and Detail are what the endpoint answered with, for the user
+	// to read; neither is an input to Code.
+	HTTPStatus int    `json:"httpStatus,omitempty"`
+	Detail     string `json:"detail,omitempty"`
 }
 
 // No protocol switch rides along with this. A probe only lists models, and it
@@ -89,7 +94,7 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 	// A refusal is a finding, not a request failure: the row wants to say what
 	// went wrong, and a bare status code would leave it with nothing to show.
 	if probeErr != nil {
-		writeJSON(w, providerCheck{Error: probeErr.Error()})
+		writeJSON(w, probeFinding(probeErr, entry.APIKey))
 		return
 	}
 	completed := ""
@@ -106,6 +111,27 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 		Ambiguous: got.Ambiguous,
 		NoProxy:   got.NoProxy,
 	})
+}
+
+// probeFinding reads a failed probe as the typed finding a client renders. An
+// error that is not a probe identity is the kernel's own fault, not the
+// endpoint's or the user's, and says so.
+func probeFinding(err error, apiKey func() string) providerCheck {
+	var probe *catalog.ProbeError
+	if !errors.As(err, &probe) {
+		return providerCheck{Code: codeProbeFailed}
+	}
+	_, code := probeReasonRefusal(probe.Reason)
+	found := providerCheck{Code: code, HTTPStatus: probe.Status, Detail: endpointDetail(probe.Body, apiKey)}
+	for name, value := range probe.Params {
+		if n, ok := value.(int); ok {
+			if found.Params == nil {
+				found.Params = map[string]int{}
+			}
+			found.Params[name] = n
+		}
+	}
+	return found
 }
 
 type providerModelCheckRequest struct {
@@ -255,6 +281,12 @@ func modelCheckDetail(err error, apiKey func() string) string {
 	case errors.As(err, &streamErr):
 		text = streamErr.Message
 	}
+	return endpointDetail(text, apiKey)
+}
+
+// endpointDetail folds what an endpoint said into one printable, bounded line
+// with the probe key and credential-shaped text removed.
+func endpointDetail(text string, apiKey func() string) string {
 	text = ansiSequence.ReplaceAllString(text, " ")
 	text = strings.Join(strings.Fields(strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {

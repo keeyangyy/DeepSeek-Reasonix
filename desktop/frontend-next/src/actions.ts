@@ -52,6 +52,8 @@ export const ACTIONS: UIAction[] = [
   // Completion verification is adaptive now, rather than a user-facing preset.
   // The legacy endpoint remains in the port for older clients and sessions,
   // but it is intentionally not advertised as an interface action.
+  { id: "chart.scroll", kind: "view", target: "none", proof: "interaction" },
+  { id: "chart.data", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.policy", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.rail", kind: "view", target: "none", proof: "browser" },
   { id: "appearance.theme", kind: "view", target: "none", proof: "interaction" },
@@ -339,6 +341,9 @@ export const ACTIONS: UIAction[] = [
   { id: "extensions.submit", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "provider.probe", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "provider.draft", kind: "interaction", target: "none", proof: "interaction" },
+  { id: "provider.discard-edits", kind: "destructive", target: "none", proof: "interaction" },
+  { id: "provider.revert", kind: "interaction", target: "none", proof: "interaction" },
+  { id: "provider.model-check-all", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "provider.model-check", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "provider.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "provider.add-start", kind: "view", target: "none", proof: "interaction" },

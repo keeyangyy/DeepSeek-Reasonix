@@ -146,7 +146,9 @@ func renderTool(it *Item, width int) string {
 			lines = append(lines, outputSummary(t.Name, it.shellOutput(), avail, it.Fold)...)
 		}
 	default:
-		if t.OutputDiff {
+		if spec, ok := chartOf(it); ok {
+			lines = append(lines, chartRows(spec, width, it.Fold)...)
+		} else if t.OutputDiff {
 			lines = append(lines, diffRows(t.Output, width, it.Fold)...)
 		} else {
 			lines = append(lines, outputSummary(t.Name, t.Output, avail, it.Fold)...)

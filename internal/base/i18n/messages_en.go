@@ -93,6 +93,8 @@ var English = Messages{
 	NoticeUnappliedSteerFmt: "Guidance was not applied because the turn ended before it could be processed. Send it again if it is still needed:\n%s",
 	TUIQuestion:             "question",
 	TUISubagentCallsFmt:     "%d sub-agent call(s)",
+	TUIChartMoreRowsFmt:     "… %d more rows",
+	TUIChartMoreColsFmt:     "… %d more columns",
 	TUIStallTokensFmt:       "About %d context windows of input (%d tokens) since the run last did anything observable. Whether to keep going is your call.",
 	TUIStallRepeating:       "The model is repeating the same text. Whether to keep going is your call.",
 	TUIStallIdleFmt:         "No observable progress for %d tool rounds: no file changed, no check or task step moved, nothing new was read. Whether to keep going is your call.",

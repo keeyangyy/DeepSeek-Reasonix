@@ -58,6 +58,9 @@ type treeSession struct {
 	// Legacy marks a conversation kept by Reasonix 1.x: this build reads that
 	// log and never writes it, so the row says so rather than looking native.
 	Legacy bool `json:"legacy,omitempty"`
+	// Unread is a turn that finished since the person last looked. The kernel
+	// derives it from two stored timestamps; absence reads as seen.
+	Unread bool `json:"unread,omitempty"`
 	// Copies are this conversation's conflict-recovery copies. A save that
 	// keeps conflicting writes one file per turn, all under the one title, and
 	// unfolded that is a sidebar of rows the user never made.
@@ -158,7 +161,7 @@ func (h *Hub) workspaceSessions(root string, open map[string]string) []treeSessi
 			lead[recoveryLineageRoot(si, byID)] = len(out)
 		}
 		out = append(out, treeSession{
-			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived,
+			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread,
 			Legacy: legacy.legacyOf(si.Path),
 		})
 	}

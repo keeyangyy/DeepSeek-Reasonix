@@ -1944,6 +1944,15 @@ body { font-size: 14px; line-height: 1.75; }
 }
 .rail .sessrow[data-run="done"] { animation: none; }
 .rail .sessrow[data-just-done] { animation: studio-session-done 1.2s ease-out both; }
+.rail .sessrow > .unread-dot { position: absolute; inset-inline-end: 11px; top: 50%; translate: 0 -50%; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-ink); pointer-events: none; }
+.rail .sessrow[data-unread] > .sesscopies { margin-inline-end: 26px; }
+.rail .sessrow-context[data-unread] > .sesstitle { padding-inline-end: 26px; }
+.rail .sessrow-remote > .unread-dot { inset-inline-end: 36px; }
+.rail .sessrow-remote[data-unread] > .sessmeta { margin-inline-end: 58px; }
+.rail .sessrow[data-unread] .sesstitle { color: var(--text); font-weight: var(--w-semi); }
+:root[data-theme="dark"] .rail .sessrow[data-unread]:not(:hover):not([aria-selected="true"]) { background: color-mix(in srgb, var(--text) 4%, transparent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rail .sessrow[data-unread]:not(:hover):not([aria-selected="true"]) { background: color-mix(in srgb, var(--text) 4%, transparent); } }
+.rail .wsacts > .unread-count { flex: none; min-width: 16px; height: 16px; margin-inline-end: 3px; padding-inline: 4px; box-sizing: border-box; display: inline-grid; place-items: center; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--muted); font: var(--w-med) 10px/1 var(--ui); }
 @keyframes studio-session-run { 55%, 100% { transform: translateX(110%); } }
 @keyframes studio-session-wait { 50% { background: color-mix(in srgb, var(--warn) 8%, transparent); } }
 @keyframes studio-session-done { from { background: color-mix(in srgb, var(--ok) 18%, transparent); } }

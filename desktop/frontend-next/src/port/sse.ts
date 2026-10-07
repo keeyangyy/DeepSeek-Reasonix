@@ -1,6 +1,6 @@
 import { PLAN_ACTIONS, type PlanAction } from "./session";
 import type { AccountState, AgentPort, Appearance, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
-import { HttpError, type Attachment, type ChangeDiff, type CommitProposal, type CommitRequest, type CommitResult, type DroppedRef, type WorkspaceFile, type WorkspaceFiles, type WorkspaceChanges } from "./port";
+import { HttpError, type ChangeDiff, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles, type WorkspaceChanges } from "./port";
 import { SseFeedback } from "./sse_feedback";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
@@ -407,32 +407,14 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post("/resume", { path });
   }
 
+  markSessionViewed() { return this.post("/sessions/viewed"); }
+
   newSession() {
     return this.post("/new");
   }
 
   deleteSession(name: string) {
     return this.post("/delete-session", { name });
-  }
-
-  // JSON, not raw bytes: csrfGuard admits nothing else, and that guard is what
-  // stops a cross-site form posting here at all.
-  async attach(blob: Blob, name?: string) {
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    const res = await fetch(this.base + "/attachments", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ mime: blob.type, name: name ?? "", data: btoa(bin) }),
-    });
-    if (!res.ok) throw new HttpError(res.status, `/attachments: ${res.status} ${await res.text()}`);
-    return (await res.json()) as Attachment;
-  }
-
-  dropRefs(paths: string[]) {
-    return this.post0<DroppedRef[]>("/drop", { paths });
   }
 
   changes() {

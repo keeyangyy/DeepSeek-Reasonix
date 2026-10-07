@@ -130,6 +130,14 @@ describe("rebuilding a reopened transcript", () => {
     expect(users([{ role: "user", content: "<reasoning-language>zh</reasoning-language>" }])).toHaveLength(0);
   });
 
+  it("strips a failed-MCP-prompt block from a replayed turn", () => {
+    const got = users([
+      { role: "user", content: "<mcp-prompt-failure>\nThe user invoked MCP prompt \"p\"\n</mcp-prompt-failure>\n你好" },
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toBe("你好");
+  });
+
   it("leaves an ordinary turn as its text", () => {
     const got = users([{ role: "user", content: "第一句话" }]);
     expect(got).toHaveLength(1);

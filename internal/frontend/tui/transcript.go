@@ -344,6 +344,12 @@ func mergeTool(prev, next eventwire.Tool) eventwire.Tool {
 	if next.Args != "" {
 		out.Args = next.Args
 	}
+	if next.ResolvedName != "" {
+		out.ResolvedName = next.ResolvedName
+	}
+	if next.CapabilityID != "" {
+		out.CapabilityID = next.CapabilityID
+	}
 	if next.Output != "" {
 		out.Output = next.Output
 	}

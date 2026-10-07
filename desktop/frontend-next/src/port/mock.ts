@@ -319,6 +319,8 @@ export class MockPort extends MockFeedback implements AgentPort {
 
   async deleteSession(_name: string) {}
 
+  async markSessionViewed() {}
+
   async status() {
     return { ...this.state };
   }

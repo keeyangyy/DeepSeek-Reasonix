@@ -25,6 +25,8 @@ const (
 	tsProviderFile  = "desktop/frontend-next/src/port/provider.ts"
 	tsFeedbackFile  = "desktop/frontend-next/src/port/feedback.ts"
 	tsWorkspaceFile = "desktop/frontend-next/src/port/workspace.ts"
+	tsHubFile       = "desktop/frontend-next/src/port/hub.ts"
+	tsChartFile     = "desktop/frontend-next/src/ui/chart/spec.ts"
 )
 
 // mirroredWireTypes are the Go types the desktop keeps a second, hand-written
@@ -106,6 +108,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/hub_remote.go", "RemoteHostView", tsRemoteFile, "RemoteHost"},
 	{"internal/frontend/serve/remote_browse.go", "RemoteListing", tsRemoteFile, "RemoteListing"},
 	{"internal/frontend/serve/remote_browse.go", "RemoteFolder", tsRemoteFile, "RemoteFolder"},
+	// The sidebar row. The unread mark is derived by the kernel from two stored
+	// timestamps; a row the page cannot read it from shows a finished turn as seen.
+	{"internal/frontend/serve/hub_tree.go", "treeSession", tsHubFile, "TreeSession"},
 	// What waits on the user, and which call answers it. The desktop reads this
 	// list as the whole set of open prompts — one it cannot read is a card it
 	// seals as decided while the run stays blocked on it.
@@ -125,6 +130,8 @@ var mirroredWireTypes = []wireMirror{
 	// A source and a model as the pickers name them. A label the page cannot
 	// read puts the config name back on screen after the user renamed it.
 	{"internal/frontend/serve/providers.go", "providerView", tsProviderFile, "ProviderEntry"},
+	{"internal/frontend/serve/provider_check.go", "providerCheck", tsProviderFile, "ProviderCheck"},
+	{"internal/frontend/serve/provider_check.go", "providerModelCheck", tsProviderFile, "ProviderModelCheck"},
 	{"internal/frontend/serve/settings.go", "modelEntry", tsModelFile, "ModelEntry"},
 	// The report form draws what the kernel will send and reads back what
 	// became of it; a field the page cannot read is a status it cannot show.
@@ -145,6 +152,13 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/commit.go", "CommitRequest", tsWorkspaceFile, "CommitRequest"},
 	{"internal/session/control/commit.go", "CommitResult", tsWorkspaceFile, "CommitResult"},
 	{"internal/platform/gitcommit/gitcommit.go", "File", tsWorkspaceFile, "CommitFile"},
+	// The chart spec a stored render_chart call carries. The page re-validates it
+	// on load, so a field it cannot read is one the card silently drops.
+	{"internal/contract/chartspec/spec.go", "Spec", tsChartFile, "ChartSpec"},
+	{"internal/contract/chartspec/spec.go", "Data", tsChartFile, "ChartData"},
+	{"internal/contract/chartspec/spec.go", "Column", tsChartFile, "ChartColumn"},
+	{"internal/contract/chartspec/spec.go", "Mark", tsChartFile, "ChartMark"},
+	{"internal/contract/chartspec/spec.go", "Axis", tsChartFile, "ChartAxis"},
 }
 
 type wireMirror struct {

@@ -90,6 +90,8 @@ var ChineseTraditional = Messages{
 	NoticeUnappliedSteerFmt:       "引導沒有生效：這一輪在處理它之前就結束了。如果仍然需要，請再發送一次：\n%s",
 	TUIQuestion:                   "提問",
 	TUISubagentCallsFmt:           "%d 次子代理呼叫",
+	TUIChartMoreRowsFmt:           "… 還有 %d 行",
+	TUIChartMoreColsFmt:           "… 還有 %d 列",
 	TUIStallTokensFmt:             "自上次有可觀察的進展以來已用約 %d 倍上下文的輸入（%d tokens）。是否繼續由你決定。",
 	TUIStallRepeating:             "模型在重複輸出同一段文字。是否繼續由你決定。",
 	TUIStallIdleFmt:               "已連續 %d 輪工具呼叫沒有可觀察的進展：沒有檔案變更、檢查或任務步驟變化，也沒有新讀取。是否繼續由你決定。",

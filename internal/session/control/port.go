@@ -166,6 +166,9 @@ type SessionHistory interface {
 	ContextReport() (summary, detail string)
 	SummarizeFrom(ctx context.Context, turn int) error
 	SummarizeUpTo(ctx context.Context, turn int) error
+	// MarkSessionViewed clears the session's unread mark: a turn finished since
+	// the person last looked. It writes the session sidecar only.
+	MarkSessionViewed() error
 }
 
 // MemoryControl covers session/project memory reads and mutations.

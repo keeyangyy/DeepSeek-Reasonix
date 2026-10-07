@@ -35,6 +35,20 @@ describe("what a reader is told a refusal was", () => {
       expect(english).not.toBe("fixture fallback");
     }
   });
+  it("explains a serve left running instead of replaced, in both languages", () => {
+    for (const code of ["remote.serve_provider_mismatch", "remote.serve_not_attachable"]) {
+      const error = coded("fixture fallback", code, { host: "box" });
+      localStorage.setItem(STORAGE, "zh"); boot();
+      const chinese = reason(error);
+      expect(chinese).toContain("box");
+      expect(chinese).not.toBe("fixture fallback");
+      localStorage.setItem(STORAGE, "en"); boot();
+      const english = reason(error);
+      expect(english).toContain("box");
+      expect(english).not.toBe(chinese);
+      expect(english).not.toBe("fixture fallback");
+    }
+  });
   it("says a coded refusal in the window's own language", () => {
     expect(reason(coded("inbox item not found", "inbox.not_found"))).toBe("该条已不在待送达队列中");
   });
@@ -124,5 +138,42 @@ describe("codes a caller branches on", () => {
 
   it("spells the saved-but-not-applied answers the same in the constant and the catalogue", () => {
     for (const code of SAVED_NOT_APPLIED) expect(codes[code]).toBeTruthy();
+  });
+});
+
+describe("attachment refusals", () => {
+  const ico = () => coded("pasted data is not a supported image", "attachment.unsupported_image", { format: ".ico", type: "image/x-icon", supported: "PNG, JPEG, GIF, WebP" });
+
+  it("tells the reader the format, the supported ones and what to do, in Chinese", () => {
+    expect(reason(ico())).toBe("这个文件的格式暂不支持（.ico）。支持的图片格式：PNG, JPEG, GIF, WebP。可以先转换格式再添加。");
+  });
+
+  it("says the same in English", () => {
+    localStorage.setItem(STORAGE, "en"); boot();
+    expect(reason(ico())).toBe("This file's format is not supported (.ico). Supported image formats: PNG, JPEG, GIF, WebP. Convert it first, then add it again.");
+  });
+
+  it("names the limit when a file is too large, and says what an empty or unreadable one is", () => {
+    expect(reason(coded("x", "attachment.too_large", { limit_mb: 10 }))).toContain("10 MB");
+    expect(reason(coded("x", "attachment.empty"))).toContain("空");
+    expect(reason(coded("x", "attachment.unreadable", { detail: "denied" }))).toContain("denied");
+    expect(reason(coded("x", "attachment.write_failed", { detail: "disk full" }))).toContain("disk full");
+  });
+
+  it("speaks every attachment code in both languages", () => {
+    for (const code of ["attachment.unsupported_image", "attachment.too_large", "attachment.empty", "attachment.unreadable", "attachment.write_failed"]) {
+      localStorage.setItem(STORAGE, "zh"); boot();
+      const params = { format: ".ico", supported: "PNG", limit_mb: 25, detail: "d" };
+      const chinese = reason(coded("fallback", code, params));
+      localStorage.setItem(STORAGE, "en"); boot();
+      const english = reason(coded("fallback", code, params));
+      expect(chinese).not.toBe("fallback");
+      expect(english).not.toBe("fallback");
+      expect(english).not.toBe(chinese);
+    }
+  });
+
+  it("degrades an unknown code to the kernel's own words", () => {
+    expect(reason(coded("kernel words", "attachment.from_the_future"))).toBe("kernel words");
   });
 });

@@ -123,12 +123,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	return b.freeze(ctrl)
 }
 
-// retireUnownedSidecars closes the preflighted sidecars when the build fails
-// before the extension snapshot takes ownership: no process outlives a failed build.
+// retireUnownedSidecars restores adopted clients and closes fresh sidecars when
+// the build fails before the extension snapshot takes ownership.
 func (b *builder) retireUnownedSidecars() {
 	if b.pendingMgr != nil {
 		close(b.ext.failed)
-		_ = b.pendingMgr.Close()
+		b.pendingMgr.RollbackPlanStart(b.opts.Extensions)
 	}
 }
 
@@ -597,6 +597,7 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		// The failed assembly already retired the sidecars; bind neither hub nor manager.
 		extensionMgr = nil
 	}
+	installSidecarStreamRouters(extensionMgr, b.providers.extension)
 	providerResolver := b.providers.base
 	if b.providers.extension != nil {
 		providerResolver = b.providers.extension

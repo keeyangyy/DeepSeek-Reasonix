@@ -152,7 +152,7 @@ export function AddProvider({
         apiKey: apiKey.trim(),
         kind,
         authHeader: probe?.authHeader ?? false,
-        noProxy: probe?.noProxy ?? false,
+        noProxy: noProxy || (probe?.noProxy ?? false),
       });
       setFacts((current) => ({
         ...current,
@@ -173,7 +173,7 @@ export function AddProvider({
   };
 
   return (
-    <div className="addp">
+    <fieldset className="addp" disabled={busy && errOnSave}>
       <div className="addp-head">
         <div>
           <span className="step">{t("自定义来源")}</span>
@@ -222,6 +222,10 @@ export function AddProvider({
             value={baseUrl}
             placeholder="https://api.moonshot.cn/v1"
             onChange={(e) => {
+              if (e.target.value.trim() !== baseUrl.trim()) {
+                setProbe(null);
+                setCompleted("");
+              }
               setBaseUrl(e.target.value);
               setFacts(clearModelCheckFacts);
             }}
@@ -306,7 +310,10 @@ export function AddProvider({
               <small>{t("仅当该地址通过系统代理无法连接、直连可用时开启。")}</small>
             </span>
             <button type="button" className="switch-control" data-action="provider.draft" data-value="no-proxy" role="switch" aria-label={t("绕过系统代理")} aria-checked={noProxy || (probe?.noProxy ?? false)}
-              disabled={busy || checkingModel !== "" || probe?.noProxy === true} onClick={() => setNoProxy((v) => !v)}><span /></button>
+              disabled={busy || checkingModel !== "" || probe?.noProxy === true} onClick={() => {
+                setNoProxy((v) => !v);
+                setFacts(clearModelCheckFacts);
+              }}><span /></button>
           </div>
           <label className="advanced-field">
             <span>{t("额外请求头")}</span>
@@ -337,6 +344,12 @@ export function AddProvider({
             </button>
           )}
         </div>
+        {err && !errOnSave && (
+          <div className="find" data-lvl="warn" role="alert">
+            <span className="t">{t("无法连接")}</span>
+            <span className="why">{err}</span>
+          </div>
+        )}
         {probe && <p className="probe-ok">{t("连接可用 · 找到 {n} 个模型", { n: probe.models.length })}</p>}
         {completed !== "" && completed === baseUrl.trim() && <p className="probe-ok">{t("接口地址已补全为 {url}", { url: completed })}</p>}
         <div className="mlist">
@@ -358,20 +371,6 @@ export function AddProvider({
         </div>
       </div>
 
-      <div className="acts addp-footer">
-        <button className="act" data-action="provider.add" data-primary onClick={save} aria-describedby={nameBad ? "addp-name-rule" : undefined} disabled={busy || composing || checkingModel !== "" || picked.length === 0 || name.trim() === "" || nameBad || kind === "" || baseUrl.trim() === "" || extraBad}>
-          {t(busy ? "保存中…" : "添加来源")}
-        </button>
-        <button className="act" onClick={onCancel} disabled={busy || checkingModel !== ""}>{t("取消")}</button>
-      </div>
-
-      {err && (
-        <div className="find" data-lvl="warn">
-          <span className="t">{errOnSave ? t("无法保存") : t("无法连接")}</span>
-          <span className="why">{err}</span>
-        </div>
-      )}
-
       {probe && (probe.ambiguous || probe.noProxy || searchSplit) && (
         <>
           {searchSplit && (
@@ -392,7 +391,21 @@ export function AddProvider({
 
         </>
       )}
-    </div>
+      <div className="acts-bar">
+        {err && errOnSave && (
+          <div className="find" data-lvl="warn">
+            <span className="t">{t("无法保存")}</span>
+            <span className="why">{err}</span>
+          </div>
+        )}
+        <div className="acts addp-footer">
+          <button className="act" data-action="provider.add" data-primary onClick={save} aria-describedby={nameBad ? "addp-name-rule" : undefined} disabled={busy || composing || checkingModel !== "" || picked.length === 0 || name.trim() === "" || nameBad || kind === "" || baseUrl.trim() === "" || extraBad}>
+            {t(busy ? "保存中…" : "添加来源")}
+          </button>
+          <button className="act" onClick={onCancel} disabled={busy || checkingModel !== ""}>{t("取消")}</button>
+        </div>
+      </div>
+    </fieldset>
   );
 }
 

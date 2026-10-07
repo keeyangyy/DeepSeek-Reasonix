@@ -3,6 +3,7 @@ import { decimals } from "../i18n/format";
 import { t } from "../i18n";
 import type { Waiting } from "../state/session";
 import { retryPhase, type RetryState } from "../state/retry_line";
+import { useShown } from "./shown";
 
 function lead(retry: RetryState): string {
   switch (retry.cause) {
@@ -40,13 +41,15 @@ function phase(retry: RetryState, elapsedMs: number): string {
 // next attempt replaces the stamp, so the clock always means the attempt in flight.
 export function Await({ since, retry }: { since: number; retry?: Waiting["retry"] }) {
   const start = retry?.since ?? since;
+  const watched = useShown();
   const [elapsed, setElapsed] = useState(() => Date.now() - start);
   useEffect(() => {
     const tick = () => setElapsed(Date.now() - start);
     tick();
+    if (!watched) return;
     const id = setInterval(tick, 100);
     return () => clearInterval(id);
-  }, [start]);
+  }, [start, watched]);
   return (
     <div className="await" data-retry={retry ? "" : undefined}>
       <i />

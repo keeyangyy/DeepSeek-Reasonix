@@ -6,6 +6,9 @@ import type { ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope
 import { RMark } from "./RMark";
 import { Await } from "./Await";
 import { ToolCard } from "./cards/ToolCard";
+import { Boundary } from "./Boundary";
+import { LazyChart } from "./chart/LazyChart";
+import { chartOfTool } from "./chart/spec";
 import { GuardianCard } from "./cards/GuardianCard";
 import { ApprovalCard, type PlanAction } from "./cards/ApprovalCard";
 import { AskCard } from "./cards/AskCard";
@@ -680,8 +683,10 @@ const Row = memo(function Row({
       // The ask tool also raises ask_request, which carries the id /answer
       // needs. Drawing the tool call too put two copies of the same question on
       // screen, each answerable.
-      return it.tool.name === "ask" ? null : (
-        <ToolCard
+      if (it.tool.name === "ask") return null;
+      return (() => {
+        const card = (
+          <ToolCard
             tool={it.tool}
             running={it.running}
             activity={activity}
@@ -691,7 +696,14 @@ const Row = memo(function Row({
             onPrepareFileRevert={onPrepareFileRevert}
             onCommitFileRevert={onCommitFileRevert}
           />
-      );
+        );
+        const chart = activity ? null : chartOfTool(it.tool);
+        return chart ? (
+          <Boundary fallback={card} retryKey={it.tool.args}>
+            <LazyChart spec={chart} callId={it.tool.id} />
+          </Boundary>
+        ) : card;
+      })();
     case "reads":
       return <ReadsCard tools={it.tools} />;
     case "guardian":

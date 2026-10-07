@@ -18,6 +18,9 @@ type samplingRequest struct {
 	// rejection by folding. The recovery is one-shot: a second rejection means
 	// the fold did not reach far enough, not that another one will.
 	overflowFolded bool
+	// sent is what the visible view held when this request was built, the basis
+	// the provider's reported size is later anchored to.
+	sent usageAnchor
 }
 
 func (a *Agent) streamProviderRequest(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
@@ -88,13 +91,15 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		}
 		shape := a.window().requestCalibrationShape(rebuilt.req)
 		a.sess.output.activeReqShape.Store(&shape)
-		return samplingRequest{req: freezeProviderRequest(rebuilt.req)}, nil
+		a.sess.output.usageAnchor.Store(&rebuilt.sent)
+		return samplingRequest{req: freezeProviderRequest(rebuilt.req), sent: rebuilt.sent}, nil
 	} else if clipped {
 		frozen.req.MaxTokens = budget
 	}
 	shape := a.window().requestCalibrationShape(frozen.req)
 	a.sess.output.activeReqShape.Store(&shape)
-	return samplingRequest{req: freezeProviderRequest(frozen.req)}, nil
+	a.sess.output.usageAnchor.Store(&frozen.sent)
+	return samplingRequest{req: freezeProviderRequest(frozen.req), sent: frozen.sent}, nil
 }
 
 func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (samplingRequest, error) {
@@ -135,7 +140,11 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	// Host-owned and set after the extension ruling: the payload it rewrites
 	// has no mode, and a replaced request must not drop the session's choice.
 	req.Mode = a.sess.mode.get()
-	return samplingRequest{req: req}, nil
+	sent := usageAnchor{
+		visible:           a.window().visibleRequestShape(prepared.Messages),
+		projectionVersion: prepared.ProjectionVersion,
+	}
+	return samplingRequest{req: req, sent: sent}, nil
 }
 
 // providerProjectionMessages applies provider-specific role compatibility to a

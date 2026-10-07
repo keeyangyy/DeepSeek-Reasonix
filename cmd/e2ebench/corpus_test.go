@@ -28,6 +28,15 @@ const trainCorpusDir = "../../benchmarks/train"
 // grader test instead.
 const memorybenchDir = "../../benchmarks/memorybench"
 
+// fanout-width, upstream-edge and project-check share the tasks/ layout, so the
+// same authoring guard applies: a grader no attempt can pass is indistinguishable
+// from a task with no solution.
+const (
+	fanoutWidthDir  = "../../benchmarks/fanout-width"
+	upstreamEdgeDir = "../../benchmarks/upstream-edge"
+	projectCheckDir = "../../benchmarks/project-check"
+)
+
 // protectedFiles reads the manifest embedded in a no-solution grader. The
 // manifest lives inside verify.sh precisely because e2ebench drops that file
 // in only after the run, so the agent never sees which files are watched.
@@ -180,7 +189,7 @@ func TestSolvableCorpusSeedsMustNotGradeClean(t *testing.T) {
 			t.Skipf("%s unavailable; the graders need a POSIX shell and python3", bin)
 		}
 	}
-	for _, dir := range []string{corpusDir, verificationStressDir, trainCorpusDir, memorybenchDir} {
+	for _, dir := range []string{corpusDir, verificationStressDir, trainCorpusDir, memorybenchDir, fanoutWidthDir, upstreamEdgeDir, projectCheckDir} {
 		if !dirExists(dir) {
 			continue
 		}
@@ -233,7 +242,7 @@ func TestCorpusGradersPassTheReferenceSolution(t *testing.T) {
 			t.Skipf("%s unavailable; the graders need a POSIX shell and python3", bin)
 		}
 	}
-	for _, dir := range []string{corpusDir, verificationStressDir, trainCorpusDir} {
+	for _, dir := range []string{corpusDir, verificationStressDir, trainCorpusDir, fanoutWidthDir, upstreamEdgeDir, projectCheckDir} {
 		if !dirExists(dir) {
 			continue
 		}
@@ -250,7 +259,7 @@ func TestCorpusGradersPassTheReferenceSolution(t *testing.T) {
 					t.Parallel()
 					work := stageSeed(t, task.dir)
 					if !stageSolved(t, task.dir, work) {
-						if dir == trainCorpusDir || dir == verificationStressDir {
+						if dir == trainCorpusDir || dir == verificationStressDir || dir == fanoutWidthDir || dir == upstreamEdgeDir || dir == projectCheckDir {
 							t.Fatal("no solution/: a corpus task must prove its grader can pass")
 						}
 						t.Skip("no solution/: the e2e suite does not commit reference solutions")

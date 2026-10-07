@@ -13,7 +13,7 @@ import (
 func init() { tool.RegisterBuiltin(renderChart{}) }
 
 // ChartToolName is the name a frontend recognises a chart call by.
-const ChartToolName = "render_chart"
+const ChartToolName = chartspec.ToolName
 
 // renderChart validates a chart spec and answers with its identity and a text
 // summary. The spec itself rides in the call's arguments, which the session

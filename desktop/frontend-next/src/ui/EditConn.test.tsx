@@ -34,7 +34,7 @@ it("keeps vision capability discovered while refreshing a saved source", async (
     visionSettable: [],
   };
 
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
   await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
 
   const modelName = await screen.findByText(visionModel);
@@ -66,7 +66,7 @@ it("keeps an exact unlisted model id and verifies it independently of the catalo
     canSetVision: false,
   };
 
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索或添加模型" }), `${hidden}{enter}`);
 
   const row = screen.getAllByText(hidden).map((el) => el.closest(".mline")).find(Boolean) as HTMLElement;
@@ -104,7 +104,7 @@ it("shows the HTTP status and the endpoint's own words when a model check is ref
     preset: false,
   };
 
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
   const row = screen.getAllByText("clef:27b").map((el) => el.closest(".mline")).find(Boolean) as HTMLElement;
   await userEvent.click(within(row).getByRole("button", { name: "验证模型 clef:27b" }));
 
@@ -128,7 +128,7 @@ it("preserves configured models that a refreshed catalog no longer returns", asy
     preset: true,
   };
 
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
   await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
 
   expect(await screen.findByText("deepseek-new")).toBeTruthy();
@@ -151,7 +151,7 @@ it("opens on the reasoning fields when sent to declare effort levels, and saves 
     preset: false,
   };
 
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} declare />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} declare />);
   const think = screen.getByRole("combobox", { name: /^思考参数/ });
   expect(document.activeElement).toBe(think);
 
@@ -172,7 +172,7 @@ it("keeps the reasoning fields folded when the form was opened by hand", () => {
     name: "relay", kind: "openai", baseUrl: "https://relay.invalid/v1", models: ["gpt-x"],
     default: "gpt-x", hasKey: true, inUse: false, preset: false,
   };
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
   expect(screen.queryByRole("textbox", { name: /^推理档位/ })).toBeNull();
 });
 
@@ -188,7 +188,8 @@ it("refreshes the list when the save landed but the conversation keeps its setti
   const onDone = vi.fn();
   const onSaved = vi.fn();
 
-  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={onDone} onSaved={onSaved} />);
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={onDone} onRevert={() => {}} onSaved={onSaved} />);
+  await userEvent.type(screen.getByLabelText("上下文窗口"), "1");
   await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
   await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
@@ -204,8 +205,8 @@ const rejecting = (status: number, code: string, error: string) => {
     name: "rich", kind: "openai", baseUrl: "https://gateway.invalid/v1",
     models: ["alpha"], default: "alpha", hasKey: true, inUse: true, preset: false, canSetVision: false,
   };
-  render(<EditConn entry={entry} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} onSaved={() => {}} />);
-  return userEvent.click(screen.getByRole("button", { name: "保存" }));
+  render(<EditConn entry={entry} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} onSaved={() => {}} />);
+  return userEvent.type(screen.getByLabelText("上下文窗口"), "1").then(() => userEvent.click(screen.getByRole("button", { name: "保存" })));
 };
 
 it("says a refused save failed, as an error alert", async () => {
@@ -218,7 +219,7 @@ it("says a refused save failed, as an error alert", async () => {
 
 it("does not call a saved-but-not-applied outcome a failed save", async () => {
   await rejecting(409, "provider.saved_while_running", "saved");
-  const note = (await screen.findByText("已保存，尚未生效")).closest(".find")!;
+  const note = (await screen.findByText(/已保存。当前对话还有未结束的工作/)).closest(".find")!;
   expect(note.getAttribute("data-lvl")).toBe("warn");
   expect(note.getAttribute("role")).toBe("status");
   expect(screen.queryByRole("alert")).toBeNull();
@@ -233,7 +234,7 @@ const idleEntry = (idleTimeoutSeconds?: number): ProviderEntry => ({
 
 async function openIdle(entry: ProviderEntry) {
   const editProvider = vi.fn(async () => {});
-  render(<EditConn entry={entry} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={entry} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
   await userEvent.click(screen.getByText("思考参数与推理档位"));
   return { editProvider, field: (await screen.findByLabelText("无响应超时")) as HTMLInputElement };
 }
@@ -241,6 +242,7 @@ async function openIdle(entry: ProviderEntry) {
 it("shows the stored no-answer timeout in the advanced section and leaves it unchanged when untouched", async () => {
   const { editProvider, field } = await openIdle(idleEntry(90));
   expect(field.value).toBe("90");
+  await userEvent.type(screen.getByLabelText("上下文窗口"), "1");
   await userEvent.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({ idleTimeoutSeconds: 90 })));
 });
@@ -289,7 +291,8 @@ it("words the kernel's refusal of the timeout with its bounds", async () => {
   const editProvider = vi.fn(async () => {
     throw new HttpError(400, "bad", { code: "provider.bad_idle_timeout", error: "bad", params: { min: 1, max: 32767 } });
   });
-  render(<EditConn entry={idleEntry()} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  render(<EditConn entry={idleEntry()} port={{ editProvider } as unknown as Port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
+  await userEvent.type(screen.getByLabelText("上下文窗口"), "1");
   await userEvent.click(screen.getByRole("button", { name: "保存" }));
   expect(await screen.findByText("无响应超时须在 1 到 32767 秒之间；留空使用默认值")).toBeTruthy();
 });

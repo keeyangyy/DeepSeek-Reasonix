@@ -173,9 +173,11 @@ type HistoryMessage struct {
 }
 
 type HistoryToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Arguments    string `json:"arguments"`
+	ResolvedName string `json:"resolvedName,omitempty"`
+	CapabilityID string `json:"capabilityId,omitempty"`
 }
 
 func (c *Client) History(ctx context.Context) ([]HistoryMessage, error) {

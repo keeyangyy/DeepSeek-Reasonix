@@ -234,6 +234,9 @@ export const EN_KERNEL: Record<string, string> = {
     "This service lists {count} models, none of which can hold a conversation — it may only do embeddings or reranking",
   "服务商返回错误（HTTP {status}），与填写内容无关，请稍后重试":
     "The provider errored (HTTP {status}) — nothing you typed is wrong; try again shortly",
+  "该地址在限定时间内没有响应。请检查网络或代理，或稍后重试":
+    "That address did not answer in time. Check the network or proxy, or try again shortly",
+  "检查失败，没有具体原因": "The check failed and gave no reason",
   "无法连接该地址。请检查网络是否通畅，以及地址是否有误":
     "Cannot reach that address. Check the network, or whether the address has a typo",
   "该地址有响应，但不是 OpenAI 或 Anthropic 类接口。请确认是否误将网页地址复制过来":
@@ -289,6 +292,11 @@ export const EN_KERNEL: Record<string, string> = {
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",
   "不存在该预设": "There is no such preset",
   "本次拖入 {count} 个，最多允许 {limit} 个": "{count} dropped at once — the limit is {limit}",
+  "这个文件的格式暂不支持（{format}）。支持的图片格式：{supported}。可以先转换格式再添加。": "This file's format is not supported ({format}). Supported image formats: {supported}. Convert it first, then add it again.",
+  "这个文件超过 {limit_mb} MB 的上限，请压缩或拆分后再添加。": "This file is over the {limit_mb} MB limit. Compress or split it, then add it again.",
+  "这个文件是空的（0 字节），没有可添加的内容。": "This file is empty (0 bytes), so there is nothing to add.",
+  "无法读取这个文件：{detail}。它可能被其他程序占用、已被移动，或在云盘里尚未下载。": "Could not read this file: {detail}. It may be open in another program, moved, or not yet downloaded from cloud storage.",
+  "附件未能保存到工作区的 .reasonix/attachments：{detail}。请检查该目录的写入权限和磁盘空间。": "The attachment could not be saved to .reasonix/attachments in the workspace: {detail}. Check that folder's write permission and the free disk space.",
   "该行过长，无法补全": "That line is too long to complete",
   "该连接不支持流式传输": "This connection does not support streaming",
   "服务端出现异常，与你的操作无关": "Something went wrong on this side — nothing you did is at fault",

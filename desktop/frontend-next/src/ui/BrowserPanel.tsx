@@ -5,6 +5,7 @@ import { host, type BrowserControl, type BrowserLoadFailure } from "../port/host
 import { SWAP_MARK } from "./swap";
 import { occluded, visibleBox } from "./occlusion";
 import { BrowserFailure } from "./BrowserFailure";
+import { AgentPageNote } from "./AgentPageNote";
 
 const START = "reasonix://start";
 
@@ -157,7 +158,6 @@ export const UNREAD_TABS: BrowserTab[] = [];
 export function useBrowserTabs(port: AgentPort, moved: number): BrowserTab[] {
   const [tabs, setTabs] = useState<BrowserTab[]>(UNREAD_TABS);
   useEffect(() => {
-    if (!host().drawsBrowserViews()) return;
     let live = true;
     port.browserTabs().then((next) => live && setTabs(next), () => {});
     return () => { live = false; };
@@ -165,7 +165,13 @@ export function useBrowserTabs(port: AgentPort, moved: number): BrowserTab[] {
   return tabs;
 }
 
-export function AgentBrowserPanel({ tabs, shown, showTabs = true }: { tabs: BrowserTab[]; shown: boolean; showTabs?: boolean }) {
+export function AgentBrowserPanel(props: { tabs: BrowserTab[]; shown: boolean; showTabs?: boolean }) {
+  if (host().drawsBrowserViews()) return <AgentBrowserView {...props} />;
+  const current = props.tabs.find((tab) => tab.active) ?? props.tabs[0];
+  return <div className="bpanel">{current && <AgentPageNote tab={current} />}</div>;
+}
+
+function AgentBrowserView({ tabs, shown, showTabs = true }: { tabs: BrowserTab[]; shown: boolean; showTabs?: boolean }) {
   const slot = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState("");
   const current = tabs.find((tab) => tab.target === picked) ?? tabs.find((tab) => tab.active) ?? tabs[0];

@@ -268,7 +268,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     const resumed = decided?.t === "approval" && !halted ? decided.a.tool || RUNNING : s.doing;
     return {
       ...s,
-      doing: decided?.t === "ask" ? "运行中" : resumed,
+      doing: decided?.t === "ask" ? (s.running ? RUNNING : IDLE) : resumed,
       items: s.items.map((i) =>
         i.id !== ev.id
           ? i
@@ -283,14 +283,13 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       ),
     };
   }
-  // A rebuild re-reads the record, and an open prompt is not in it: it is the
-  // run stopped, waiting on an answer only this window can give. Overwriting it
-  // left the session reading 等你决定 with nothing on screen to decide.
+  // The transcript does not contain live extension publications or pending
+  // prompts. Both belong to this pane until it is rebound to another session.
   if (ev.kind === "__restore") {
     // How the restored turns ended is not in the record; a live turn that
     // vanished mid-flight leaves null, which is a different answer.
     const terminal: TurnTerminal = ev.items.length ? { kind: "unread" } : s.terminal;
-    return { ...s, executions: ev.executions, terminal, items: [...ev.items, ...s.items.filter(promptOpen)], plan: ev.plan ? livePlan(ev.plan) : s.plan };
+    return { ...s, executions: ev.executions, terminal, items: [...ev.items, ...s.items.filter((i) => i.t === "extension" || promptOpen(i))], plan: ev.plan ? livePlan(ev.plan) : s.plan };
   }
   // The kernel's canonical task list, asked for rather than re-derived: the
   // advances are not todo_write calls, and the refused writes are.
@@ -651,7 +650,7 @@ function withReceipt(items: Item[], r?: Receipt): Item[] {
 // eleven. The server strips these before /history now — this is what covers
 // sessions already on disk.
 const CONTROL =
-  /<(reasoning-language|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run)[\s\S]*?<\/\1>\s*/g;
+  /<(reasoning-language|response-language|execution-policy|memory-update|background-jobs|active-goal|autoresearch-runtime|hook-context|available-skills|project-instructions|capability-route|interrupted-turn-recovery|workspace|scheduled-run|mcp-prompt-failure)[\s\S]*?<\/\1>\s*/g;
 const stripControl = (s: string) => s.replace(CONTROL, "").trim();
 
 // A plan that ran to the end is spent: struck through in the rail it reads as

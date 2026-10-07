@@ -477,6 +477,29 @@ the desktop reconnects in the background, re-attaches its loopback forward, and
 reloads the window against the recovered Serve. An authentication or host-key
 failure is terminal and closes the unusable remote window instead.
 
+### Lifetime of the remote serve
+
+- The `reasonix serve` process on the host is persistent. Quitting the desktop
+  or losing the link does not terminate it, and the next connect attaches to it.
+- A pane's session on that serve does not outlive the desktop. Each pane drives
+  its own runtime there; closing the pane or quitting the desktop makes Studio
+  call `POST /runtimes/{id}/close` on the remote serve before it takes the
+  tunnel down.
+- That close cancels a turn in flight and releases the session lease, so another
+  window can open the session. Only the pane's runtime is closed: the serve
+  process keeps running and the next connect can attach to it. Runtimes opened
+  by other clients are left alone too, whichever way the serve was started.
+- `provider = "remote"` decides only where model credentials come from. It does
+  not detach a pane from the desktop.
+- A serve already running for the workspace is attached to, never replaced,
+  whether `reasonix remote serve start`, another window or a hand-started
+  `reasonix serve --port-file` launched it. A later connect never deletes its
+  port or pid files and never stops it.
+- `serve start` uses no broker, so a host with `provider = "local"` cannot
+  attach to it. That connect fails with an explanation and leaves the serve
+  running. Set the host to `provider = "remote"` (it then needs its own
+  credentials), or stop the serve with `reasonix remote serve stop <host>`.
+
 ## Custom OpenAI-compatible providers
 
 In the desktop app, open **Settings -> Model -> Access -> Add model service ->

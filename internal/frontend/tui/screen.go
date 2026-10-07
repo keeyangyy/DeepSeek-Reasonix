@@ -189,7 +189,13 @@ func (m *model) fillScreen() tea.Cmd {
 // foldable reports a block whose shell output has more than its preview.
 func (b *block) foldable() bool {
 	r := b.row
-	if r == nil || r.Kind != ItemTool || r.Tool == nil || !termrender.IsShellTool(r.Tool.Name) {
+	if r == nil || r.Kind != ItemTool || r.Tool == nil {
+		return false
+	}
+	if spec, ok := chartOf(r); ok {
+		return len(spec.Data.Rows) > chartPreviewRows
+	}
+	if !termrender.IsShellTool(r.Tool.Name) {
 		return false
 	}
 	return strings.Count(strings.TrimRight(r.shellOutput(), "\n"), "\n")+1 > shellPreviewLines

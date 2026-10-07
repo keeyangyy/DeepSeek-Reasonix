@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import "./testkit";
 import { Await } from "./Await";
+import { PaneShown } from "./shown";
 import { boot, STORAGE } from "../i18n";
 import { retryPhase } from "../state/retry_line";
 import type { Waiting } from "../state/session";
@@ -126,5 +127,26 @@ describe("the retry line", () => {
 
   it("still shows the plain wait when nothing is being retried", () => {
     expect(line(undefined, "en", 1500)).toBe("Waiting for a response · 1.5s");
+  });
+});
+
+describe("the wait clock in a pane nobody is looking at", () => {
+  it("does not tick, and reads the true time when brought forward", () => {
+    const view = (shown: boolean) => (
+      <PaneShown.Provider value={shown}>
+        <Await since={NOW} />
+      </PaneShown.Provider>
+    );
+    localStorage.setItem(STORAGE, "zh");
+    boot();
+    const tick = vi.spyOn(window, "setInterval");
+    const { container, rerender } = render(view(false));
+    act(() => void vi.advanceTimersByTime(3000));
+    expect(tick).not.toHaveBeenCalled();
+    expect(container.querySelector(".t")?.textContent).toBe("等待回包 0.0s");
+    rerender(view(true));
+    expect(container.querySelector(".t")?.textContent).toBe("等待回包 3.0s");
+    act(() => void vi.advanceTimersByTime(500));
+    expect(container.querySelector(".t")?.textContent).toBe("等待回包 3.5s");
   });
 });

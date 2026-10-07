@@ -11,9 +11,13 @@ const check = (name, ok, detail = "") => {
   if (!ok) fails.push(name);
 };
 
-const measure = (page, action) =>
-  page.evaluate((action) => {
-    const button = document.querySelector(`.compose [data-action="${action}"]`) ?? document.querySelector(`.compose [aria-label="${action}"]`);
+// Controls are found by structure, never by label: the label is translated,
+// so a lookup by its wording matches one language and skips the other.
+const CONTROLS = { "prompt.refine": '[data-action="prompt.refine"]', attach: "button.attach" };
+
+const measure = (page, selector) =>
+  page.evaluate((selector) => {
+    const button = document.querySelector(`.compose ${selector}`);
     const tip = button?.querySelector(".studio-control-tip");
     if (!button || !tip) return null;
     let opacity = 1;
@@ -59,7 +63,7 @@ const measure = (page, action) =>
       viewport: innerWidth,
       disabled: button.disabled,
     };
-  }, action);
+  }, selector);
 
 const browser = await chromium.launch();
 for (const scheme of ["light", "dark"]) {
@@ -71,14 +75,13 @@ for (const scheme of ["light", "dark"]) {
       await page.goto(`${BASE}?pref=${lang}&turns=2`, { waitUntil: "networkidle" });
       await page.waitForSelector(".compose");
       await page.evaluate(() => document.fonts.ready);
-      for (const [text, action] of [["", "prompt.refine"], ["1111", "prompt.refine"], ["", "添加附件"], ["", "Add attachment"]]) {
+      for (const [text, control] of [["", "prompt.refine"], ["1111", "prompt.refine"], ["", "attach"]]) {
         await page.fill(BOX, text);
-        const sel = action.includes(".") ? `[data-action="${action}"]` : `[aria-label="${action}"]`;
-        if (!(await page.$(`.compose ${sel}`))) continue;
-        await page.hover(`.compose ${sel}`, { force: true });
+        const tag = `${scheme}/${lang}/${width}px/${control}/${text ? "有字" : "空"}`;
+        if (!(await page.$(`.compose ${CONTROLS[control]}`))) { check(`${tag}：找得到按钮`, false); continue; }
+        await page.hover(`.compose ${CONTROLS[control]}`, { force: true });
         await page.waitForTimeout(250);
-        const m = await measure(page, action);
-        const tag = `${scheme}/${lang}/${width}px/${action}/${text ? "有字" : "空"}`;
+        const m = await measure(page, CONTROLS[control]);
         if (!m) { check(`${tag}：找得到提示`, false); continue; }
         check(`${tag}：提示不在半透明的祖先之下`, m.opacity === 1 && m.visibility === "visible", `有效不透明度 ${m.opacity.toFixed(2)}`);
         check(`${tag}：文字不溢出提示框`, m.spill <= 0.5 && m.scroll <= 0, `溢出 ${m.spill.toFixed(1)}px，scroll ${m.scroll}px`);

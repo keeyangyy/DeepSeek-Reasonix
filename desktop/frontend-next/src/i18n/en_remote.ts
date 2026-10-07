@@ -89,6 +89,8 @@ export const EN_REMOTE: Record<string, string> = {
   "无法在 {host} 上安装 reasonix —— npm、上传、下载均已尝试。请先自行在该机器上安装，再重新连接": "Nothing could install reasonix on {host} — npm, upload and download were all tried. Install one there by hand, then connect again",
   "安装到 {host} 上的 reasonix 无法运行。该目录可能挂载了 noexec，也可能传输中断": "The reasonix installed on {host} will not run. That directory may be mounted noexec, or the transfer was cut short",
   "{host} 上的 reasonix 已启动，但始终未报告端口。请查看该机器上 ~/.reasonix/remote 下的日志": "reasonix started on {host} but never reported a port. Look at the logs under ~/.reasonix/remote over there",
+  "{host} 上已有一个正在运行的 reasonix serve，它的模型来源（本机代理或该机器自带的密钥）与本次连接的设置不一致。为避免打断它正在做的事，没有替换它。请把该主机的 provider 改成与它一致，或先在该机器上运行 reasonix remote serve stop 再连接": "A reasonix serve is already running on {host}, and it resolves models differently from this connection (this machine's broker versus the host's own keys). It was left alone so its work is not interrupted. Set this host's provider to match it, or run reasonix remote serve stop on that machine first and connect again",
+  "{host} 上已有一个正在运行的 reasonix serve 占用着该工作区，但无法接入（令牌文件或地址不可读）。请先在该机器上结束那个进程（进程号记在该机器 .reasonix/remote 目录下的 .pid 文件里），再重新连接": "A reasonix serve is already running for this workspace on {host}, but it cannot be attached to (its token file or address is unreadable). End that process over there (its id is in the .pid file in that machine's .reasonix/remote directory), then connect again",
   "跳板机": "Jump host",
   "登录密码的环境变量名": "Env var with the password",
   "安装方式": "Installing",

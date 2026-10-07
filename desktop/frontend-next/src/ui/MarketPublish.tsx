@@ -138,7 +138,7 @@ function PublishDraft({ port, handle, onMine, initial }: PublishProps) {
         <label>
           <span>{t("版本")}</span>
           <input value={d.version} disabled={busy} data-action="market.draft" data-value="version" placeholder="0.1.0" spellCheck={false} onChange={set("version")} />
-          <em className="mkt-tip">{t("留空时新包为 0.1.0，更新自动加一个补丁号。")}</em>
+          <em className="mkt-tip">{t("留空时新包为 0.1.0；更新只自动递增纯数字三段版本的补丁号，其他版本请明确填写。")}</em>
         </label>
         <label className="full">
           <span>{t("来源地址")}</span>

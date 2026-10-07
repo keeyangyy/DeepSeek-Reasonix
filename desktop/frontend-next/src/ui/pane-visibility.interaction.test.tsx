@@ -7,6 +7,7 @@ import { MockPort } from "../port/mock";
 import type { AgentPort } from "../port/port";
 import type { WireEvent } from "../port/wire";
 import type { RuntimeView } from "../port/hub";
+import { BACKGROUND_FLUSH_MS } from "./deltas";
 
 afterEach(() => {
   cleanup();
@@ -54,6 +55,8 @@ function open(visible: boolean) {
   return {
     status,
     todos,
+    send: (ev: Partial<WireEvent>) => act(() => emit(ev as WireEvent)),
+    answer: () => view.container.querySelector(".txt")?.textContent ?? "",
     show: (next: boolean) => act(() => void view.rerender(<Pane {...props} active={next} visible={next} />)),
     start: () => act(() => emit({ kind: "turn_started" } as WireEvent)),
     // Polls over one second of a running turn, counted from zero so a pane's
@@ -97,5 +100,54 @@ describe("what a pane costs while nobody is looking at it", () => {
     pane.status.mockClear();
     pane.show(true);
     expect(pane.status).toHaveBeenCalled();
+  });
+});
+
+describe("what a pane draws while nobody is looking at it", () => {
+  // The mount reads (history, status) and the lazily loaded renderer both
+  // answer a tick later; the answer is read after they have.
+  const settle = () => act(async () => void (await vi.advanceTimersByTimeAsync(50)));
+  const opened = async (visible: boolean) => {
+    const pane = open(visible);
+    await settle();
+    return pane;
+  };
+  const stream = async (pane: ReturnType<typeof open>, tail: string[]) => {
+    pane.start();
+    pane.send({ kind: "text", text: "a" });
+    tail.forEach((text) => pane.send({ kind: "text", text }));
+    await settle();
+  };
+
+  it("draws a streamed answer as it arrives when it is shown", async () => {
+    const pane = await opened(true);
+    await stream(pane, ["b", "c"]);
+    expect(pane.answer()).toBe("abc");
+  });
+
+  it("takes the first token at once and the rest of the stream in one batch", async () => {
+    const pane = await opened(false);
+    await stream(pane, ["b", "c", "d"]);
+    expect(pane.answer()).toBe("a");
+    await act(async () => void (await vi.advanceTimersByTimeAsync(BACKGROUND_FLUSH_MS)));
+    expect(pane.answer()).toBe("abcd");
+  });
+
+  it("catches up the moment it is brought forward", async () => {
+    const pane = await opened(false);
+    await stream(pane, ["b", "c"]);
+    expect(pane.answer()).toBe("a");
+    pane.show(true);
+    await settle();
+    expect(pane.answer()).toBe("abc");
+  });
+
+  it("does not hold an event that is not a delta", async () => {
+    const pane = await opened(false);
+    await stream(pane, ["b"]);
+    pane.send({ kind: "message", text: "abc" });
+    pane.send({ kind: "turn_done" });
+    await settle();
+    expect(pane.answer()).toBe("abc");
   });
 });

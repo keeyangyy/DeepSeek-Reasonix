@@ -1,8 +1,7 @@
 .fbk-veil {
   position: fixed; inset: var(--chrome-h, 39px) 0 0; z-index: 55;
   display: grid; place-items: center; padding: 20px;
-  background: color-mix(in srgb, var(--page) 55%, transparent);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--page) 93%, transparent);
 }
 .fbk {
   width: min(720px, 100%); max-height: 100%;

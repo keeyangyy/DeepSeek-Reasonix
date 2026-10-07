@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reasonix/internal/contract/event"
 	"reasonix/internal/runtime/usecap"
 	"strings"
 
@@ -755,6 +754,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 		}
 		return out
 	}
+	a.observeTouchedPaths(runTool, runArgs)
 	result = silentSuccessDetail(evidenceName, evidenceArgs, result)
 	body, bound, truncMsg := a.boundToolOutput(result, call.Name, call.ID, call.Arguments, false)
 	out := toolOutcome{
@@ -780,16 +780,4 @@ func annotateShellSubject(execution *tool.ShellExecution, args json.RawMessage) 
 	if subject, cut := shellrun.OperativeCommand(cmd); cut {
 		execution.Subject = subject
 	}
-}
-
-// delegationProfile reports the sub-agents a call dispatches. A nil profile is
-// what says the call kept the work in this context.
-func delegationProfile(t tool.Tool, args json.RawMessage) *event.Profile {
-	pr, ok := t.(interface {
-		ResolveProfile(json.RawMessage) *event.Profile
-	})
-	if !ok {
-		return nil
-	}
-	return pr.ResolveProfile(args)
 }
