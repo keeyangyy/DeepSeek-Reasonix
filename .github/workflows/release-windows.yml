@@ -303,9 +303,12 @@ jobs:
           now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           # The shared script writes Studio's own manifest address; this fork
           # serves its manifests from its own releases instead.
+          # Written to a temp file first: the existing index is read from this same
+          # path, and a plain redirect would truncate it before the script ran.
           bash scripts/update-versions-index.sh "$existing" "$VERSION" "$RELEASE_TAG" studio "$now" 3 \
             | sed "s#https://dl.reasonix.io/#https://github.com/${GITHUB_REPOSITORY}/releases/download/#g" \
-            > catalog/versions.json
+            > catalog/versions.json.new
+          mv catalog/versions.json.new catalog/versions.json
           jq -e --arg v "$VERSION" '.versions | map(select(.version == $v)) | length == 1' catalog/versions.json >/dev/null
           if ! gh release view "$anchor" >/dev/null 2>&1; then
             gh release create "$anchor" --latest=false --target studio-mine \
