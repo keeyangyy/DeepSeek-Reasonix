@@ -163,7 +163,15 @@ export class MockPort extends MockFeedback implements AgentPort {
   }
 
   async versions(): Promise<VersionHub> {
-    return { current: "dev", pinned: "", stalePin: false, latest: "", newer: false, versions: [] };
+    // One row from the fork's own catalog, so the source mark shows up in the
+    // design surface; the running build stays the demo's own "dev".
+    return {
+      current: "dev", pinned: "", stalePin: false, latest: "2.30.0-mine.2", newer: true,
+      versions: [
+        { version: "2.30.0-mine.2", tag: "v2.30.0-mine.2", publishedAt: "", current: false, older: false, source: "mine" },
+        { version: "dev", tag: "", publishedAt: "", current: true, older: false },
+      ],
+    };
   }
 
   private welcomed = true;

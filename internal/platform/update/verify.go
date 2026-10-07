@@ -20,6 +20,28 @@ import (
 const publicKey = `untrusted comment: minisign public key: AF12CA46F4A9EBB0
 RWSw66n0RsoSr6Zhh6qt5YO95YkpCayTOCMFVDNUQSjJYwxoYngNVBSq`
 
+// forkPublicKey is the minisign public key this fork's own Studio releases are
+// signed with (Key ID 238315CA90ACADED). A build that reads a second catalog
+// beside Studio's accepts artifacts under that catalog's key, so an entry can
+// only install what the key it names vouches for. The private half lives in
+// this fork's CI secrets and nowhere else.
+const forkPublicKey = `untrusted comment: minisign public key: 238315CA90ACADED
+RWTtrayQyhWDI8VYPakDFeST7JhS0rqq2HzMRV9wkMDmYSR+y5qUAVnG`
+
+// VerifyWithSource checks sig over data under the key a catalog declared,
+// falling back to Studio's own key when the source named none. A source that
+// names no key is read as Studio's, never as "any signature will do".
+func VerifyWithSource(key string, data, sig []byte) error {
+	if strings.TrimSpace(key) == "" {
+		return Verify(data, sig)
+	}
+	return verifyWith(key, data, sig)
+}
+
+// ForkPublicKey returns this fork's own signing key in its canonical two-line
+// text form, the counterpart of PublicKey for the second catalog.
+func ForkPublicKey() string { return forkPublicKey }
+
 // Verify reports whether sig (the contents of a .minisig file) is a valid minisign
 // signature of data under the embedded public key. A nil return means the artifact
 // is authentic; any error means do not trust it. Callers MUST verify before
@@ -29,8 +51,9 @@ func Verify(data, sig []byte) error { return verifyWith(publicKey, data, sig) }
 // verifyArtifact is the gate Download gets its artifacts through, indirected
 // only so package tests can sign with a throwaway key: the embedded key's
 // private half exists solely in CI secrets, so nothing else can produce a
-// signature this would accept.
-var verifyArtifact = Verify
+// signature this would accept. The key used is the one the artifact's own
+// catalog declared, so one source cannot speak for another's bytes.
+var verifyArtifact = VerifyWithSource
 
 // PublicKey returns the embedded public key in its canonical two-line text form,
 // so docs/UI can surface it for manual `minisign -Vm <file>` verification.

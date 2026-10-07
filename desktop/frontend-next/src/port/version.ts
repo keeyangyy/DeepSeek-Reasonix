@@ -5,6 +5,8 @@ export interface VersionEntry {
   publishedAt: string;
   current: boolean;
   older: boolean;
+  // Names the catalog that published this row; absent is Studio's own.
+  source?: string;
 }
 
 // err rides alongside the data: an unreachable catalog must not hide which
