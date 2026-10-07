@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import { Group } from "./Group";
+import { arrowRadios } from "./tablist";
 import type { AgentPort, WriteLeaseSettings } from "../port/port";
 
 // One choice over how far the cross-session write lease reaches. The key is the
@@ -56,7 +57,7 @@ export function WriteLease({ port, onChanged }: { port: AgentPort; onChanged: ()
           <span className="lb">{t("写锁档位")}</span>
           <span className="ds">{t(MODE_WHY[state.mode] ?? MODE_WHY.strict)}</span>
         </span>
-        <div className="seg" data-text role="radiogroup" aria-label={t("写锁档位")}>
+        <div className="seg" data-text role="radiogroup" aria-label={t("写锁档位")} data-action-keydown="write-lease.mode" onKeyDown={arrowRadios}>
           {MODES.map((mode) => (
             <button
               key={mode}
