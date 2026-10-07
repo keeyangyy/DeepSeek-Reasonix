@@ -4025,6 +4025,10 @@
   .vrow:last-of-type { border-bottom: 1px solid var(--hair) }
   .vrow[data-on] { box-shadow: inset 2px 0 0 var(--accent); background: var(--accent-wash) }
   .vrow .nm { grid-column: 1; font: var(--w-reg) var(--fs-ui) var(--mono); color: var(--muted) }
+  .vrow .nm .vsrc {
+    margin-left: 6px; padding: 0 4px; border: 1px solid var(--border); border-radius: var(--r-xs);
+    font: var(--w-reg) var(--fs-micro) var(--ui); color: var(--faint)
+  }
 
   .vrow[data-on] .nm { font-weight: var(--w-med); color: var(--text) }
   .vrow[data-on] .sc { color: var(--muted) }
