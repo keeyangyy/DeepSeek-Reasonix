@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
+import { host as hostBridge } from "../port/host";
 import type { HubPort } from "../port/hub";
 import type { AccountState, AgentPort, SessionStatus, WorkspaceInfo } from "../port/port";
 import { DeviceBar } from "./DeviceBar";
@@ -40,6 +41,13 @@ interface Props {
 export function Chrome({ port, status, title, steer, onSettings, onBrowser, browser, account, host, rail, theme, onRail, onTheme, onFind, hub, onError }: Props) {
   const root = status?.workspaceRoot || status?.cwd || "";
   const project = root ? base(root) : "—";
+  // The folder mark opens the project itself. Only a shell that can enter a
+  // folder offers it, and only once a pane names where that folder is; the
+  // kernel is still the one that answers where the folder lives.
+  const canOpenProject = !!hub && root !== "" && hostBridge().opensFolders();
+  const openProject = () => {
+    if (hub && root) void hub.openWorkspace(root).catch((e) => onError?.(e));
+  };
   // Only for the "隔离" tag: the folder list and the switch itself moved to the
   // sidebar, where adding one and opening one are the same gesture.
   const [ws, setWs] = useState<WorkspaceInfo | null>(null);
@@ -60,7 +68,17 @@ export function Chrome({ port, status, title, steer, onSettings, onBrowser, brow
       </button>
 
       <div className="crumb">
-        <svg className="crumb-folder" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+        <button
+          type="button"
+          className="crumb-folder"
+          data-action="chrome.open-project"
+          aria-label={t("打开项目文件夹")}
+          title={t("打开项目文件夹")}
+          disabled={!canOpenProject}
+          onClick={openProject}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+        </button>
         <span className="crumb-proj" title={root}>
           {project}
         </span>
