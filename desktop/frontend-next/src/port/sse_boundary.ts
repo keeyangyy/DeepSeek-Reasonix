@@ -1,5 +1,5 @@
 import { SseShell } from "./sse_shell";
-import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings, WriteLeaseSettings } from "./port";
 import type { DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
@@ -32,11 +32,11 @@ export class SseBoundary extends SseShell {
   saveBrowserTools(enabled: boolean) {
     return this.post0<BrowserToolsSettings>("/browser-tools", { enabled });
   }
-  opaqueWriters() {
-    return this.get<OpaqueWriterSerializationSettings>("/opaque-writers");
+  writeLease() {
+    return this.get<WriteLeaseSettings>("/write-lease");
   }
-  saveOpaqueWriters(enabled: boolean) {
-    return this.post0<OpaqueWriterSerializationSettings>("/opaque-writers", { enabled });
+  saveWriteLease(mode: string) {
+    return this.post0<WriteLeaseSettings>("/write-lease", { mode });
   }
   rememberApproval() {
     return this.get<RememberApprovalSettings>("/remember-approval");

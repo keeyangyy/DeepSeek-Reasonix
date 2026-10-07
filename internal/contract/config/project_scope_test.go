@@ -218,16 +218,24 @@ func TestProjectCannotClearUserDeny(t *testing.T) {
 	}
 }
 
-// A project file may not turn the write lease off: that would remove the
-// conflict protection from everyone working in that clone, which is not the
-// project's to give away.
-func TestProjectCannotTurnOffTheWriteLease(t *testing.T) {
-	cfg, _ := loadScoped(t, "[agent]\nserialize_opaque_writers = true\n", "[agent]\nserialize_opaque_writers = false\n")
-	if !cfg.Agent.SerializeOpaqueWriters {
-		t.Fatal("a project file turned the write lease off")
+// A project file may not change the write-lease mode: widening or removing the
+// conflict protection is not the clone's to give away.
+func TestProjectCannotChangeTheWriteLease(t *testing.T) {
+	cfg, _ := loadScoped(t, "[agent]\nwrite_lease = \"strict\"\n", "[agent]\nwrite_lease = \"off\"\n")
+	if got := cfg.Agent.WriteLeaseMode(); got != WriteLeaseStrict {
+		t.Fatalf("a project file set write_lease = %q", got)
 	}
-	if !slices.Contains(ignoredKeys(cfg), "agent.serialize_opaque_writers") {
-		t.Fatalf("ignored = %v, want agent.serialize_opaque_writers reported", ignoredKeys(cfg))
+	if !slices.Contains(ignoredKeys(cfg), "agent.write_lease") {
+		t.Fatalf("ignored = %v, want agent.write_lease reported", ignoredKeys(cfg))
+	}
+}
+
+// The legacy key is the same setting, so a project file may not turn the lease
+// off through it either.
+func TestProjectCannotTurnTheWriteLeaseOffByTheOldKey(t *testing.T) {
+	cfg, _ := loadScoped(t, "", "[agent]\nserialize_opaque_writers = false\n")
+	if got := cfg.Agent.WriteLeaseMode(); got != WriteLeaseStrict {
+		t.Fatalf("a project file turned the lease off by the legacy key: %q", got)
 	}
 }
 

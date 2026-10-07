@@ -39,7 +39,7 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { MarketDetail, MarketList, MarketOwnRequest, MarketPackage, MarketPlan, MarketPublished, MarketQuery, MarketRequest, MarketSubmission, MarketVote } from "./market";
 import type { Appearance, ThemeImport, ThemePack } from "./look";
-import type { BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, ProgressWatchSettings, RememberApprovalSettings, SandboxSettings } from "./boundary";
+import type { BrowserToolsSettings, ConfigProblem, ConfigRepair, DisplayCurrencyMode, DisplayCurrencySettings, PermissionLists, PermissionRules, ProgressWatchSettings, RememberApprovalSettings, SandboxSettings, WriteLeaseSettings } from "./boundary";
 import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 export type { ModelEffort, ModelLimit, Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -257,9 +257,9 @@ export interface AgentPort {
   browserTools(): Promise<BrowserToolsSettings>;
   // Writes the user file, then rebuilds: the tools are bound while assembling.
   saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings>;
-  opaqueWriters(): Promise<OpaqueWriterSerializationSettings>;
+  writeLease(): Promise<WriteLeaseSettings>;
   // Writes the user file, then rebuilds: the lease is bound while assembling.
-  saveOpaqueWriters(enabled: boolean): Promise<OpaqueWriterSerializationSettings>;
+  saveWriteLease(mode: string): Promise<WriteLeaseSettings>;
   rememberApproval(): Promise<RememberApprovalSettings>;
   // Writes the user file, then rebuilds: the gate is bound while assembling.
   saveRememberApproval(

@@ -1,4 +1,4 @@
-import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, OpaqueWriterSerializationSettings, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings } from "./port";
+import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings, WriteLeaseSettings } from "./port";
 import type { DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
 import { MockShell } from "./mock_shell";
 
@@ -60,7 +60,7 @@ export class MockBoundary extends MockShell {
 
   private browser: BrowserToolsSettings = { enabled: true, effective: true, path: "/Users/you/.reasonix/config.toml" };
 
-  private opaque: OpaqueWriterSerializationSettings = { enabled: true, effective: true, path: "/Users/you/.reasonix/config.toml" };
+  private lease: WriteLeaseSettings = { mode: "strict", effective: "strict", path: "/Users/you/.reasonix/config.toml" };
 
   async permissions(): Promise<PermissionRules> {
     return { ...this.rules };
@@ -106,13 +106,13 @@ export class MockBoundary extends MockShell {
     return { ...this.browser };
   }
 
-  async opaqueWriters(): Promise<OpaqueWriterSerializationSettings> {
-    return { ...this.opaque };
+  async writeLease(): Promise<WriteLeaseSettings> {
+    return { ...this.lease };
   }
 
-  async saveOpaqueWriters(enabled: boolean): Promise<OpaqueWriterSerializationSettings> {
-    this.opaque = { ...this.opaque, enabled, effective: enabled };
-    return { ...this.opaque };
+  async saveWriteLease(mode: string): Promise<WriteLeaseSettings> {
+    this.lease = { ...this.lease, mode, effective: mode };
+    return { ...this.lease };
   }
 
   private remember: RememberApprovalSettings = {

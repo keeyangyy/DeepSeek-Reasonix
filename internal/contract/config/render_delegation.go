@@ -66,13 +66,13 @@ func renderAgentDelegation(b *strings.Builder, c *Config) {
 	} else {
 		b.WriteString("# worktree_isolation = true   # task can run a writer in a git worktree; changes wait for apply_isolated\n")
 	}
-	// Written in both states: turning this off is a saved setting, so a render
-	// that dropped it would let the next load silently re-serialize writers.
-	if c.Agent.SerializeOpaqueWriters {
-		b.WriteString("serialize_opaque_writers = true   # bash/MCP writers that declare no write_paths hold the workspace lock\n")
-	} else {
-		b.WriteString("serialize_opaque_writers = false   # off: such writers no longer serialize across sessions\n")
+	// Written in every state, and written back as it stands: a mode this build
+	// does not recognise still has to survive a save/load round trip.
+	lease := strings.TrimSpace(c.Agent.WriteLease)
+	if lease == "" {
+		lease = WriteLeaseStrict
 	}
+	fmt.Fprintf(b, "write_lease = %q   # strict: every writer that could overlap queues (upstream); optimistic: only declared write_paths exclude each other; off: no lease at all\n", lease)
 	if c.Agent.CodeMode {
 		b.WriteString("code_mode = true   # run_script: tool calls from a short script, one round trip\n")
 	} else {

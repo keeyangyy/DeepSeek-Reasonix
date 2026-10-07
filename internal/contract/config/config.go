@@ -1045,10 +1045,14 @@ type AgentConfig struct {
 	// WorktreeIsolation lets task run a writer in a git worktree of the
 	// workspace, its changes held until applied. Off by default.
 	WorktreeIsolation bool `toml:"worktree_isolation"`
-	// SerializeOpaqueWriters keeps writers that could not declare write_paths
-	// holding the whole workspace. Set on in Default, not left to the zero value,
-	// because upstream serializes and this switch only exists to opt out.
-	SerializeOpaqueWriters bool `toml:"serialize_opaque_writers"`
+	// WriteLease names how far the cross-session write lease reaches: "strict"
+	// (the default, and upstream's behaviour), "optimistic", or "off". See
+	// write_lease.go for what each one covers.
+	WriteLease string `toml:"write_lease"`
+	// SerializeOpaqueWriters is the earlier spelling of the same setting: true
+	// meant "strict", false meant "off". Read so an existing config keeps its
+	// meaning; WriteLease wins when both are present.
+	SerializeOpaqueWriters *bool `toml:"serialize_opaque_writers"`
 	// CodeMode offers run_script: a Starlark script whose tool calls each pass
 	// the ordinary checks, so dependent steps cost one round trip.
 	CodeMode bool `toml:"code_mode"`
@@ -1401,7 +1405,7 @@ func Default() *Config {
 			MaxParallelWriters:     3,
 			// Set here, not left to the zero value: an absent key must keep the
 			// upstream behaviour of serializing writers that declare no paths.
-			SerializeOpaqueWriters: true,
+			WriteLease: WriteLeaseStrict,
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
 		// resolves to allow) while `reasonix` prompts before writers. Users add
