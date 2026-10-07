@@ -86,6 +86,50 @@ func AssessRememberWrite(store Store, args json.RawMessage) RememberAssessment {
 	return assessment
 }
 
+// AssessRememberSwitch reports whether the user's own auto-confirm switch may let
+// this write through without the dialog. Which scope the switch covers is the
+// caller's question; what stays here is the content floor every unattended write
+// keeps, so a sensitive body still asks however the switch is set. The assessed
+// Name travels so the caller can name the fact in the receipt the write owes.
+func AssessRememberSwitch(store Store, args json.RawMessage) RememberAssessment {
+	in, err := parseRememberRequest(args)
+	if err != nil {
+		return RememberAssessment{Reason: "invalid remember request"}
+	}
+	ref := parseMemoryReference(rememberRequestName(in))
+	assessment := RememberAssessment{Name: ref.name}
+	if assessment.Name == "" {
+		// An id-only call still has a name to report: the stored fact's own.
+		if id := strings.TrimSpace(in.ID); id != "" {
+			for _, stored := range store.ListAll() {
+				if stored.ID == id {
+					assessment.Name = stored.Name
+					break
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(in.Description) == "" || strings.TrimSpace(in.Body) == "" {
+		assessment.Reason = "description and body are required"
+		return assessment
+	}
+	if assessment.Name == "" {
+		assessment.Reason = "memory name cannot be derived"
+		return assessment
+	}
+	if len([]rune(in.Body)) > maxAutoRememberBodyRunes {
+		assessment.Reason = "memory body exceeds the automatic-write budget"
+		return assessment
+	}
+	if rememberRequestSensitive(in) {
+		assessment.Reason = "memory may contain sensitive information"
+		return assessment
+	}
+	assessment.AutoAllow = true
+	assessment.Reason = "the user's switch covers this write"
+	return assessment
+}
+
 func rememberRequestSensitive(in rememberRequest) bool {
 	text := strings.Join([]string{in.Name, in.Title, in.Description, in.Body}, "\n")
 	if secrets.Redact(text) != text || rememberEmailPattern.MatchString(text) {

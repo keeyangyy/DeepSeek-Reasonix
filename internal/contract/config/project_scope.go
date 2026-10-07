@@ -34,9 +34,8 @@ type heldScope struct {
 	// give away.
 	writeLease string
 	// rememberProject and rememberGlobal are the user's [memory] auto-confirm
-	// switches. A project file may set neither: skipping a memory confirmation
-	// is the user's call, not the clone's, and it widens what the agent may
-	// persist in that workspace.
+	// switches. A project file may set neither: skipping a confirmation widens
+	// what the agent may persist, and that is the user's call, not the clone's.
 	rememberProject bool
 	rememberGlobal  bool
 }

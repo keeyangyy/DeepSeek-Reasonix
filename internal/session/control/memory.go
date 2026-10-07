@@ -38,6 +38,10 @@ type memoryManager struct {
 	pending    []string
 	lastRecall memory.RecallResult
 	autoWrites map[[32]byte]int
+	// receipt names the fact the user's switch let a remember call through, so
+	// the write that follows can report it once it has happened. It lives for
+	// one call: a later decision or a management-surface save clears it.
+	receipt string
 
 	// instructions is what the model has of the standing-instruction block. It
 	// rides the turn rather than the prefix: the project's own rules are what
@@ -116,6 +120,37 @@ func (m *memoryManager) claimAutoRemember(args json.RawMessage) bool {
 		m.autoWrites[key]--
 	}
 	return true
+}
+
+// markReceipt notes the fact the switch let the next remember write through, so
+// the write that follows owes the session a receipt naming it.
+func (m *memoryManager) markReceipt(name string) {
+	m.mu.Lock()
+	m.receipt = name
+	m.mu.Unlock()
+}
+
+// clearReceipt drops a mark whose write never reported itself, so a later save
+// of the same name cannot be told it went unasked.
+func (m *memoryManager) clearReceipt() {
+	m.mu.Lock()
+	m.receipt = ""
+	m.mu.Unlock()
+}
+
+// takeReceipt consumes that note whether or not the write it authorized
+// succeeded: a receipt describes a save that happened, and only the note the
+// remember tool queues on a successful save carries the fact's name, so the mark
+// pays out for that write alone.
+func (m *memoryManager) takeReceipt(note string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	name := m.receipt
+	if name == "" || !strings.HasPrefix(note, "Saved memory \""+name+"\"") {
+		return "", false
+	}
+	m.receipt = ""
+	return name, true
 }
 
 func (m *memoryManager) recall(query string) memory.RecallResult {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/contract/event"
 	"reasonix/internal/state/memory"
 )
 
@@ -52,18 +53,36 @@ func (c *Controller) SaveRememberApproval(projectAutoConfirm, globalAutoConfirm 
 
 // allowRememberByScope answers whether the user turned off confirmation for the
 // scope this write lands in. It sits beside allowLowRiskRemember in the same
-// short-circuit — that path covers low-risk creates, this one the user's own
-// per-scope switch — and neither covers forget.
-func (c *Controller) allowRememberByScope(args json.RawMessage) bool {
-	if !c.autoConfirmProjectRemember && !c.autoConfirmGlobalRemember {
-		return false
-	}
+// short-circuit, and neither covers forget; the content floor the assessment
+// keeps means a sensitive body still asks however the switch is set. The
+// assessment travels so the gate can name the fact in the receipt it owes.
+func (c *Controller) allowRememberByScope(args json.RawMessage) memory.RememberAssessment {
 	mem := c.Memory()
-	if mem == nil {
-		return false
+	// This call owns the mark from here on: whatever an earlier one left is
+	// stale by definition.
+	c.memory.clearReceipt()
+	if mem == nil || (!c.autoConfirmProjectRemember && !c.autoConfirmGlobalRemember) {
+		return memory.RememberAssessment{Reason: "the switch is off"}
 	}
 	if memory.RememberWriteScope(mem.Store, args) == memory.FactScopeGlobal {
-		return c.autoConfirmGlobalRemember
+		if !c.autoConfirmGlobalRemember {
+			return memory.RememberAssessment{Reason: "the global switch is off"}
+		}
+	} else if !c.autoConfirmProjectRemember {
+		return memory.RememberAssessment{Reason: "the project switch is off"}
 	}
-	return c.autoConfirmProjectRemember
+	return memory.AssessRememberSwitch(mem.Store, args)
+}
+
+// noticeRememberSavedUnasked leaves the receipt a skipped confirmation owes: the
+// name of the fact the user's switch let through, which /forget takes back. The
+// kernel's own line stays English for frontends that do not localize; the detail
+// is the fact's name, for the desktop card to word in the reader's language.
+func (c *Controller) noticeRememberSavedUnasked(name string) {
+	text := "memory saved without asking"
+	if name != "" {
+		text += ": " + name
+	}
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeMemorySavedUnasked,
+		Text: text, Detail: name})
 }

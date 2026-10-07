@@ -36,6 +36,49 @@ func TestAssessRememberWriteAutoAllowsOnlyLowRiskProjectCreates(t *testing.T) {
 	}
 }
 
+// TestAssessRememberSwitchKeepsTheContentFloor is the switch's one bound: it
+// lifts the ask for the scope it covers, not the content floor, so a body that
+// reads as a credential or an address keeps asking however it is set.
+func TestAssessRememberSwitchKeepsTheContentFloor(t *testing.T) {
+	store := Store{Dir: testenv.TempDir(t), GlobalDir: testenv.TempDir(t)}
+	safe := json.RawMessage(`{"name":"release-target","scope":"project","description":"Release target","type":"project","body":"Release artifacts are published from main-v2."}`)
+	if got := AssessRememberSwitch(store, safe); !got.AutoAllow || got.Name != "release-target" {
+		t.Fatalf("safe write assessment = %+v", got)
+	}
+
+	sensitive := map[string]json.RawMessage{
+		"credential": json.RawMessage(`{"name":"deploy-key","scope":"project","description":"Deploy","body":"DEPLOY_API_KEY=sk-example-secret-value-123456"}`),
+		"email":      json.RawMessage(`{"name":"release-owner","scope":"project","description":"Release owner","body":"Contact release-owner@example.test."}`),
+	}
+	for name, args := range sensitive {
+		t.Run(name, func(t *testing.T) {
+			if got := AssessRememberSwitch(store, args); got.AutoAllow || got.Reason == "" {
+				t.Fatalf("sensitive write assessment = %+v, want asking", got)
+			}
+		})
+	}
+}
+
+// An id-only call still has a name to report: the stored fact's own, so the
+// receipt it owes can name the fact /forget takes back.
+func TestAssessRememberSwitchNamesAnIdOnlyUpdate(t *testing.T) {
+	store := Store{Dir: testenv.TempDir(t), GlobalDir: testenv.TempDir(t)}
+	if _, err := store.Save(Memory{
+		Name: "release-target", Type: TypeProject, Scope: FactScopeProject,
+		Description: "Release target", Body: "Release from main.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stored, ok := store.Read("release-target")
+	if !ok {
+		t.Fatal("stored fact was not found")
+	}
+	got := AssessRememberSwitch(store, json.RawMessage(`{"id":"`+stored.ID+`","description":"Release target","body":"Release from main-v2."}`))
+	if !got.AutoAllow || got.Name != "release-target" {
+		t.Fatalf("id-only update assessment = %+v", got)
+	}
+}
+
 func TestAssessRememberWriteRejectsConflictingReferenceScope(t *testing.T) {
 	store := Store{Dir: testenv.TempDir(t), GlobalDir: testenv.TempDir(t)}
 	args := json.RawMessage(`{"name":"global/release-target.md","description":"Release target","type":"project","scope":"project","body":"Use main-v2."}`)
