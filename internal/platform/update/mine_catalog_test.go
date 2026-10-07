@@ -58,6 +58,52 @@ func forkInstall(running string, max int) Install {
 	}}
 }
 
+// A version is installed from the catalog that published it, whichever that is:
+// the resolved manifest remembers the key its publisher signs with, and a
+// build's own releases are never verified against Studio's key.
+func TestAVersionIsInstalledFromTheCatalogThatPublishedIt(t *testing.T) {
+	rt := &routeCatalog{byURL: map[string]string{
+		StudioCatalog:  studioTwoReleases,
+		forkCatalogURL: forkFourReleases,
+		"https://dl.reasonix.io/studio/2.30.0/latest.json":    `{"version":"2.30.0","platforms":{}}`,
+		"https://example.test/mine/2.30.0-mine.2/latest.json": `{"version":"2.30.0-mine.2","platforms":{}}`,
+	}}
+	u := New(Options{
+		Current:  "2.30.0-mine.1",
+		IndexURL: StudioCatalog,
+		HTTP:     &http.Client{Transport: rt},
+		Mine:     &MineCatalog{Name: "mine", URL: forkCatalogURL, PublicKey: forkPublicKey},
+	})
+	fork, err := u.ManifestFor(context.Background(), "2.30.0-mine.2")
+	if err != nil {
+		t.Fatalf("the fork's release must resolve, though Studio's catalog does not list it: %v", err)
+	}
+	if got := u.artifactKey(fork); got != forkPublicKey {
+		t.Errorf("artifact key = %q, want the key the catalog that listed it declares", got)
+	}
+	upstream, err := u.ManifestFor(context.Background(), "2.30.0")
+	if err != nil {
+		t.Fatalf("Studio's release must still resolve from Studio's own catalog: %v", err)
+	}
+	if got := u.artifactKey(upstream); got != "" {
+		t.Errorf("artifact key = %q, want empty so Studio's embedded key verifies it", got)
+	}
+}
+
+// A version neither catalog lists is refused: a second catalog widens where a
+// version may come from, never what "published" means.
+func TestAVersionNoCatalogListsIsRefused(t *testing.T) {
+	rt := &routeCatalog{byURL: map[string]string{StudioCatalog: studioTwoReleases, forkCatalogURL: forkFourReleases}}
+	u := New(Options{
+		Current: "2.30.0-mine.1", IndexURL: StudioCatalog, HTTP: &http.Client{Transport: rt},
+		Mine: forkInstall("2.30.0-mine.1", 3).Mine,
+	})
+	_, err := u.ManifestFor(context.Background(), "2.30.0-mine.9")
+	if err == nil || !strings.Contains(err.Error(), "not in the published catalog") {
+		t.Fatalf("err = %v, want the version refused by both catalogs", err)
+	}
+}
+
 // The fork's own releases sit beside Studio's, and the budget keeps the list
 // short: newest first, with the running build's row always present.
 func TestHubListsTheForksOwnReleasesWithinTheirBudget(t *testing.T) {

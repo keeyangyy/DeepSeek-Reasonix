@@ -121,6 +121,7 @@ func studioUpdateHost(shell shellIdentity, to io.Writer) appupdate.Capability {
 		Running:     shell.version,
 		Line:        update.StudioLine(),
 		Application: application,
+		Mine:        forkCatalog(),
 	})
 }
 

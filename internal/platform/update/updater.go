@@ -27,9 +27,13 @@ type Installer interface {
 // it is a user setting the shells own, and keeping it out makes the policy
 // testable without a config file.
 type Options struct {
-	Current   string       // running version
-	Pinned    string       // release the user pinned, or ""
-	IndexURL  string       // this line's catalog; required
+	Current  string // running version
+	Pinned   string // release the user pinned, or ""
+	IndexURL string // this line's catalog; required
+	// Mine is a second catalog this build declares, consulted only for versions
+	// the catalog above does not list: a version is installed from the catalog
+	// that published it, and neither answers for the other's artifacts.
+	Mine      *MineCatalog
 	PublicKey string       // minisign key this catalog's artifacts use; "" is Studio's
 	HTTP      *http.Client // carries the caller's proxy and timeouts
 	Fallback  *http.Client // IPv4-pinned route, tried from the second attempt
