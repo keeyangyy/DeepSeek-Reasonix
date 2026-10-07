@@ -1705,9 +1705,7 @@ func (a *App) historyIndexMigrationLoop(ctx context.Context) {
 			if historySessionIndexOnDiskValid(path) || historySessionLooksEventFormat(path) {
 				continue
 			}
-			if err := agent.RepairSessionDisplayReadModel(path); err != nil {
-				slog.Debug("desktop: history read-model migration failed", "path", path, "err", err)
-			}
+			repairDesktopSessionReadModel(path, "migration")
 			timer := time.NewTimer(25 * time.Millisecond)
 			select {
 			case <-ctx.Done():
