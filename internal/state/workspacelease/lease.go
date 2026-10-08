@@ -286,7 +286,8 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 	if o.skipWriteSerialization {
 		// Serialization turned off: report the write as granted without taking
 		// the cross-session lease, so opaque writers stop blocking each other.
-		return nil
+		// Nothing was held, so the release the caller gets is a no-op.
+		return func() {}, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
