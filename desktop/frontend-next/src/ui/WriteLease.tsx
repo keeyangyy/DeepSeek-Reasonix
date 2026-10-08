@@ -11,8 +11,8 @@ import type { AgentPort, WriteLeaseSettings } from "../port/port";
 const MODES = ["strict", "optimistic", "off"] as const;
 
 const MODE_NAME: Record<string, string> = {
-  strict: "严格",
-  optimistic: "乐观",
+  strict: "标准写锁",
+  optimistic: "宽松写锁",
   off: "关闭写锁",
 };
 
@@ -93,7 +93,7 @@ export function WriteLeaseGroup({ port, onChanged }: { port: AgentPort; onChange
     <Group
       id="write-lease"
       title={t("写锁档位")}
-      hint={t("跨会话写锁的适用范围：严格＝声明了 write_paths 的写者按路径互斥，未声明路径的写者占用整个工作区；乐观＝仅声明了 write_paths 的写者按路径互斥，未声明路径的写者不占用工作区；关闭写锁＝本会话不取跨会话写锁。会话内子代理始终按声明路径与写者名额排队。修改会重建运行时，任务运行期间无法变更。")}
+      hint={t("跨会话写锁的适用范围：标准写锁＝声明了 write_paths 的写者按路径互斥，未声明路径的写者占用整个工作区；宽松写锁＝仅声明了 write_paths 的写者按路径互斥，未声明路径的写者不占用工作区；关闭写锁＝本会话不取跨会话写锁。会话内子代理始终按声明路径与写者名额排队。修改会重建运行时，任务运行期间无法变更。")}
     >
       <WriteLease port={port} onChanged={onChanged} />
     </Group>

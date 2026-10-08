@@ -27,10 +27,10 @@ describe("the write-lease mode", () => {
     const changed = vi.fn();
     render(<WriteLease port={p} onChanged={changed} />);
     await group();
-    expect(option("严格").getAttribute("aria-checked")).toBe("true");
-    await userEvent.click(option("乐观"));
+    expect(option("标准写锁").getAttribute("aria-checked")).toBe("true");
+    await userEvent.click(option("宽松写锁"));
     expect(save).toHaveBeenCalledWith("optimistic");
-    await waitFor(() => expect(option("乐观").getAttribute("aria-checked")).toBe("true"));
+    await waitFor(() => expect(option("宽松写锁").getAttribute("aria-checked")).toBe("true"));
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
@@ -44,7 +44,7 @@ describe("the write-lease mode", () => {
     await group();
     await userEvent.click(option("关闭写锁"));
     await screen.findByText(/disk full/);
-    expect(option("严格").getAttribute("aria-checked")).toBe("true");
+    expect(option("标准写锁").getAttribute("aria-checked")).toBe("true");
     expect(changed).not.toHaveBeenCalled();
   });
 
@@ -55,7 +55,7 @@ describe("the write-lease mode", () => {
     const changed = vi.fn();
     render(<WriteLease port={p} onChanged={changed} />);
     await group();
-    await userEvent.click(option("严格"));
+    await userEvent.click(option("标准写锁"));
     expect(save).not.toHaveBeenCalled();
     expect(changed).not.toHaveBeenCalled();
   });
@@ -87,8 +87,8 @@ describe("the write-lease mode", () => {
     };
     render(<WriteLease port={p} onChanged={() => {}} />);
     await group();
-    await userEvent.click(option("乐观"));
-    await waitFor(() => expect((option("严格") as HTMLButtonElement).disabled).toBe(true));
+    await userEvent.click(option("宽松写锁"));
+    await waitFor(() => expect((option("标准写锁") as HTMLButtonElement).disabled).toBe(true));
     open();
   });
 });
