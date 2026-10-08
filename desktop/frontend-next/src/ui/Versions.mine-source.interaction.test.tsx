@@ -15,9 +15,9 @@ const hub: VersionHub = {
   latest: "2.30.0-mine.2",
   newer: true,
   versions: [
-    { version: "2.30.0-mine.2", tag: "v2.30.0-mine.2", publishedAt: "", current: false, older: false, source: "mine" },
-    { version: "2.30.0-mine.1", tag: "v2.30.0-mine.1", publishedAt: "", current: true, older: false, source: "mine" },
-    { version: "2.30.0", tag: "studio-v2.30.0", publishedAt: "", current: false, older: false },
+    { version: "2.30.0-mine.2", tag: "v2.30.0-mine.2", publishedAt: "", current: false, older: false, source: "mine", hasNotes: false },
+    { version: "2.30.0-mine.1", tag: "v2.30.0-mine.1", publishedAt: "", current: true, older: false, source: "mine", hasNotes: false },
+    { version: "2.30.0", tag: "studio-v2.30.0", publishedAt: "", current: false, older: false, hasNotes: false },
   ],
 };
 

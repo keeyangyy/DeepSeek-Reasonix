@@ -178,8 +178,8 @@ export class MockPort extends MockFeedback implements AgentPort {
     return {
       current: "dev", pinned: "", stalePin: false, latest: "2.30.0-mine.2", newer: true,
       versions: [
-        { version: "2.30.0-mine.2", tag: "v2.30.0-mine.2", publishedAt: "", current: false, older: false, source: "mine" },
-        { version: "dev", tag: "", publishedAt: "", current: true, older: false },
+        { version: "2.30.0-mine.2", tag: "v2.30.0-mine.2", publishedAt: "", current: false, older: false, source: "mine", hasNotes: false },
+        { version: "dev", tag: "", publishedAt: "", current: true, older: false, hasNotes: false },
       ],
     };
   }
