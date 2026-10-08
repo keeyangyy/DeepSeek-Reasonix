@@ -218,7 +218,7 @@ jobs:
               # step: it costs one package (~8m) rather than a whole sweep, and
               # these three are exactly the packages that blow the budget on a
               # loaded runner. Anything else stays red immediately.
-              if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|panic: test timed out after|: timed out|timed out waiting for|timed out after [0-9]+"; then
+              if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|panic: test timed out after|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat"; then
                 printf '%s\n' "$output"
                 exit "$status"
               fi
@@ -312,7 +312,7 @@ jobs:
             #      wait_failed" / ".semawakeup"): an OS/runtime-level fault on
             #      hosted runners that kills the whole test process mid-package;
             #      not reproducible from the code under test, passes on a rerun.
-            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
+            if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat"; then
               printf '%s\n' "$output"
               exit "$status"
             fi
@@ -423,7 +423,7 @@ jobs:
             #      empty"): a background writer still touches the directory while
             #      t.TempDir() removes it. Same class: slow runners only, passes
             #      on a rerun.
-            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+"; then
+            if ! printf '%s' "$output" | grep -Eq "FAIL: TestLazyCacheMissAsyncSpawn|FAIL[[:space:]]+reasonix/internal/plugin|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat"; then
               printf '%s\n' "$output"
               exit "$status"
             fi

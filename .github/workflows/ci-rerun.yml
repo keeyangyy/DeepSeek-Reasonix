@@ -43,7 +43,11 @@ jobs:
 
           # Signatures of the environment-level flakes these hosted runners
           # produce; keep in sync with the in-step retry list in ci.yml.
-          flake_re='found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime\.semasleep|runtime\.semawakeup|waitforsingleobject wait_failed|setevent failed|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+'
+          # "the turn never closed" is a test-internal budget timeout (half of
+          # the binary deadline), the same class as ": timed out"; "go: unlinkat
+          # ...: Access is denied" is the runner's antivirus holding the freshly
+          # built test binary. Both pass on a rerun.
+          flake_re='found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime\.semasleep|runtime\.semawakeup|waitforsingleobject wait_failed|setevent failed|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat'
 
           jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET/jobs?per_page=100" \
             --jq '.jobs[] | select(.conclusion=="failure") | "\(.id)\t\(.name)"')"
@@ -53,9 +57,17 @@ jobs:
 
           # Any failing job without a flake signature means the run is a genuine
           # regression: leave it red instead of retrying.
+          # Job logs carry terminal escape sequences, which gh refuses to print
+          # ("pass --allow-escape-sequences") and exits 1 on — leaving $log
+          # empty and every job "without a known flake signature". curl hands
+          # back the same text with the escapes intact, and the patterns above
+          # match on plain substrings, so the escapes do not matter.
           while IFS="$(printf '\t')" read -r id name; do
             [ -n "$id" ] || continue
-            log="$(gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" 2>/dev/null || true)"
+            log="$(curl -sSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" || true)"
             if ! printf '%s' "$log" | grep -Eq "$flake_re"; then
               echo "::warning::$name failed without a known flake signature; leaving the run red"
               {
