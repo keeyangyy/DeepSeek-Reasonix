@@ -17,8 +17,8 @@ const MODE_NAME: Record<string, string> = {
 };
 
 const MODE_WHY: Record<string, string> = {
-  strict: "凡是可能重叠的写者都排队，与上游一致——包括没声明 write_paths 的子代理。",
-  optimistic: "只让声明了写入路径的写者互斥；说不清范围的写者（bash、MCP、没声明 write_paths 的子代理）不再占住整个工作区。",
+  strict: "声明了写入路径的写者按路径互斥；没声明路径的（bash、MCP、没给 write_paths 的子代理）占住整个工作区，因此也排住别人。",
+  optimistic: "只让声明了写入路径的写者按路径互斥；没声明路径的不再占住整个工作区，可以和其他会话并行。",
   off: "本会话不取跨会话写锁：不再排住别的会话，也不再被它们排住。会话内子代理之间仍按声明路径与写者名额（max_parallel_writers）排队。",
 };
 
@@ -86,14 +86,14 @@ export function WriteLease({ port, onChanged }: { port: AgentPort; onChanged: ()
 }
 
 // The settings block ships whole so the settings page keeps one line for it
-// instead of a frame plus its wording; that also keeps that upstream file from
-// growing past its line ceiling for a fork-only row.
+// instead of a frame plus its wording; that also keeps Settings.tsx from
+// growing past its line ceiling for one more row.
 export function WriteLeaseGroup({ port, onChanged }: { port: AgentPort; onChanged: () => void }) {
   return (
     <Group
       id="write-lease"
       title={t("写锁档位")}
-      hint={t("跨会话写锁走多远：严格＝凡是可能重叠的写者都排队（上游行为）；乐观＝只让声明了写入路径的写者互斥，说不清范围的写者不再占住整个工作区；关闭写锁＝本会话不取跨会话写锁，会话内子代理之间仍按写者名额与声明路径排队。修改会重建运行时，任务运行期间无法变更。")}
+      hint={t("跨会话写锁走多远：严格＝声明了路径的写者按路径互斥，没声明路径的占住整个工作区；乐观＝只有声明了路径的写者互斥，没声明路径的不再占工作区；关闭写锁＝本会话不取跨会话写锁。会话内子代理之间仍按声明路径与写者名额排队。修改会重建运行时，任务运行期间无法变更。")}
     >
       <WriteLease port={port} onChanged={onChanged} />
     </Group>

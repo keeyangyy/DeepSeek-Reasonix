@@ -95,9 +95,9 @@ func newSubagentConfig(opts Options, cfg *config.Config, entry *config.ProviderE
 	maxConcurrency, maxWriters := writeclaim.NormalizeConcurrencyLimits(
 		cfg.Agent.MaxSubagentConcurrency, cfg.Agent.MaxParallelWriters,
 	)
-	// The whole-workspace gate is a user setting: "strict" keeps it on, which is
-	// upstream behaviour; "optimistic" turns it off so a writer that declares no
-	// write_paths stops holding the workspace.
+	// The whole-workspace gate is a user setting: "strict" keeps it on;
+	// "optimistic" turns it off so a writer that declares no write_paths stops
+	// holding the workspace.
 	writeclaim.SetSerializeWholeWorkspace(cfg.Agent.SerializeWholeWorkspace())
 	inherited := resolveInheritedSubagentEffort(cfg, entry)
 	return subagentConfig{

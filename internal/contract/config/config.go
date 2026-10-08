@@ -1046,8 +1046,8 @@ type AgentConfig struct {
 	// workspace, its changes held until applied. Off by default.
 	WorktreeIsolation bool `toml:"worktree_isolation"`
 	// WriteLease names how far the cross-session write lease reaches: "strict"
-	// (the default, and upstream's behaviour), "optimistic", or "off". See
-	// write_lease.go for what each one covers.
+	// (the default), "optimistic", or "off". See write_lease.go for what each
+	// one covers.
 	WriteLease string `toml:"write_lease"`
 	// SerializeOpaqueWriters is the earlier spelling of the same setting: true
 	// meant "strict", false meant "off". Read so an existing config keeps its
@@ -1404,7 +1404,7 @@ func Default() *Config {
 			MaxSubagentConcurrency: 6,
 			MaxParallelWriters:     3,
 			// Set here, not left to the zero value: an absent key must keep the
-			// upstream behaviour of serializing writers that declare no paths.
+			// strict behaviour of serializing writers that declare no paths.
 			WriteLease: WriteLeaseStrict,
 		},
 		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask

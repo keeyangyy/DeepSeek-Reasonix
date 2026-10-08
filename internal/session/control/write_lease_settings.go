@@ -12,9 +12,9 @@ type WriteLeaseSetting struct {
 }
 
 // WriteLeaseSettings reads [agent] write_lease from the user file and from the
-// merge in force for this workspace. Absent reads as "strict", which is
-// upstream's behaviour: every writer whose extent could overlap another's
-// serializes, including the writers that declare no write_paths.
+// merge in force for this workspace. Absent reads as "strict": every writer
+// whose extent could overlap another's serializes, including the writers that
+// declare no write_paths.
 func (c *Controller) WriteLeaseSettings() WriteLeaseSetting {
 	path := config.UserConfigPath()
 	out := WriteLeaseSetting{

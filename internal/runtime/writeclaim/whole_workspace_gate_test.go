@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// 开关默认打开：整区声明与任何声明冲突（上游行为）；关闭后整区声明不再冲突，
+// 开关默认打开：整区声明与任何声明冲突；关闭后整区声明不再冲突，
 // 而普通路径声明之间的冲突规则完全不变 —— 这正是「一处收口覆盖全部整区来源」的语义。
 func TestWholeWorkspaceGateOnlyRelaxesWholeClaims(t *testing.T) {
 	root := t.TempDir()
@@ -20,7 +20,7 @@ func TestWholeWorkspaceGateOnlyRelaxesWholeClaims(t *testing.T) {
 
 	SetSerializeWholeWorkspace(true)
 	if !whole.Overlaps(file) || !file.Overlaps(whole) {
-		t.Fatal("开关打开时：整区声明必须仍然与路径声明冲突（上游行为）")
+		t.Fatal("开关打开时：整区声明必须仍然与路径声明冲突")
 	}
 
 	SetSerializeWholeWorkspace(false)

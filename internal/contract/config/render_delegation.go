@@ -72,7 +72,7 @@ func renderAgentDelegation(b *strings.Builder, c *Config) {
 	if lease == "" {
 		lease = WriteLeaseStrict
 	}
-	fmt.Fprintf(b, "write_lease = %q   # strict: every writer that could overlap queues (upstream); optimistic: only declared write_paths exclude each other; off: no lease at all\n", lease)
+	fmt.Fprintf(b, "write_lease = %q   # strict: declared paths serialize, undeclared ones hold the whole workspace; optimistic: only declared paths serialize; off: no lease at all\n", lease)
 	if c.Agent.CodeMode {
 		b.WriteString("code_mode = true   # run_script: tool calls from a short script, one round trip\n")
 	} else {

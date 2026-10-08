@@ -210,8 +210,8 @@ func combineApprovalReasons(reasons ...string) string {
 
 func (g gateApprover) approveWithPolicyReason(ctx context.Context, tool, subject string, args json.RawMessage, policyReason string) (bool, bool, string, error) {
 	if tool == memoryRememberTool {
-		// The low-risk create path is upstream's own and leaves no receipt; the
-		// user's switch is this fork's, so it names what it let through.
+		// The low-risk create path leaves no receipt; the per-scope switch
+		// does, so it names what it let through.
 		if g.c.allowLowRiskRemember(args) {
 			return true, false, "", nil
 		}

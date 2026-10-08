@@ -122,15 +122,15 @@ func SubagentWriteClaim(ctx context.Context) WritePathSet {
 }
 
 // serializeWholeWorkspace gates whether a writer that could not declare write
-// paths claims the whole workspace for exclusive use. It ships on, which is
-// upstream behaviour; boot sets it once from the user config. It is atomic so a
-// build that sets it cannot race a session already asking Overlaps.
+// paths claims the whole workspace for exclusive use. It ships on; boot sets it
+// once from the user config. It is atomic so a build that sets it cannot race a
+// session already asking Overlaps.
 var serializeWholeWorkspace atomic.Bool
 
 func init() { serializeWholeWorkspace.Store(true) }
 
 // SetSerializeWholeWorkspace sets the boot-time value of the gate above. Left
-// untouched, whole-workspace claims keep serializing writers as upstream does.
+// untouched, whole-workspace claims keep serializing writers.
 func SetSerializeWholeWorkspace(on bool) { serializeWholeWorkspace.Store(on) }
 
 // WholeWorkspaceWriteClaim claims the entire workspace for a writer that did

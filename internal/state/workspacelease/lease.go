@@ -73,7 +73,7 @@ type Owner struct {
 	holder func() string
 	// skipWriteSerialization drops this session's cross-session write lease
 	// entirely: no call takes the workspace lock, so opaque writers stop
-	// blocking other sessions. The zero value keeps upstream behaviour.
+	// blocking other sessions. The zero value keeps the lease.
 	skipWriteSerialization bool
 
 	mu            sync.Mutex
@@ -122,7 +122,7 @@ type Option func(*Owner)
 
 // WithoutWriteSerialization lets writers that could not declare write paths run
 // without the workspace write lease. Callers get it from the user config; the
-// default (not passing this option) keeps upstream serialization.
+// default (not passing this option) keeps serializing.
 func WithoutWriteSerialization() Option {
 	return func(o *Owner) { o.skipWriteSerialization = true }
 }

@@ -27,7 +27,7 @@ func NormalizeWriteLeaseMode(mode string) string {
 
 // WriteLeaseMode is the setting with the legacy key folded in: an earlier config
 // wrote serialize_opaque_writers, where true meant strict and false meant off.
-// Absent both, the answer is strict — upstream's behaviour.
+// Absent both, the answer is strict.
 func (a AgentConfig) WriteLeaseMode() string {
 	if strings.TrimSpace(a.WriteLease) != "" {
 		return NormalizeWriteLeaseMode(a.WriteLease)

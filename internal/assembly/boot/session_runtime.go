@@ -31,8 +31,8 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 	}
 	// The lease mode is a user setting. "off" takes no cross-session lease at
 	// all; "optimistic" and "strict" differ in the whole-workspace gate the
-	// subagent scheduler reads, not here. Passing no option keeps the lease
-	// exactly as upstream has it.
+	// subagent scheduler reads, not here. Passing no option keeps the lease at
+	// its default.
 	var leaseOptions []workspacelease.Option
 	if cfg.Agent.SkipWriteLease() {
 		leaseOptions = append(leaseOptions, workspacelease.WithoutWriteSerialization())
