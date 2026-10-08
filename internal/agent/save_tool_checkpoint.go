@@ -32,6 +32,10 @@ func (s *Session) markCheckpointPersisted(path string, digest [sha256.Size]byte,
 		return
 	}
 	s.setPersistedBaseline(path, digest, version, revision, true, true, rewriteVersion, msgs)
+	// Defer only the expensive display index: the sidecar counts are the
+	// catalog's liveness receipt, and leaving them self-invalidated across a
+	// long tool run makes an active session look like unrepairable stale history.
+	persistSessionListingProjection(path, msgs, revision, digestString(digest))
 	s.mu.Lock()
 	s.persisted.projectionPending = true
 	s.mu.Unlock()
