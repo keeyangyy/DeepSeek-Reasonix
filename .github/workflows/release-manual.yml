@@ -153,6 +153,13 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_TITLE="${TITLE:-v$VERSION}"
+          # The studio line names its releases "Studio v<version>" so the fork's
+          # own Studio builds stay distinguishable in the releases list. A manual
+          # dispatch has forgotten the title once (v2.31.0-mine.1 shipped bare);
+          # default the prefix here instead of trusting the caller's memory.
+          if [ -z "$TITLE" ] && [ "$GITHUB_REF_NAME" = "studio-mine" ]; then
+            RELEASE_TITLE="Studio v$VERSION"
+          fi
           # Create the release as a draft: the Windows pipeline attaches the
           # installer and portable archive a few minutes later, and a public
           # release must never be visible without its assets.
