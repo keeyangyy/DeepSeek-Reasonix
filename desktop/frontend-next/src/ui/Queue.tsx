@@ -212,7 +212,10 @@ export function Queue({ queue, running, onRead, onEdit, onMove, onCancel, onSend
                   onChange={(e) => setDraft(e.target.value)}
                   onBlur={commit}
                   onKeyDown={(e) => {
-                    if (e.key === "Escape") setEditing("");
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditing("");
+                    }
                     // Enter commits; the line is one instruction, and a queue
                     // row is not where a paragraph gets composed.
                     if (e.key === "Enter" && !e.shiftKey && !touchKeyboard() && !e.nativeEvent.isComposing) {

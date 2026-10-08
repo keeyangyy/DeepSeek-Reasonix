@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
+	"slices"
 	"strings"
 
 	"reasonix/internal/base/fileutil"
@@ -394,6 +395,52 @@ func (h *Hub) removeSession(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusForbidden, "session.outside_workspace", "path outside a known workspace", nil)
 		return
 	}
+	// Removing only the lead lets a covered recovery copy take its place and the
+	// delete reads as having done nothing. Copies holding content their parent
+	// lacks, and any a pane has open, are left alone.
+	open := h.openSessions()
+	excluded := make([]string, 0, len(open))
+	for openPath := range open {
+		excluded = append(excluded, openPath)
+	}
+	paths := []string{path}
+	sibs, err := sessionstore.RecoveryLineagePaths(path, excluded...)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	for _, p := range sibs {
+		if p != path && sessionstore.RecoveryBranchCoveredByParent(p, dir) {
+			paths = append(paths, p)
+		}
+	}
+	// Every guard is taken before anything is erased, so a held copy refuses the
+	// request with the lead and the rest intact. The lead goes last.
+	guards := make([]*sessionstore.SessionRemovalGuard, 0, len(paths))
+	for _, p := range paths {
+		guard, ok := acquireRemovalGuard(w, p)
+		if !ok {
+			for _, g := range guards {
+				g.Release()
+			}
+			return
+		}
+		guards = append(guards, guard)
+	}
+	for i := range slices.Backward(paths) {
+		if !eraseGuardedSession(w, dir, paths[i], guards[i]) {
+			for _, g := range guards[:i] {
+				g.Release()
+			}
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// acquireRemovalGuard answers the request itself when the session is held,
+// returning false.
+func acquireRemovalGuard(w http.ResponseWriter, path string) (*sessionstore.SessionRemovalGuard, bool) {
 	// A pane's current path is narrower than "anyone writing this file": a
 	// recovery branch or a mid-rotation session is held without being one.
 	// Taking the guard beats probing it, which leaves a window for a writer.
@@ -403,25 +450,31 @@ func (h *Hub) removeSession(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &held) {
 			if who := sessionHolder(held); who != nil {
 				busy(w, "session.in_use_by", "another process holds this conversation open", who)
-				return
+				return nil, false
 			}
 			busy(w, "session.in_use", "this conversation is still being written to", nil)
-			return
+			return nil, false
 		}
 		writeErr(w, http.StatusInternalServerError, err)
-		return
+		return nil, false
 	}
+	return guard, true
+}
+
+// eraseGuardedSession erases one transcript under its guard and answers the
+// request itself when it cannot, returning false with the guard released.
+func eraseGuardedSession(w http.ResponseWriter, dir, path string, guard *sessionstore.SessionRemovalGuard) bool {
 	if err := removeSessionFiles(dir, path); err != nil {
 		guard.Release()
 		writeErr(w, http.StatusInternalServerError, err)
-		return
+		return false
 	}
 	if err := guard.RemoveSidecarsAndRelease(); err != nil {
 		// The conversation is already gone; a surviving lock file is stale
 		// bookkeeping, not a failed delete.
 		slog.Warn("serve: session removed, lock files survived", "path", path, "err", err)
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return true
 }
 
 // sessionHolder names the process holding a conversation, and only when it is

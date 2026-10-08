@@ -93,6 +93,7 @@ var Chinese = Messages{
 	TUIDeclinedFmt:          "已拒绝 %s %s",
 	NoticeUnappliedSteerFmt: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：\n%s",
 	NoticeExtSkippedFmt:     "扩展 %s 的配套后台程序没有运行，本次在 %s 已被跳过。用 /plugins 查看并启动它，或停用该扩展。",
+	NoticeInboxRecoveredFmt: "已恢复 %d 条未完成的指令。待发送已暂停，请先用 /queue 查看，再继续派发。",
 	TUIQuestion:             "提问",
 	TUISubagentCallsFmt:     "%d 次子代理调用",
 	TUIChartMoreRowsFmt:     "… 还有 %d 行",
@@ -643,7 +644,6 @@ var Chinese = Messages{
 	WriteEnvErr:               "写入 .env 失败：",
 
 	ProviderErrBadRequest:          "请求格式错误 (HTTP 400)：请求体被拒绝，通常是程序缺陷。若持续出现请反馈。",
-	ProviderErrDroppedReasoning:    "端点拒绝了请求体：它要求把助手的思考内容随工具调用一并回传，而这个连接没有声明思考协议，于是这部分没有发出去。把连接的思考参数设成它后面那个模型所用的协议，再重试。",
 	ProviderErrAuth:                "认证失败 (HTTP 401)：未读到 API key（缺失或未设置）。请在 .env 中配置密钥，或运行 `reasonix setup`。",
 	ProviderErrAuthRejected:        "认证失败 (HTTP 401)：服务端拒绝了你的 API key。可能是 key 错误或已过期，也可能是服务端出现瞬时鉴权/额度问题——已退避重试仍失败。请稍后再试，或检查 .env 中的密钥 / 运行 `reasonix setup`。",
 	ProviderErrDNSNotFound:         "无法解析模型服务域名 %s：DNS 查询显示该主机不存在，未建立任何连接，也没有重试。请检查网络、DNS、代理设置以及服务商的接口地址。",

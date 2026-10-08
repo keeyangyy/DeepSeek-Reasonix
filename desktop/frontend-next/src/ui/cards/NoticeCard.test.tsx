@@ -112,6 +112,18 @@ describe("a coded notice with a payload", () => {
     expect(auto.querySelector(".find .t")?.textContent).toBe(t("费用显示币种已设为 {mode}", { mode: "auto" }));
   });
 
+  it("words the recovered inbox from its count and draws no raw payload line", () => {
+    const box = draw({ level: "warn", code: "inbox_recovered", text: "Recovered 1 pending instruction(s). Inbox is paused — review with /queue before resuming.", detail: '{"count":1}' });
+    expect(box.querySelector(".find .t")?.textContent).toBe(t("已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”", { n: 1 }));
+    expect(box.querySelector(".find .t")?.textContent).not.toContain("Recovered");
+    expect(box.querySelector(".find .why")).toBeNull();
+  });
+
+  it("keeps the kernel's English when the recovered-inbox payload is not readable", () => {
+    const box = draw({ level: "warn", code: "inbox_recovered", text: "Recovered 2 pending instruction(s).", detail: "garbled" });
+    expect(box.querySelector(".find .t")?.textContent).toContain("Recovered 2 pending");
+  });
+
   it("wraps the user's unapplied guidance in this build's sentence and keeps their words verbatim", () => {
     const box = draw({
       code: "unapplied_steer",

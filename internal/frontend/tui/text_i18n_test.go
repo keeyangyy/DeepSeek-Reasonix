@@ -122,3 +122,18 @@ func TestSkippedExtensionNoticeFollowsTheUILanguage(t *testing.T) {
 		t.Fatalf("unreadable payload must keep the kernel's text, got %q", got)
 	}
 }
+
+func TestRecoveredInboxNoticeFollowsTheUILanguage(t *testing.T) {
+	inChinese(t)
+	detail := event.InboxRecovered{Count: 2}.Encode()
+	got := renderNotice(&Item{Code: event.NoticeCodeInboxRecovered, Text: "english", Detail: detail})
+	if !strings.Contains(got, "已恢复 2 条未完成的指令") || !strings.Contains(got, "/queue") {
+		t.Fatalf("notice = %q", got)
+	}
+	if strings.Contains(got, "{") || strings.Contains(got, "english") {
+		t.Fatalf("payload or fallback leaked into %q", got)
+	}
+	if got := renderNotice(&Item{Code: event.NoticeCodeInboxRecovered, Text: "kernel english", Detail: "not json"}); !strings.Contains(got, "kernel english") {
+		t.Fatalf("unreadable payload must keep the kernel's text, got %q", got)
+	}
+}

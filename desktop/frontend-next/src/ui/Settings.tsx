@@ -163,19 +163,20 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
       .catch((e) => { if (current()) { setSkills([]); setExtErrors((errors) => ({ ...errors, skills: reason(e) })); } });
     void Promise.allSettled([mcpRead, packageRead, skillRead]).then(() => { if (current()) setExtRefreshing(false); });
   }, [port, scopeAt]);
-  const currentExt = useRef({ port, reloadExt, onChanged });
-  currentExt.current = { port, reloadExt, onChanged };
-  const afterExtChange = useCallback(() => {
-    if (currentExt.current.port !== port) return;
-    currentExt.current.reloadExt();
-    currentExt.current.onChanged();
-  }, [port]);
-  const reload = useRuntimeReload(port, afterExtChange);
-
   // Adding or removing a source changes what the picker above can offer, so
   // the list is reloadable rather than read once at mount.
   const homePort = networkPort ?? port;
   const loadModels = useModelCatalog(port, homePort, setModels);
+
+  const currentExt = useRef({ port, reloadExt, loadModels, onChanged });
+  currentExt.current = { port, reloadExt, loadModels, onChanged };
+  const afterExtChange = useCallback(() => {
+    if (currentExt.current.port !== port) return;
+    currentExt.current.reloadExt();
+    currentExt.current.loadModels();
+    currentExt.current.onChanged();
+  }, [port]);
+  const reload = useRuntimeReload(port, afterExtChange);
 
   // Three sections whose row used to report nothing. Loaded here rather than in
   // reloadExt because none of them moves with the scope the extension lists are

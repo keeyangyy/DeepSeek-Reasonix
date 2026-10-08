@@ -320,6 +320,10 @@ func codedNoticeText(it *Item) string {
 			return fmt.Sprintf(i18n.M.NoticeUnappliedSteerFmt, textutil.TruncateGraphemes(textutil.SanitizeDisplay(it.Detail), unappliedSteerCap, "…"))
 		}
 		return textutil.TruncateGraphemes(textutil.SanitizeDisplay(it.Text), unappliedSteerCap, "…")
+	case event.NoticeCodeInboxRecovered:
+		if p, ok := event.DecodeInboxRecovered(it.Detail); ok {
+			return fmt.Sprintf(i18n.M.NoticeInboxRecoveredFmt, p.Count)
+		}
 	case event.NoticeCodeExtensionSkipped:
 		if p, ok := event.DecodeExtensionSkipped(it.Detail); ok && p.Reason == event.ExtensionSkipReasonNoLiveSidecar {
 			return fmt.Sprintf(i18n.M.NoticeExtSkippedFmt, p.Extension, p.Point)

@@ -22,7 +22,7 @@ export function UserCard({
   cp?: Checkpoint;
   onResend?: (turn: number, text: string) => Promise<void>;
   onPrepareRewind?: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
-  onCommitRewind?: (planId: string) => Promise<RewindResult>;
+  onCommitRewind?: (planId: string, text?: string) => Promise<RewindResult>;
   onUndoRewind?: (transactionId: string) => Promise<void>;
 }) {
   // A rewind needs a turn the kernel claimed, and a queued line has not
@@ -122,7 +122,7 @@ export function UserCard({
             </button>
           )}
           {rewind && (
-            <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={onCommitRewind!} onUndo={onUndoRewind!} />
+            <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={(planId) => onCommitRewind!(planId, item.text)} onUndo={onUndoRewind!} />
           )}
         </div>
       </div>

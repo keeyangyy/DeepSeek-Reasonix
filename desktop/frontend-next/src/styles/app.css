@@ -535,7 +535,7 @@
   .call[data-pending] > .c { opacity: .7 }
 
   .app {
-    --nav-w: 52px; --rail-w: var(--rail-open); --side-w: 0px; --dock-w: var(--dock-open);
+    --nav-w: 0px; --rail-w: var(--rail-open); --side-w: 0px; --dock-w: var(--dock-open);
     transition: --rail-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --side-w var(--t-panel) cubic-bezier(.32, .72, 0, 1), --dock-w var(--t-panel) cubic-bezier(.32, .72, 0, 1);
   }
   .app[data-rail="off"] { --rail-w: 0px }
@@ -546,7 +546,7 @@
   .app[data-drag="pointer"] { user-select: none; cursor: col-resize }
   .app[data-drag="pointer"] * { cursor: col-resize }
 
-  .cols { flex: 1; display: grid; grid-template-columns: var(--nav-w) var(--rail-w) minmax(0, 1fr) var(--side-w); min-height: 0 }
+  .cols { flex: 1; display: grid; grid-template-columns: var(--rail-w) var(--nav-w) minmax(0, 1fr) var(--side-w); min-height: 0 }
   .rail, .side { overflow: hidden }
   [data-rail="off"] .rail { border-right: 0 }
   .app:not([data-side="on"]) .side { border-left: 0 }
@@ -2296,7 +2296,7 @@
   }
 
   [data-fold~="side"] .cols {
-    grid-template-columns: var(--nav-w) var(--rail-w) minmax(0, 1fr);
+    grid-template-columns: var(--rail-w) var(--nav-w) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto auto;
   }
   [data-fold~="side"] .side { grid-column: 1 / -1 }
@@ -2321,7 +2321,7 @@
   [data-fold~="side"] .app:not([data-side="on"]) .side { display: none }
 
   .railveil { display: none }
-  [data-fold~="scene"] .cols { grid-template-columns: var(--nav-w) 0 minmax(0, 1fr) var(--side-w) }
+  [data-fold~="scene"] .cols { grid-template-columns: 0 var(--nav-w) minmax(0, 1fr) var(--side-w) }
   [data-fold~="scene"] :is(.gutter-l, .pane > .gutter-r) { display: none }
   [data-fold~="scene"] .app[data-browser="on"] .pane:has(> .pbody[data-dock]) { grid-template-columns: 0 minmax(0, 1fr) }
   [data-fold~="scene"] .app[data-browser="on"] .pane:has(> .pbody[data-dock]) > :is(.pbody, .compose) { display: none }

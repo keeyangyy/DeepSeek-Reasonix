@@ -2,6 +2,7 @@ import type { Item } from "../../state/session";
 import { t } from "../../i18n";
 import { NOTICE_TEXT } from "../../i18n/notices";
 import { EXTENSION_SKIPPED, extensionSkippedVars } from "../../i18n/extension_skipped";
+import { INBOX_RECOVERED, inboxRecoveredVars } from "../../i18n/inbox_recovered";
 import { FOLD_WHY, NO_CODE_WHY } from "../../i18n/compaction_why";
 import { workspaceLeaseDetail } from "../../i18n/workspace_lease";
 import { Sym } from "../Sym";
@@ -33,8 +34,9 @@ export function NoticeCard({ item }: { item: Extract<Item, { t: "notice" }> }) {
   const reasoned = item.code !== undefined && REASONED.has(item.code);
   const reason = reasoned ? (item.detail ? FOLD_WHY[item.detail] : item.code === "compact_declined" ? NO_CODE_WHY : undefined) : undefined;
   const skipped = item.code === EXTENSION_SKIPPED ? extensionSkippedVars(item.detail) : undefined;
-  const vars: Record<string, string | number> | undefined = stored ? { mode: item.detail || "auto" } : reason ? { why: t(reason) } : skipped;
-  const wording = item.code && (!reasoned || vars) && (item.code !== EXTENSION_SKIPPED || skipped) ? NOTICE_TEXT[item.code] : undefined;
+  const recovered = item.code === INBOX_RECOVERED ? inboxRecoveredVars(item.detail) : undefined;
+  const vars: Record<string, string | number> | undefined = stored ? { mode: item.detail || "auto" } : reason ? { why: t(reason) } : skipped ?? recovered;
+  const wording = item.code && (!reasoned || vars) && (item.code !== EXTENSION_SKIPPED || skipped) && (item.code !== INBOX_RECOVERED || recovered) ? NOTICE_TEXT[item.code] : undefined;
   const claim = item.workspaceLease;
   const detail = claim
     ? workspaceLeaseDetail(claim, item.code !== "workspace_lease_resumed") || item.detail

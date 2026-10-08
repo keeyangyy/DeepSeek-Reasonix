@@ -21,6 +21,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   default_model_unavailable: "配置里保存的默认模型已不在已配置的供应商中，本次改用第一个可用的模型；在设置里重新选择默认模型即可替换，配置文件未被改动",
   approval_mode_unrecognized: "配置里的默认审批档位本版本不认识，已按每次询问处理；在界面里选一个档位即可替换",
   memory_migration_backup: "旧版记忆文件没能先备份，所以没有迁移，保持原样；详情里有具体原因",
+  inbox_recovered: "已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”",
   queue_paused_hold: "待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送",
   unapplied_steer: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：",
   display_currency: "费用显示币种已设为 {mode}",

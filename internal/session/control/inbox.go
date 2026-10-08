@@ -221,15 +221,22 @@ func (c *Controller) ensureInbox() (*sessioninbox.Store, error) {
 	}
 	snap := st.Snapshot()
 	if snap.Recovered && snap.RecoveredN > 0 {
-		c.sink.Emit(event.Event{
-			Kind:  event.Notice,
-			Level: event.LevelWarn,
-			Code:  "inbox_recovered",
-			Text:  fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", snap.RecoveredN),
-		})
+		c.sink.Emit(inboxRecoveredNotice(snap.RecoveredN))
 		sessioninbox.NoteRecovered(snap.RecoveredN)
 	}
 	return st, nil
+}
+
+// inboxRecoveredNotice carries the count as a typed payload; the English text is
+// the fallback for a frontend that does not word the code itself.
+func inboxRecoveredNotice(n int) event.Event {
+	return event.Event{
+		Kind:   event.Notice,
+		Level:  event.LevelWarn,
+		Code:   event.NoticeCodeInboxRecovered,
+		Text:   fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", n),
+		Detail: event.InboxRecovered{Count: n}.Encode(),
+	}
 }
 
 // rebindInbox opens the inbox for the current session path. Safe across
@@ -260,12 +267,7 @@ func (c *Controller) rebindInbox() {
 	if snap.Recovered && snap.RecoveredN > 0 {
 		// Emit after unlock via deferred sink call would race; emit here.
 		go func(n int) {
-			c.sink.Emit(event.Event{
-				Kind:  event.Notice,
-				Level: event.LevelWarn,
-				Code:  "inbox_recovered",
-				Text:  fmt.Sprintf("Recovered %d pending instruction(s). Inbox is paused — review with /queue before resuming.", n),
-			})
+			c.sink.Emit(inboxRecoveredNotice(n))
 		}(snap.RecoveredN)
 		sessioninbox.NoteRecovered(snap.RecoveredN)
 	}

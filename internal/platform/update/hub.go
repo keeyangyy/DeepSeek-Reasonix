@@ -53,7 +53,7 @@ type VersionEntry struct {
 	Version     string `json:"version"`
 	Tag         string `json:"tag"`
 	PublishedAt string `json:"publishedAt"`
-	Notes       string `json:"notes"`
+	HasNotes    bool   `json:"hasNotes"`
 	Current     bool   `json:"current"`
 	Older       bool   `json:"older"`
 	// Source names the catalog that published this row; "" is Studio's own.
@@ -180,7 +180,7 @@ func versionRowsFor(entries []sourcedEntry, current string) []VersionEntry {
 			continue
 		}
 		listed[e.Version] = true
-		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt, Source: s.source}
+		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt, Source: s.source, HasNotes: strings.TrimSpace(e.Notes) != ""}
 		if SameVersion(e.Version, current) {
 			row.Current, seen = true, true
 		} else {

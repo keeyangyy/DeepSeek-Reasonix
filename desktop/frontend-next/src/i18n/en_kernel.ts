@@ -22,6 +22,7 @@ export const EN_KERNEL: Record<string, string> = {
   "尚未取得所需的写入范围，这次等待已结束": "The wait ended before the requested write claim was granted",
   "会话 {holder}（{session}）持有写入范围：{paths}": "Session {holder} ({session}) holds write claim: {paths}",
   "所需写入范围：{paths}": "Requested write claim: {paths}",
+  "参数不符合该工具的约定，本次调用没有执行；请按工具说明补全或更正参数后重试": "The arguments break this tool's contract, so the call did not run; complete or correct them per the tool description and retry",
   "另一个会话持有所需的写入范围。本次操作未执行；请结束当前轮次，待该范围释放后再重试": "Another session holds the requested write claim. This operation did not run; end the current turn and retry after the claim is released",
   "反馈通道今日已满，请明天再试": "Feedback is at capacity for today - try again tomorrow",
   "这份反馈的回复次数已到上限，或回复太频繁了，请稍后再试": "This report has reached its reply limit, or you replied too often - try again later",
@@ -340,6 +341,10 @@ export const EN_KERNEL: Record<string, string> = {
   "这个 Studio 不是安装版（从源码启动），没有可以查看或切换的版本":
     "This Studio is not an installed build (it runs from source), so it has no version to show or change",
   "版本固定未能保存：{detail}": "The version hold was not saved: {detail}",
+  "这不是一个已发布的版本号": "That is not a published version number",
+  "这个版本没有发布更新内容": "This version has no published notes",
+  "暂时取不到更新内容，请检查网络后重试": "What's new cannot be reached right now. Check the network and try again",
+  "这个版本的更新内容超出了允许的大小，已拒绝读取": "This version's notes are larger than allowed and were not read",
   "已有一个版本切换正在进行，请等待其完成后重试":
     "A version change is already running — wait for it to finish and try again",
   "本次版本切换未能启动：{detail}": "This version change did not start: {detail}",

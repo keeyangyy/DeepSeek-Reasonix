@@ -727,6 +727,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "启用的模型": "Enabled models",
   "目录只用于发现，不是白名单。直接输入服务商给出的原始模型 ID 即可。": "The catalogue is for discovery, not a whitelist. You can enter any exact model ID supplied by the service.",
   "阈值需至少为 1,000，并小于模型上下文窗口。": "The threshold must be at least 1,000 and below the model context window.",
+  "被容量保护（{p}%）限制，实际 {n} tokens": "Capped by the capacity guard ({p}%): runs at {n} tokens",
   "达到这个用量时开始整理": "Start maintenance when usage reaches this value",
   "常用阈值": "Common thresholds",
   "不要依赖接口猜测，请按模型文档填写": "Use the model documentation instead of endpoint guesses",
@@ -947,4 +948,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "倍窗口": "× window",
   "请输入 1 到 {n} 之间的整数。": "Enter a whole number from 1 to {n}.",
   "无法读取无进展设置。": "Could not read the progress settings.",
+  "图标栏": "Icon rail",
+  "工作区栏旁的一列图标，直达用量、工具、扩展、记忆、远程、账号和设置。窗口窄到手机宽度时不显示。": "A column of icons beside the workspace rail that opens usage, tools, extensions, memory, remote, account and settings. It is not drawn when the window is as narrow as a phone.",
+  "显示图标栏": "Show the icon rail",
+  "关闭后这些页面仍可从设置打开": "With it off these pages still open from settings",
 };

@@ -73,4 +73,6 @@ const (
 	NoticeCodeCompactFailed = "compact_failed"
 	// An optional extension was left out of an operation; Detail is the ExtensionSkipped payload.
 	NoticeCodeExtensionSkipped = "extension_skipped"
+	// A reopened session's inbox held unfinished instructions and came up paused; Detail is the InboxRecovered payload.
+	NoticeCodeInboxRecovered = "inbox_recovered"
 )

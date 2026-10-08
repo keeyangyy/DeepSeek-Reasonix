@@ -79,6 +79,37 @@ export function setHidesAmounts(on: boolean): void {
   amountListeners.forEach((fn) => fn());
 }
 
+// On unless this machine turned it off. The icon column beside the workspace
+// rail is a second way to the settings sections; a phone-width window never
+// draws it, whatever this says.
+const NAV_RAIL_KEY = "rx-nav-rail";
+
+const navRailListeners = new Set<() => void>();
+
+export function showsNavRail(): boolean {
+  try {
+    return localStorage.getItem(NAV_RAIL_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function onNavRailChange(fn: () => void): () => void {
+  navRailListeners.add(fn);
+  return () => {
+    navRailListeners.delete(fn);
+  };
+}
+
+export function setShowsNavRail(on: boolean): void {
+  try {
+    localStorage.setItem(NAV_RAIL_KEY, on ? "on" : "off");
+  } catch {
+    /* a private window keeps the default, which is the same answer it gives */
+  }
+  navRailListeners.forEach((fn) => fn());
+}
+
 // How each foldable part of the transcript starts. "live" opens while the part
 // is still being written and folds once it is done; "failed" opens only a step
 // that failed; "changed" opens only what wrote a file. A block the reader opened

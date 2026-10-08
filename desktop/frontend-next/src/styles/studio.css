@@ -145,7 +145,8 @@
 }
 
 body { background: var(--page); }
-.app { --nav-w: 48px; --rail-open: 238px; background: var(--page); }
+.app { --rail-open: 238px; background: var(--page); }
+.app[data-nav="on"] { --nav-w: 48px; }
 .app::after { opacity: .012; }
 
 /* Window bar */
@@ -461,14 +462,13 @@ body { background: var(--page) !important; }
 :root[data-sky] .app { background: transparent !important; }
 
 .app {
-  --nav-w: 0px !important;
   --side-open: 308px !important;
   --chrome-h: 54px;
   background: var(--page) !important;
 }
 .app::after { opacity: .018; }
-.cols { grid-template-columns: 0 var(--rail-w) minmax(0, 1fr) var(--side-w); }
-.nav { display: none !important; }
+.cols { grid-template-columns: var(--rail-w) var(--nav-w) minmax(0, 1fr) var(--side-w); }
+.nav { grid-column: 2; }
 .main { grid-column: 3; }
 .side { grid-column: 4; }
 
@@ -1703,7 +1703,6 @@ body { background: var(--page) !important; }
 .onb-foot { flex: none; padding: 14px 24px 18px; text-align: center; color: var(--ghost); font: 500 10px/1 var(--ui); }
 
 @media (max-width: 760px) {
-  .app { --nav-w: 44px; }
   .studio-brand > span:nth-child(2) small { display: none; }
   .flow { width: calc(100% - 20px); margin-inline: auto; padding-inline: 0; }
   .compose { width: calc(100% - 20px); margin-inline: auto; }

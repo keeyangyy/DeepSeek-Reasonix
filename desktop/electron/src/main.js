@@ -1,5 +1,5 @@
 "use strict";
-const { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker, screen, session, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, powerSaveBlocker, screen, session, shell } = require("electron");
 const { relaunchForOzonePlatform } = require("./ozone");
 
 // Before the instance lock: this process must hold nothing its relaunch needs.
@@ -25,6 +25,7 @@ const { stripPackageGrants, unpaintedWindowCause } = require("./packagegrants");
 const { BrowserProtocol } = require("./browserprotocol");
 const { BrowserViews } = require("./browserviews");
 const { startBrowserRelay } = require("./browserrelay");
+const { groundFor } = require("./ground");
 const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
 const { createPowerGuard, keepsAwake } = require("./powerguard");
 const { openLogs, redactArgv, failStartup } = require("./shelllog");
@@ -285,6 +286,8 @@ function fitted() {
   };
 }
 
+const ground = () => groundFor(loadPrefs(prefsFile(app.getPath("userData"))), nativeTheme.shouldUseDarkColors);
+
 function createWindow() {
   const mac = process.platform === "darwin";
   const windows = process.platform === "win32";
@@ -297,6 +300,7 @@ function createWindow() {
     // Shown once it has been measured against the screen it landed on; sizing a
     // visible window makes the correction a flicker.
     show: false,
+    backgroundColor: ground(),
     frame: !windows,
     titleBarStyle: mac ? "hiddenInset" : "default",
     ...(mac ? { trafficLightPosition: LIGHTS } : {}),
@@ -335,7 +339,11 @@ function fromWindow(event) {
 const uiLang = () => uiLanguage(loadPrefs(prefsFile(app.getPath("userData"))), app.getPreferredSystemLanguages()[0] ?? app.getLocale());
 registerPrefs(ipcMain, () => prefsFile(app.getPath("userData")), fromWindow, () => {
   installApplicationMenu(uiLang);
+  if (win && !win.isDestroyed()) win.setBackgroundColor(ground());
   void powerGuard?.refresh();
+});
+nativeTheme.on("updated", () => {
+  if (win && !win.isDestroyed()) win.setBackgroundColor(ground());
 });
 
 ipcMain.handle("window:minimise", (event) => {

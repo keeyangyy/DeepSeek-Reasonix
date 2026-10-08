@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/ext/hook"
 	"reasonix/internal/safety/permission"
@@ -46,14 +47,18 @@ func newLeaseRig(t *testing.T, timeout time.Duration) leaseRig {
 	return leaseRig{c: c, owner: owner, other: other, file: file}
 }
 
+// pendingAsk returns the ask on screen: a registered ask still queued behind
+// the prompt lock is not the one a user can answer.
 func (r leaseRig) pendingAsk(t *testing.T) string {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		r.c.approval.mu.Lock()
-		for id := range r.c.approval.asks {
-			r.c.approval.mu.Unlock()
-			return id
+		for id, ask := range r.c.approval.asks {
+			if !ask.queued {
+				r.c.approval.mu.Unlock()
+				return id
+			}
 		}
 		r.c.approval.mu.Unlock()
 		time.Sleep(5 * time.Millisecond)
@@ -189,6 +194,18 @@ func TestApprovalYieldsTheWriteClaimWhileWaiting(t *testing.T) {
 	r.owner.EndRun()
 }
 
+func awaitAsk(t *testing.T, done <-chan error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(testenv.Budget(t)):
+		t.Fatal("an answered ask never returned")
+	}
+}
+
 func TestTwoAsksRetakeTheClaimOnlyAfterTheLastIsAnswered(t *testing.T) {
 	r := newLeaseRig(t, 0)
 	done := make(chan error, 2)
@@ -210,9 +227,7 @@ func TestTwoAsksRetakeTheClaimOnlyAfterTheLastIsAnswered(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	r.c.AnswerQuestion(first, []event.AskAnswer{{QuestionID: "q1", Selected: []string{"x"}}})
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
+	awaitAsk(t, done)
 	if r.owner.State().Acquired {
 		t.Fatal("claim retaken while the second ask still waits on the user")
 	}
@@ -222,9 +237,7 @@ func TestTwoAsksRetakeTheClaimOnlyAfterTheLastIsAnswered(t *testing.T) {
 	r.other.EndRun()
 	id := r.pendingAsk(t)
 	r.c.AnswerQuestion(id, []event.AskAnswer{{QuestionID: "q2", Selected: []string{"x"}}})
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
+	awaitAsk(t, done)
 	if !r.owner.State().Acquired {
 		t.Fatal("claim not retaken after the last ask")
 	}

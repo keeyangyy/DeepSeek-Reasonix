@@ -88,6 +88,7 @@ type Messages struct {
 	TUIDeclinedFmt          string // an approval the user refused — %s tool, %s subject
 	NoticeUnappliedSteerFmt string // guidance that arrived too late for its turn — %s the guidance
 	NoticeExtSkippedFmt     string // an optional extension skipped, its sidecar not running — %s extension, %s point
+	NoticeInboxRecoveredFmt string // a reopened inbox came up paused with unfinished instructions — %d count
 	TUIQuestion             string // an answered question that carried no prompt
 	TUISubagentCallsFmt     string // calls a sub-agent made under its task — %d count
 	TUIChartMoreRowsFmt     string // rows of a chart table past the preview — %d count
@@ -658,10 +659,7 @@ type Messages struct {
 	WriteEnvErr               string // "write .env:" — prefix for env-write failure
 
 	// provider HTTP error explanations — actionable, reason + fix per status code
-	ProviderErrBadRequest string // 400
-	// ProviderErrDroppedReasoning explains a refused body whose
-	// assistant thinking this host left out for want of a declared protocol.
-	ProviderErrDroppedReasoning    string
+	ProviderErrBadRequest          string // 400
 	ProviderErrAuth                string // 401 — no key configured / sent
 	ProviderErrAuthRejected        string // 401 — a key was sent but the server rejected it
 	ProviderErrDNSNotFound         string // model host name does not resolve

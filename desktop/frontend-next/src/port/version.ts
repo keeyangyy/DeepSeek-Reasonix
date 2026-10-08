@@ -3,10 +3,18 @@ export interface VersionEntry {
   version: string;
   tag: string;
   publishedAt: string;
+  hasNotes: boolean;
   current: boolean;
   older: boolean;
   // Names the catalog that published this row; absent is Studio's own.
   source?: string;
+}
+
+// One release's notes. cached says only where they came from.
+export interface VersionNotes {
+  version: string;
+  markdown: string;
+  cached: boolean;
 }
 
 // err rides alongside the data: an unreachable catalog must not hide which

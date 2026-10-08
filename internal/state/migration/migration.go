@@ -169,7 +169,7 @@ func RunLegacySessionImportInto(sourceRoot, fallbackDest string, sink event.Sink
 		var n int
 		var err error
 		if src.v4 {
-			n, err = sessionstore.ImportV4From(src.store, fallbackDest)
+			n, err = sessionstore.ImportV4From(src.store, fallbackDest, src.route)
 		} else {
 			var rep *sessionstore.LegacyReport
 			n, rep, err = sessionstore.ImportLegacySessionsFromExplicitDir(src.dir, fallbackDest, config.ProjectSessionDir)
@@ -509,6 +509,7 @@ type explicitSessionSource struct {
 	label string
 	v4    bool
 	store fs.FS
+	route func(sessionID string) string
 }
 
 func parseLegacyRescueArgs(args string) (source string, explicit bool, err error) {
@@ -564,7 +565,7 @@ func explicitLegacySessionSources(picked string) ([]explicitSessionSource, func(
 	tree := root.FS()
 	var out []explicitSessionSource
 	seen := map[string]bool{}
-	add := func(rel string, v4 bool) {
+	add := func(rel string, v4 bool, route func(string) string) {
 		if seen[rel] {
 			return
 		}
@@ -577,25 +578,25 @@ func explicitLegacySessionSources(picked string) ([]explicitSessionSource, func(
 		}
 		seen[rel] = true
 		dir := filepath.Join(picked, filepath.FromSlash(rel))
-		out = append(out, explicitSessionSource{dir: dir, label: dir, v4: v4, store: sub})
+		out = append(out, explicitSessionSource{dir: dir, label: dir, v4: v4, store: sub, route: route})
 	}
 	for _, home := range []string{".", ".reasonix", "reasonix"} {
-		add(path.Join(home, "sessions"), false)
-		add(path.Join(home, "sessions-v4"), true)
-		add(path.Join(home, "desktop-sessions-v5", "by-id"), true)
+		add(path.Join(home, "sessions"), false, nil)
+		add(path.Join(home, "sessions-v4"), true, nil)
+		add(path.Join(home, "desktop-sessions-v5", "by-id"), true, routeToOwner(desktopSessionOwners(tree, home)))
 		projects, _ := fs.ReadDir(tree, path.Join(home, "projects"))
 		for _, project := range projects {
 			if !project.IsDir() {
 				continue
 			}
 			dir := path.Join(home, "projects", project.Name())
-			add(path.Join(dir, "sessions"), false)
-			add(path.Join(dir, "sessions-v4"), true)
+			add(path.Join(dir, "sessions"), false, nil)
+			add(path.Join(dir, "sessions-v4"), true, nil)
 		}
 	}
 	if len(out) == 0 {
-		add(".", false)
-		add(".", true)
+		add(".", false, nil)
+		add(".", true, nil)
 	}
 	return out, func() { _ = root.Close() }, nil
 }

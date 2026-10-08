@@ -72,7 +72,7 @@ interface Props {
   onPrepareRewind: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
   onPrepareFileRevert: (path: string) => Promise<RewindPlan>;
   onCommitFileRevert: (planId: string, resolution?: string) => Promise<RewindResult>;
-  onCommitRewind: (planId: string) => Promise<RewindResult>;
+  onCommitRewind: (planId: string, text?: string) => Promise<RewindResult>;
   onUndoRewind: (transactionId: string) => Promise<void>;
   /** Cards that have not had their one entrance yet. Owed by the projection,
    *  spent by the first render that draws them — never by the animation, which

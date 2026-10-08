@@ -124,6 +124,11 @@ var mirroredWireTypes = []wireMirror{
 	// sentence per phase; a phase it cannot read renders as nothing, which on
 	// the long pause after the last byte is indistinguishable from a hang.
 	{"internal/platform/update/progress.go", "Progress", tsVersionFile, "UpdateProgress"},
+	// The panel lists these and offers a notes view only for a row that says it
+	// has them; a field it cannot read is a row that never offers one.
+	{"internal/platform/update/hub.go", "VersionEntry", tsVersionFile, "VersionEntry"},
+	{"internal/platform/update/hub.go", "VersionHub", tsVersionFile, "VersionHub"},
+	{"internal/platform/update/notes.go", "VersionNotes", tsVersionFile, "VersionNotes"},
 	{"internal/state/checkpoint/types.go", "RewindResult", tsSessionFile, "RewindResult"},
 	{"internal/contract/eventwire/wire.go", "ShellExecution", tsWireFile, "Execution"},
 	{"internal/contract/eventwire/workspace_lease.go", "WorkspaceLease", tsWireFile, "WorkspaceLease"},

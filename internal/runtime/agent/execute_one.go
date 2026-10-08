@@ -658,6 +658,7 @@ func toolHooksMayMutateWorkspace(hooks ToolHooks) bool {
 // post hooks and recovery observation, and truncates the model-facing result.
 func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) toolOutcome {
 	plan.executed = true
+	a.announceDelegation(plan)
 	cctx := plan.cctx
 	runTool := plan.runTool
 	runArgs := plan.runArgs

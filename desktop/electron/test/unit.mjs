@@ -12,6 +12,7 @@ const { uiLanguage } = require("../src/uilang.js");
 const { externalTarget } = require("../src/links.js");
 const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
+const { groundFor, GROUND } = require("../src/ground.js");
 const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
@@ -1740,4 +1741,12 @@ test("the host client asks the kernel how many panes run", async () => {
   assert.deepEqual(await client.trayRunning(), { panes: 3 });
   server.close();
   assert.equal(await client.trayRunning(), null);
+});
+
+test("the window ground follows the stored theme and, for auto, the system", () => {
+  assert.equal(groundFor({ "rx-theme": "dark" }, false), GROUND.dark);
+  assert.equal(groundFor({ "rx-theme": "light" }, true), GROUND.light);
+  assert.equal(groundFor({ "rx-theme": "auto" }, true), GROUND.dark);
+  assert.equal(groundFor({}, false), GROUND.light);
+  assert.equal(groundFor(undefined, true), GROUND.dark);
 });

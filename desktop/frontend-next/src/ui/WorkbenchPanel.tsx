@@ -308,7 +308,7 @@ export function WorkbenchPanel({
   useEffect(() => {
     const before = lastAgent.current;
     lastAgent.current = agentAt;
-    if (before === null || !agentAt || before === agentAt) return;
+    if (!before || !agentAt || before === agentAt) return;
     dropBlankStart();
     pick(`browser:${agentTarget}`);
   }, [agentAt, agentTarget, dropBlankStart, pick]);

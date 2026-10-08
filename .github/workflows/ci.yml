@@ -86,7 +86,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: node --test scripts/cli-archive-build.test.mjs scripts/release-credits.test.mjs scripts/update-contributors.test.mjs scripts/markdown-refs.test.mjs scripts/studio-release-notes.test.mjs scripts/publish-cli-pointer.test.mjs scripts/studio-release-flags.test.mjs scripts/brew-cask-guard.test.mjs scripts/feedback-sync.test.mjs npm/publish.test.mjs
+      - run: node --test scripts/cli-archive-build.test.mjs scripts/release-credits.test.mjs scripts/update-contributors.test.mjs scripts/markdown-refs.test.mjs scripts/studio-release-notes.test.mjs scripts/publish-cli-pointer.test.mjs scripts/studio-release-flags.test.mjs scripts/studio-notes-publish.test.mjs scripts/brew-cask-guard.test.mjs scripts/feedback-sync.test.mjs npm/publish.test.mjs
 
   # The ruleset requires the per-OS check names (test (ubuntu-latest) etc.).
   # A matrix job skipped at job level reports no per-leg checks at all, so
