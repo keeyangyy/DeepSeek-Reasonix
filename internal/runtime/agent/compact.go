@@ -342,7 +342,7 @@ func closedPrefixEnd(msgs []provider.Message) int {
 	return end
 }
 
-func (a *contextWindow) keepIndexes(region []provider.Message) ([]bool, userTurnRetention) {
+func (a *contextWindow) keepIndexes(region []provider.Message, policy KeepPolicy) ([]bool, userTurnRetention) {
 	keep := make([]bool, len(region))
 	activeTurn := a.activeTurnCreatedAt.Load()
 	policyStart := 0
@@ -354,7 +354,7 @@ func (a *contextWindow) keepIndexes(region []provider.Message) ([]bool, userTurn
 	// Retention applies only to messages since the latest digest; older kept
 	// messages are allowed to fold on the next pass so they cannot grow forever.
 	for i, m := range region {
-		if i >= policyStart && shouldKeepMessage(m, a.keepPolicy) {
+		if i >= policyStart && shouldKeepMessage(m, policy) {
 			keep[i] = true
 		}
 		// The request that began the running turn states the work the rest of
@@ -364,14 +364,15 @@ func (a *contextWindow) keepIndexes(region []provider.Message) ([]bool, userTurn
 		}
 	}
 	retention := a.keepUserTurns(region, keep)
+	pinned := slices.Clone(keep)
 	for i, m := range region {
-		if !keep[i] {
+		if !pinned[i] {
 			continue
 		}
 		switch m.Role {
 		case provider.RoleTool:
 			if j := findToolCaller(region, i, m.ToolCallID); j >= 0 {
-				keepToolCallGroup(region, keep, j)
+				keepAnsweredCall(region, keep, j)
 			}
 		case provider.RoleAssistant:
 			keepToolCallGroup(region, keep, i)
@@ -385,23 +386,6 @@ func (a *contextWindow) keepIndexes(region []provider.Message) ([]bool, userTurn
 // turn's ratio would keep a turn at one checkpoint and fold it at the next.
 func fixedTokenEstimate(m provider.Message) int {
 	return int(float64(msgChars(m)) * fallbackTokPerChar)
-}
-
-func keepToolCallGroup(region []provider.Message, keep []bool, assistantIndex int) {
-	if assistantIndex < 0 || assistantIndex >= len(region) {
-		return
-	}
-	m := region[assistantIndex]
-	if m.Role != provider.RoleAssistant || len(m.ToolCalls) == 0 {
-		return
-	}
-	keep[assistantIndex] = true
-	ids := toolCallIDs(m)
-	for j := assistantIndex + 1; j < len(region) && region[j].Role == provider.RoleTool; j++ {
-		if ids[region[j].ToolCallID] {
-			keep[j] = true
-		}
-	}
 }
 
 func shouldKeepMessage(m provider.Message, policy KeepPolicy) bool {
@@ -644,10 +628,11 @@ func (a *contextWindow) summarize(ctx context.Context, region []provider.Message
 	req := provider.Request{
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: sys},
-			{Role: provider.RoleUser, Content: renderTranscript(region)},
+			{Role: provider.RoleUser, Content: renderTranscript(region) + summaryClosingInstruction},
 		},
 		MaxTokens:      maxOut,
 		EffortOverride: summaryEffort,
+		Summary:        true,
 		Temperature:    provider.OptionalTemperature(a.temperature),
 	}
 	if budget, clipped, budgetErr := a.effectiveOutputBudget(req); budgetErr != nil {

@@ -1,15 +1,15 @@
 import { ApplyNote } from "./Group";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { TrayPrefs, AgentPort, Appearance as Look, ThemePack } from "../port/port";
+import type { AgentPort, Appearance as Look, ThemePack } from "../port/port";
 import { MONO_FAMILIES, UI_FAMILIES, installed, readSizeOf, readSteps } from "./look";
 import { STORAGE as LANG_KEY, t } from "../i18n";
 import { pct } from "../i18n/format";
 import { reason } from "../i18n/kernel";
 import { Notifications } from "./Notifications";
 import { Folding } from "./Folding";
-import { Switch } from "./Switch";
+import { WindowSection } from "./WindowSection";
 import { ThemeImport } from "./ThemeImport";
-import { setShowsReceipt, showsReceipt } from "../state/session";
+import { useThemeInventory } from "./useThemeInventory";
 
 // "" follows the machine; the rest are explicit, the same shape the light/dark
 // control uses.
@@ -121,41 +121,7 @@ function useCrop(url: string | undefined, box: HTMLElement | null) {
 }
 
 export function Appearance({ port, theme, onTheme, contrast, onContrast, weight, onWeight, reloadThemes, look, onLook }: Props) {
-  const [{ packs, unread }, setThemes] = useState<{ packs: ThemePack[]; unread: string }>({ packs: [], unread: "" });
-  // null in a browser tab, where there is no window to keep running and no
-  // icon to bring one back. The whole section goes with it.
-  const [tray, setTray] = useState<TrayPrefs | null>(null);
-  const [receipt, setReceipt] = useState(showsReceipt);
-
-  useEffect(() => {
-    let live = true;
-    port.trayPrefs().then((p) => live && setTray(p)).catch(() => live && setTray(null));
-    return () => {
-      live = false;
-    };
-  }, [port]);
-
-  // The window answers with what is true afterwards rather than what was
-  // asked: turning the icon off turns backgrounding off with it, and the
-  // switch has to show that rather than the request.
-  const flipTray = useCallback(
-    (patch: Partial<TrayPrefs>) => {
-      if (!tray) return;
-      const next = { ...tray, ...patch };
-      port
-        .setTrayPrefs(next.icon, next.closeToTray)
-        .then((got) => got && setTray(got))
-        .catch(() => {});
-    },
-    [port, tray],
-  );
-
-  const load = useCallback(() => {
-    port.themes()
-      .then((packs) => setThemes({ packs, unread: "" }))
-      .catch((e) => setThemes((prev) => ({ ...prev, unread: reason(e) })));
-  }, [port]);
-  useEffect(load, [load]);
+  const { packs, unread, load } = useThemeInventory(port);
 
   // Activating repaints through App's own theme effect, so this only refreshes
   // the list and asks App to re-read which pack is active.
@@ -555,64 +521,8 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <ApplyNote id="language" />
       </section>
 
-      {tray && (
-        <section className="grp" id="set-window" data-setting="window">
-          <div className="grp-hd">
-            <h3>{t("窗口")}</h3>
-          </div>
-          <p className="hint">
-            {t("关闭窗口后需通过托盘图标重新打开主界面，下方选项依赖该图标。")}
-          </p>
-          <div className="grp-items">
-            <div className="lrow">
-              <span className="tx">
-                <span className="lb">{t("回合结束时给出回执")}</span>
-                <span className="ds">{t("列出这一轮改了什么、验了什么、哪些没有验；无话可说时不出现。下一轮起生效")}</span>
-              </span>
-              <Switch
-                data-action="chrome.receipt"
-                on={receipt}
-                label={t("回合结束时给出回执")}
-                onClick={() => {
-                  setShowsReceipt(!receipt);
-                  setReceipt(!receipt);
-                }}
-              />
-            </div>
-            <div className="lrow">
-              <span className="tx">
-                <span className="lb">{t("在托盘显示图标")}</span>
-                <span className="ds">
-                  {tray.icon === tray.live
-                    ? t("通过图标即可判断正在运行还是等待批准")
-                    : tray.icon
-                      ? t("下次启动时出现")
-                      : t("下次启动时不再显示，本次仍保留")}
-                </span>
-              </span>
-              <Switch data-action="tray.icon" on={tray.icon} label={t("在托盘显示图标")} onClick={() => flipTray({ icon: !tray.icon })} />
-            </div>
-            {/* The second switch only means anything while there is an icon,
-                so it is drawn as a branch of the first rather than as a rule
-                you have to discover by watching it grey out. */}
-            <div className="lrow subrow" data-off={tray.icon && tray.live ? undefined : ""}>
-              <span className="tx">
-                <span className="lb">{t("关闭窗口后在托盘中继续运行")}</span>
-                <span className="ds">{t("关闭窗口不会中断会话和后台任务；从托盘菜单退出才会完全关闭程序")}</span>
-              </span>
-              <Switch
-                data-action="tray.close-to-tray"
-                on={tray.closeToTray}
-                busy={!tray.icon || !tray.live}
-                label={t("关闭窗口后在托盘中继续运行")}
-                onClick={() => flipTray({ closeToTray: !tray.closeToTray })}
-              />
-            </div>
-          </div>
-          <ApplyNote id="window" />
-        </section>
-      )}
 
+      <WindowSection port={port} />
       <Folding />
       <Notifications port={port} />
 

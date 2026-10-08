@@ -23,6 +23,7 @@ const (
 	NoticeCodeHookBlocked                                       = "hook_blocked"
 	NoticeCodeHookWarned                                        = "hook_warned"
 	NoticeCodeHookFailed                                        = "hook_failed"
+	NoticeCodeHookUnevaluable                                   = "hook_unevaluable"
 	NoticeCodeCancelledTurn                                     = "cancelled_turn_display"
 	NoticeCodeUnappliedSteer                                    = "unapplied_steer"
 	NoticeCodeSessionRecoveryForked                             = "session_recovery_forked"
@@ -56,8 +57,6 @@ const (
 	NoticeCodeAwaitUser = "await_user"
 	// A slash command nothing resolves, refused rather than sent as prose.
 	NoticeCodeUnknownCommand = "unknown_command"
-	// The model was told the compaction trigger is near; Detail is a ContextBudgetFigures.
-	NoticeCodeContextBudget = "context_budget"
 	// The display currency preference changed; Detail is the stored value, "" for auto.
 	NoticeCodeDisplayCurrency = "display_currency"
 	// A saved language choice is overridden by the project config; Detail is the language in effect.
@@ -72,4 +71,6 @@ const (
 	NoticeCodeCompactDeclined = "compact_declined"
 	// /compact failed; Detail is the failure code, its text the English fallback.
 	NoticeCodeCompactFailed = "compact_failed"
+	// An optional extension was left out of an operation; Detail is the ExtensionSkipped payload.
+	NoticeCodeExtensionSkipped = "extension_skipped"
 )

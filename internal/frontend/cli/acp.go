@@ -13,10 +13,8 @@ import (
 
 	"reasonix/internal/assembly/boot"
 	"reasonix/internal/base/i18n"
-	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/config"
-	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/extension/providerext"
@@ -535,55 +533,4 @@ func cloneStringPtr(p *string) *string {
 	}
 	cp := *p
 	return &cp
-}
-
-func acpTaskProfileDefaults(cfg *config.Config) (string, string) {
-	if cfg == nil {
-		return "", ""
-	}
-	model := strings.TrimSpace(cfg.Agent.SubagentModels["task"])
-	if model == "" {
-		model = strings.TrimSpace(cfg.Agent.SubagentModel)
-	}
-	effort := strings.TrimSpace(cfg.Agent.SubagentEfforts["task"])
-	if effort == "" {
-		effort = strings.TrimSpace(cfg.Agent.SubagentEffort)
-	}
-	return model, effort
-}
-
-func newACPSubagentProviderResolver(cfg *config.Config, parent *config.ProviderEntry, proxySpec netclient.ProxySpec) func(string, string) (provider.Provider, *provider.Pricing, int, error) {
-	return func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error) {
-		modelRef = strings.TrimSpace(modelRef)
-		effort = strings.TrimSpace(effort)
-
-		var entry *config.ProviderEntry
-		if modelRef != "" {
-			var ok bool
-			entry, ok = cfg.ResolveModel(modelRef)
-			if !ok {
-				return nil, nil, 0, fmt.Errorf("subagent_model %q is not a configured provider", modelRef)
-			}
-		} else {
-			cp := *parent
-			entry = &cp
-		}
-
-		if effort != "" {
-			normalized, err := config.NormalizeEffort(entry, effort)
-			if err != nil {
-				return nil, nil, 0, err
-			}
-			entry.Effort = normalized
-			if entry.Kind == "anthropic" && strings.TrimSpace(entry.Effort) != "" && strings.TrimSpace(entry.Thinking) == "" {
-				entry.Thinking = "adaptive"
-			}
-		}
-
-		prov, err := boot.NewProviderWithProxy(entry, proxySpec)
-		if err != nil {
-			return nil, nil, 0, err
-		}
-		return prov, entry.Price, entry.ContextWindow, nil
-	}
 }

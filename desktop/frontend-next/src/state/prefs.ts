@@ -23,6 +23,26 @@ export function setShowsReceipt(on: boolean): void {
   }
 }
 
+// On unless this machine turned it off. The desktop shell reads the same key
+// from its saved preferences, so a flip here reaches it without a request.
+const KEEP_AWAKE_KEY = "rx-keep-awake";
+
+export function keepsAwake(): boolean {
+  try {
+    return localStorage.getItem(KEEP_AWAKE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setKeepsAwake(on: boolean): void {
+  try {
+    localStorage.setItem(KEEP_AWAKE_KEY, on ? "on" : "off");
+  } catch {
+    /* a private window keeps the default, which is the same answer it gives */
+  }
+}
+
 // Off unless this machine turned it on. The balance and the session's cost are
 // what a shared screen or a recording leaks; masking changes only what is drawn,
 // so the reads behind them keep running and revealing shows the current value.

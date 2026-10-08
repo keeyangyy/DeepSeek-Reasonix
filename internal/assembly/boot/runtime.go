@@ -141,7 +141,9 @@ type legacyAssembly struct {
 type extensionBoot struct {
 	session   protocol.SessionContext
 	onWarning func(string)
-	ui        *uihub.Hub
+	// onSidecarDown reports an optional extension skipped for want of a running sidecar.
+	onSidecarDown func(string, extension.InterceptorPoint)
+	ui            *uihub.Hub
 	// skipPromptStrategy skips system_prompt.build strategy when the RuntimePlan
 	// is a no-op (or does not affect cache), preserving the previous prompt.
 	skipPromptStrategy bool
@@ -307,7 +309,7 @@ func assembleLegacySnapshot(ctx context.Context, in legacyAssembly, generation u
 		}
 		required := requiredRuntimeSet(managed)
 		clients := sidecarClientResolver(managed)
-		dispatchOpts := dispatch.Options{Warn: ext.warn}
+		dispatchOpts := dispatch.Options{Warn: ext.warn, SidecarDown: ext.onSidecarDown}
 		// system_prompt.build strategy: the slot's owner rules on the
 		// composed prompt before the snapshot freezes. Skipped on no-op plans
 		// so CacheHash stays stable across rebuilds.

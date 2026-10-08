@@ -104,30 +104,12 @@ describe("a hand-back notice", () => {
 // A notice whose sentence carries figures or the user's own words is drawn from
 // the typed payload, so the reader's language owns the whole line.
 describe("a coded notice with a payload", () => {
-  it("words the context-budget notice from its figures, not from the kernel's English", () => {
-    const box = draw({
-      level: "warn",
-      code: "context_budget",
-      text: "Context at 83% of the compaction threshold — the model was told it has about 135785 tokens of room left.",
-      detail: '{"percent":83,"remaining":135785}',
-    });
-    const said = box.querySelector(".find .t")?.textContent ?? "";
-    expect(said).toBe(t("上下文已用到压缩阈值的 {percent}%，已告知模型约剩 {remaining} 个词元的空间。", { percent: 83, remaining: 135785 }));
-    expect(said).not.toContain("compaction threshold");
-    expect(box.querySelector(".find .why")).toBeNull();
-  });
-
   it("words the currency change from the stored value and draws no second line for it", () => {
     const box = draw({ code: "display_currency", text: "fee display currency set to USD (resolved: USD)", detail: "USD" });
     expect(box.querySelector(".find .t")?.textContent).toBe(t("费用显示币种已设为 {mode}", { mode: "USD" }));
     expect(box.querySelector(".find .why")).toBeNull();
     const auto = draw({ code: "display_currency", text: "kernel", detail: "" });
     expect(auto.querySelector(".find .t")?.textContent).toBe(t("费用显示币种已设为 {mode}", { mode: "auto" }));
-  });
-
-  it("falls back to the kernel's text when the figures do not decode", () => {
-    const box = draw({ code: "context_budget", text: "kernel english", detail: "not json" });
-    expect(box.querySelector(".find .t")?.textContent).toContain("kernel english");
   });
 
   it("wraps the user's unapplied guidance in this build's sentence and keeps their words verbatim", () => {
@@ -167,5 +149,17 @@ describe("a /compact notice", () => {
   it("keeps the kernel's text for a code this build cannot word", () => {
     const box = draw({ code: "compact_failed", text: "compaction failed: kernel english", detail: "future_code" });
     expect(box.querySelector(".find .t")?.textContent).toBe("compaction failed: kernel english");
+  });
+
+  it("words a skipped extension from its payload and hides the raw payload", () => {
+    const box = draw({ code: "extension_skipped", text: "kernel english", detail: JSON.stringify({ extension: "aipush-ask-bridge", point: "tool.before", reason: "no_live_sidecar" }) });
+    expect(box.textContent).toContain("扩展 aipush-ask-bridge 的配套后台程序没有运行");
+    expect(box.textContent).not.toContain("no_live_sidecar");
+  });
+
+  it("keeps the kernel's text for a skipped extension whose payload is unreadable", () => {
+    const box = draw({ code: "extension_skipped", text: "kernel english", detail: "not json" });
+    expect(box.textContent).toContain("kernel english");
+    expect(box.textContent).not.toContain("{ext}");
   });
 });

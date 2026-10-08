@@ -3,7 +3,7 @@ import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
 import { HttpError } from "../port/port";
-import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, RoleAssignments, SessionStatus, SkillEntry } from "../port/port";
+import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
 import { ICON, NAV, SECTION_NAME, SETTINGS, settingMatches } from "./prefsnav";
@@ -36,6 +36,8 @@ import { Backup } from "./Backup";
 import { Providers } from "./Providers";
 import { activeKind, groupVendors } from "./Models";
 import { ModelUsage } from "./ModelUsage";
+import { useModelCatalog } from "./useModelCatalog";
+import { useRoles } from "./useRoles";
 import { KIND_LABEL } from "./vendors";
 import { planProtocolSwitch } from "./protocolswitch";
 import { Boundary } from "./Boundary";
@@ -104,7 +106,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
   // on its reasoning fields. The model ref's first segment is the source name.
   const declare = openedAnchor === "effort-declare" ? status?.modelRef?.split("/")[0] : undefined;
   const [models, setModels] = useState<ModelEntry[]>([]);
-  const [roles, setRoles] = useState<RoleAssignments | null>(null);
+  const { roles, overrides, loadRoles } = useRoles(port);
   const [protocol, setProtocol] = useState<Record<string, string>>({});
   const [mcp, setMcp] = useState<McpEntry[]>([]);
   const [scope, setScope] = useState<CapabilityScope | null>(null);
@@ -172,13 +174,8 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
 
   // Adding or removing a source changes what the picker above can offer, so
   // the list is reloadable rather than read once at mount.
-  const loadModels = useCallback(() => {
-    port.models().then(setModels).catch(() => setModels([]));
-  }, [port]);
-
-  const loadRoles = useCallback(() => {
-    port.roles().then(setRoles).catch(() => setRoles(null));
-  }, [port]);
+  const homePort = networkPort ?? port;
+  const loadModels = useModelCatalog(port, homePort, setModels);
 
   // Three sections whose row used to report nothing. Loaded here rather than in
   // reloadExt because none of them moves with the scope the extension lists are
@@ -542,12 +539,14 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                 hint={t("默认模型用于当前对话和大多数任务，其他用途默认跟随它；只有要为某件事换一个模型时才改。切换会保留对话并重建运行时，任务执行期间无法修改。")}>
                 <ModelUsage models={models} roles={roles} main={status?.modelRef} busy={busy} protocol={protocol}
                   onMain={(ref) => run(ref, async () => {
-                    await port.setModel(ref, true);
+                    await port.setModel(ref);
+                    await homePort.setDefaultModel(ref);
                     // The row reads the catalogue's default, so the list has to
                     // be re-read or the controlled select snaps back.
                     loadModels();
                   })}
-                  onRole={(role, ref) => run(`role:${role}`, () => port.setRole(role, ref).finally(loadRoles))} />
+                  onRole={(role, ref) => run(`role:${role}`, () => port.setRole(role, ref).finally(loadRoles))}
+                  overrides={overrides} onClearOverride={(role, key) => run(`role:${role}`, () => port.clearRoleOverride(role, key).finally(loadRoles))} />
               </Group>
               {efforts.length > 0 ? (
                 <Group id="effort" title={t("推理强度")} hint={t("以下档位由当前模型的端点支持，auto 表示使用端点自身的默认值。")}>

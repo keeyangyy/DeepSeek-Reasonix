@@ -32,6 +32,7 @@ var ChineseTraditional = Messages{
 		"summary_timeout":                  "生成摘要的請求停滯了：連續 6 分鐘沒有任何輸出",
 		"summary_ceiling":                  "生成摘要的請求執行滿 30 分鐘仍未完成，已停止",
 		"summary_truncated":                "摘要在輸出上限處被截斷，沒有採用",
+		"summary_not_digest":               "摘要模型沒有按要求的標題給出摘要，沒有採用",
 		"summary_input_too_large":          "待折疊的內容縮減後仍超過單次摘要請求的容量",
 		"hook_refused":                     "擴充功能拒絕了這次折疊",
 		"persist_failed":                   "折疊結果沒能儲存",
@@ -86,8 +87,8 @@ var ChineseTraditional = Messages{
 	ResumePickSearch:              "搜尋：",
 	ResumePickNoMatch:             "沒有符合的會話",
 	TUIDeclinedFmt:                "已拒絕 %s %s",
-	NoticeContextBudgetFmt:        "上下文已用到壓縮閾值的 %d%%，已告知模型約剩 %d 個詞元的空間。",
 	NoticeUnappliedSteerFmt:       "引導沒有生效：這一輪在處理它之前就結束了。如果仍然需要，請再發送一次：\n%s",
+	NoticeExtSkippedFmt:           "擴充 %s 的配套背景程式沒有執行，本次在 %s 已被跳過。用 /plugins 查看並啟動它，或停用該擴充。",
 	TUIQuestion:                   "提問",
 	TUISubagentCallsFmt:           "%d 次子代理呼叫",
 	TUIChartMoreRowsFmt:           "… 還有 %d 行",
@@ -769,4 +770,6 @@ var ChineseTraditional = Messages{
 	UpgradeApplying:            "正在替換二進位制檔案…",
 	UpgradeApplyFailed:         "應用更新失敗：%v",
 	UpgradeSuccessFmt:          "已更新 %s → %s",
+
+	Feedback: feedbackTraditional,
 }

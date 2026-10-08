@@ -77,13 +77,69 @@ func TestModelSwitchLeavesDefaultModelAlone(t *testing.T) {
 	}
 }
 
-func TestModelSwitchAsDefaultPersistsIt(t *testing.T) {
-	srv, path := twoModelServer(t)
+func postDefaultModel(t *testing.T, base, body string) *http.Response {
+	t.Helper()
+	resp, err := http.Post(base+"/default-model", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
 
-	postModel(t, srv.URL, `{"ref":"alternate/other-chat","default":true}`)
+func TestDefaultModelPersistsWithoutSwitchingTheSession(t *testing.T) {
+	srv, path, server, _ := twoModelServerAt(t)
 
+	resp := postDefaultModel(t, srv.URL, `{"ref":"alternate/other-chat"}`)
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("POST /default-model = %d", resp.StatusCode)
+	}
 	if got := config.LoadForEdit(path).DefaultModel; got != "alternate/other-chat" {
 		t.Fatalf("default_model = %q, want alternate/other-chat", got)
+	}
+	if got := server.ctl().ModelRef(); got != "alternate/shared-chat" {
+		t.Fatalf("session model = %q: setting the default switched the session", got)
+	}
+}
+
+func TestDefaultModelRefusesAnUnknownModel(t *testing.T) {
+	srv, path := twoModelServer(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postDefaultModel(t, srv.URL, `{"ref":"gone/removed"}`)
+
+	if resp.StatusCode != http.StatusBadRequest || reasonCode(t, resp) != "settings.unknown_model" {
+		t.Fatalf("POST /default-model = %d, want 400 settings.unknown_model", resp.StatusCode)
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Fatalf("a refused default rewrote the config:\n%s", after)
+	}
+}
+
+// A pane resolving through a broker has no default_model of its own to move:
+// the default it shows is the home machine's, so the refusal says so instead of
+// reporting a write that landed on a file nobody reads.
+func TestDefaultModelOnABrokeredPaneIsRefusedByIdentity(t *testing.T) {
+	srv, path, server, _ := twoModelServerAt(t)
+	server.resolver = homeResolver()
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postDefaultModel(t, srv.URL, `{"ref":"home/chat-a"}`)
+
+	if resp.StatusCode != http.StatusConflict || reasonCode(t, resp) != "settings.default_model_brokered" {
+		t.Fatalf("POST /default-model = %d, want 409 settings.default_model_brokered", resp.StatusCode)
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Fatalf("a brokered pane wrote this machine's config:\n%s", after)
 	}
 }
 

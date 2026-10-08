@@ -1211,6 +1211,7 @@ func TestParseGitHubRepoSourceAcceptsCanonicalRepositoryPaths(t *testing.T) {
 	}{
 		{"https://github.com/o/r", githubRepoSource{Owner: "o", Repo: "r"}},
 		{"https://github.com/o/r.git/", githubRepoSource{Owner: "o", Repo: "r"}},
+		{"https://github.com/o/.github", githubRepoSource{Owner: "o", Repo: ".github"}},
 		{"https://github.com/o/r/tree/main", githubRepoSource{Owner: "o", Repo: "r", Branch: "main"}},
 		{"https://github.com/o/r/tree/main/plugins/demo", githubRepoSource{Owner: "o", Repo: "r", Branch: "main", Path: "plugins/demo"}},
 	}
@@ -1226,6 +1227,11 @@ func TestParseGitHubRepoSourceAcceptsCanonicalRepositoryPaths(t *testing.T) {
 
 func TestParseGitHubRepoSourceRejectsPagesAndUnsafePaths(t *testing.T) {
 	for _, source := range []string{
+		"https://github.com/o/...git",
+		"https://github.com/o/..git",
+		"https://github.com/o/.git",
+		"https://github.com/./r",
+		"https://github.com/.o/r",
 		"https://github.com/o/r/issues/1",
 		"https://github.com/o/r/blob/main/reasonix-plugin.json",
 		"https://github.com/o/r/pull/1",

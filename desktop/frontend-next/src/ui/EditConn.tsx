@@ -347,8 +347,8 @@ export function EditConn({
           <span className="ttl">{t("模型")}</span>
           <span className="count">{t("已启用 {on}/{all}", { on: picked.length, all: models.length })}</span>
           <button className="mrefresh" data-action="provider.probe" onClick={refetch} disabled={busy !== "" || testing}
-            title={t("重新向该端点获取模型列表，适用于端点新增或下架模型之后")}>
-            {t(refreshing ? "正在刷新…" : "刷新模型目录")}
+            title={t("用已保存或刚填的密钥向服务商读取模型列表，可直接勾选；服务商新增或下架模型后也一样")}>
+            {t(refreshing ? "正在从服务商读取…" : "从服务商读取可用模型")}
           </button>
           <button className="mrefresh" data-action="provider.model-check-all" onClick={testAll}
             disabled={busy !== "" || testing || picked.length === 0} aria-busy={batch === "running" || undefined}>
@@ -362,12 +362,6 @@ export function EditConn({
           <p className="mdiff" role="status">{t("接口地址已补全为 {url}", { url: completed })}</p>
         )}
         {batch === "stopped" && <p className="mdiff" role="status">{t("已停止启动新的验证：草稿已改动")}</p>}
-        {refreshFail && (
-          <div className="find" data-lvl="err" role="alert">
-            <span className="t">{t("刷新模型目录失败")}</span>
-            <span className="why">{refreshFail}</span>
-          </div>
-        )}
         {diff && diff.fresh && diff.added === 0 && diff.missing === 0 && (
           <p className="mdiff" role="status">{t("没有发现新模型")}</p>
         )}
@@ -390,6 +384,10 @@ export function EditConn({
           onVision={(m) => toggle(vision, setVision, m)}
           onDefault={setDef}
           onAdd={addModel}
+          onFetch={refetch}
+          fetching={refreshing}
+          fetchDisabled={busy !== "" || testing}
+          fetchFail={refreshFail}
         />
       </div>
 

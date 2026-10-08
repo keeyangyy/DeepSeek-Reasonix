@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -630,5 +631,18 @@ func TestCuratedAnthropicPresetKeepsItsDepthContract(t *testing.T) {
 	bare.PresetID = ""
 	if got := ReasoningProtocolForEntry(&bare); got != "" {
 		t.Fatalf("bare relay protocol = %q, want none", got)
+	}
+}
+
+func TestNormalizeEffortRefusalIsTyped(t *testing.T) {
+	e := &ProviderEntry{Name: "narrow", Kind: "openai", Model: "n", SupportedEfforts: []string{"low", "high"}}
+	if _, err := NormalizeEffort(e, "max"); !errors.Is(err, ErrEffortUnsupported) {
+		t.Fatalf("unsupported level err = %v, want ErrEffortUnsupported", err)
+	}
+	if _, err := NormalizeEffort(&ProviderEntry{Name: "opaque", Model: "m"}, "high"); !errors.Is(err, ErrEffortUnsupported) {
+		t.Fatalf("not configurable err = %v, want ErrEffortUnsupported", err)
+	}
+	if got, err := NormalizeEffort(e, "LOW"); err != nil || got != "low" {
+		t.Fatalf("supported level = %q/%v, want low", got, err)
 	}
 }

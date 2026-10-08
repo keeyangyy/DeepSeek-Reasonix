@@ -31,6 +31,7 @@ var English = Messages{
 		"summary_timeout":                  "The request that writes the summary stalled: no output for 6 minutes",
 		"summary_ceiling":                  "The request that writes the summary was still running after 30 minutes and was stopped",
 		"summary_truncated":                "The summary was cut off at the output limit and was not used",
+		"summary_not_digest":               "The summarizer did not return a briefing under the required headings, so it was not used",
 		"summary_input_too_large":          "The content to fold still exceeds one summary request after shortening",
 		"hook_refused":                     "An extension refused this fold",
 		"persist_failed":                   "The result of the fold could not be saved",
@@ -89,8 +90,8 @@ var English = Messages{
 	ResumePickSearch:        "Search: ",
 	ResumePickNoMatch:       "No matches",
 	TUIDeclinedFmt:          "declined %s %s",
-	NoticeContextBudgetFmt:  "Context at %d%% of the compaction threshold — the model was told it has about %d tokens of room left.",
 	NoticeUnappliedSteerFmt: "Guidance was not applied because the turn ended before it could be processed. Send it again if it is still needed:\n%s",
+	NoticeExtSkippedFmt:     "Extension %s's sidecar is not running, so it was skipped at %s. Check it with /plugins and start it, or disable the extension.",
 	TUIQuestion:             "question",
 	TUISubagentCallsFmt:     "%d sub-agent call(s)",
 	TUIChartMoreRowsFmt:     "… %d more rows",
@@ -773,4 +774,6 @@ Configuration:
   Secrets come from the environment via api_key_env (e.g. DEEPSEEK_API_KEY).
   Run 'reasonix setup' to scaffold a config; see docs/SPEC.md.
 `,
+
+	Feedback: feedbackEnglish,
 }

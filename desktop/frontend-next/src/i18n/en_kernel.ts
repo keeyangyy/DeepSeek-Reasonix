@@ -3,7 +3,11 @@
 // code adds one here. i18n.test.ts is what stops one from being forgotten.
 
 export const EN_KERNEL: Record<string, string> = {
-  "内核繁忙或无法连接，这次回答可能没有被收到，重试前请先确认": "The kernel is busy or unreachable; the answer may not have been received - check before retrying",
+  "该路径指向网络上的另一台机器，不在当前工作区内。文件工具只按路径写法拒绝它，不会去访问；工作区本身在网络共享上时，其下的路径可用": "That path names another machine on the network and is outside this workspace. File tools refuse it by its spelling and never look it up; paths below a workspace that is itself on a network share are allowed",
+  "内置浏览器不会打开指向网络上另一台机器的路径，只按路径写法拒绝，不会去访问": "The built-in browser does not open a path that names another machine on the network; it is refused by its spelling and never looked up",
+  "内核繁忙，这次操作可能没有被收到，重试前请先确认": "The kernel is busy; the action may not have been received - check before retrying",
+  "无法连接内核，这次操作可能没有送达，重试前请先确认": "The kernel cannot be reached; the action may not have been delivered - check before retrying",
+  "本界面无响应，这次操作可能没有送达内核，重试前请先确认": "This window is unresponsive; the action may not have reached the kernel - check before retrying",
   "递归删除目标受保护或超出授权范围；请使用工作区或授权目录内的字面路径": "The recursive delete target is protected or outside the granted roots; use a literal path inside the workspace or a granted directory",
   "无法确定递归删除范围；请使用字面命令名、路径和解释器内容": "The recursive delete extent is unknown; use a literal command name, path and interpreter payload",
   "请拆分命令；递归删除前只能使用字面路径切换目录，不能依赖变量赋值": "Split the call; only literal directory changes may precede a recursive delete, without relying on variable assignments",
@@ -271,6 +275,7 @@ export const EN_KERNEL: Record<string, string> = {
   "HTTP 上不提供 shell 命令": "Shell commands are not served over HTTP",
   "不存在「{role}」这个角色": "There is no “{role}” role",
   "没有已配置的模型匹配「{model}」": "No configured model matches “{model}”",
+  "「{key}」不在用户配置里，可能已被清除，或来自项目配置": "“{key}” is not in the user config; it may already be cleared, or come from the project config",
   "这台服务器未开放 shell 设置": "This server does not open shell settings",
   "这台服务器未开放账号登录": "This server does not open account sign-in",
   "登录账号后才能使用云备份": "Sign in to use cloud backups",
@@ -292,6 +297,8 @@ export const EN_KERNEL: Record<string, string> = {
   "项目列表已满（32 个），请先移除一个项目再添加": "The project list is full (32 projects); remove one before adding another",
   "这台服务器不支持切换工作区": "This server cannot switch workspaces",
   "不存在该预设": "There is no such preset",
+  "没有找到这个模型，默认模型没有改动": "That model was not found, so the default model is unchanged",
+  "这个窗格的默认模型由模型所在的那台机器决定，请在本机的窗格里设置": "This pane's default model is decided by the machine its models come from; set it from a pane on this machine",
   "本次拖入 {count} 个，最多允许 {limit} 个": "{count} dropped at once — the limit is {limit}",
   "这个文件的格式暂不支持（{format}）。支持的图片格式：{supported}。可以先转换格式再添加。": "This file's format is not supported ({format}). Supported image formats: {supported}. Convert it first, then add it again.",
   "这个文件超过 {limit_mb} MB 的上限，请压缩或拆分后再添加。": "This file is over the {limit_mb} MB limit. Compress or split it, then add it again.",

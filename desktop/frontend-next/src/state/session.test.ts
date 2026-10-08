@@ -217,6 +217,17 @@ describe("a notice about the runtime rather than the conversation", () => {
     expect(s.runtime).toEqual([]);
   });
 
+  it("carries a skipped-extension notice with its code and payload, once per extension", () => {
+    const skipped = (extension: string) => ({
+      kind: "notice", audience: "operator", level: "warn", code: "extension_skipped", text: "skipped",
+      detail: JSON.stringify({ extension, point: "tool.before", reason: "no_live_sidecar" }),
+    }) as SessionEvent;
+    const s = run([skipped("a"), skipped("a"), skipped("b")]);
+    expect(notices(s)).toEqual([]);
+    expect(s.runtime.map((n) => n.code)).toEqual(["extension_skipped", "extension_skipped"]);
+    expect(s.runtime.map((n) => JSON.parse(n.detail ?? "{}").extension)).toEqual(["a", "b"]);
+  });
+
   it("keeps legacy capability proxy audits out of the transcript", () => {
     const s = run([notice(undefined, "info", "capability proxy: use_capability → web_fetch")]);
     expect(notices(s)).toEqual([]);

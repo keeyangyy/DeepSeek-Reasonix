@@ -1,9 +1,12 @@
-import { HttpError, KernelBusyError } from "./port";
+import { DeliveryError, HttpError } from "./port";
 
 type Refusal = { code?: string; error?: string; params?: Record<string, string | number> };
 
-// How long a decision waits for the kernel before the card gets control back.
-const DECISION_WAIT_MS = 20_000;
+// How long a call the user is waiting on gets before control comes back.
+const ACK_WAIT_MS = 20_000;
+// Timers in a background tab are aligned to one second; a timer later than that
+// past its deadline was held up by this window's own event loop.
+const STALL_TOLERANCE_MS = 2_000;
 
 // One idempotent read per path in flight. `next` is the single re-read owed to
 // every caller that arrived while `flight` was already on the wire.
@@ -152,11 +155,19 @@ export class SseHttp {
     return (await res.json()) as T;
   }
 
-  // An approval, plan decision or answer: the card is waiting on this one call,
-  // so it gets its own bounded wait and a typed failure it can recover from.
-  protected async postDecision(path: string, body?: unknown): Promise<void> {
+  // An approval, plan decision, answer or stop: the caller is waiting on this
+  // one call, so it gets a bounded wait and a typed failure it can recover from.
+  // A starved event loop runs the deadline timer before the response callback,
+  // so a deadline that fires far past its time is this window's fault, not the
+  // kernel's.
+  protected async postAcked(path: string, body?: unknown): Promise<void> {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), DECISION_WAIT_MS);
+    const began = performance.now();
+    let stalled = false;
+    const timer = setTimeout(() => {
+      stalled = performance.now() - began - ACK_WAIT_MS > STALL_TOLERANCE_MS;
+      ctl.abort();
+    }, ACK_WAIT_MS);
     let answered = false;
     try {
       const res = await fetch(this.base + path, {
@@ -169,7 +180,8 @@ export class SseHttp {
       answered = true;
       if (!res.ok) await SseHttp.fail(path, res);
     } catch (e) {
-      if (!answered && ctl.signal.aborted) throw new KernelBusyError();
+      if (!answered && ctl.signal.aborted) throw new DeliveryError(stalled ? "ui_stalled" : "kernel_busy");
+      if (!answered && e instanceof TypeError) throw new DeliveryError("unreachable");
       throw e;
     } finally {
       clearTimeout(timer);

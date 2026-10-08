@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,13 +15,18 @@ const holderEnv = "REASONIX_SCRATCH_HOLDER"
 
 func TestMain(m *testing.M) {
 	if prefix := os.Getenv(holderEnv); prefix != "" {
+		// The claim lives in d's file descriptor, which the runtime closes once d is unreachable.
 		d, err := Create(prefix)
 		if err != nil {
 			os.Exit(2)
 		}
 		_ = os.WriteFile(filepath.Join(d.Path(), "payload"), []byte("x"), 0o600)
 		os.Stdout.WriteString(d.Path() + "\n")
-		select {}
+		for {
+			runtime.GC()
+			runtime.KeepAlive(d)
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 	os.Exit(m.Run())
 }

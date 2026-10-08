@@ -338,7 +338,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	bc := serve.NewBroadcaster()
 	paneSink := decorate(bc)
 	if cfg.DesktopTelemetry() || cfg.DesktopMetrics() {
-		reporter := telemetry.Start(studioTelemetryOptions(cfg, shell.version))
+		reporter := telemetry.Start(studioTelemetryOptions(ctx, cfg, shell.version))
 		if cfg.DesktopMetrics() {
 			paneSink = reporter.Wrap(paneSink)
 		}
@@ -455,12 +455,22 @@ func startCloudRemote(ctx context.Context, cfg *config.Config, logs io.Writer, t
 	go host.Run(ctx)
 }
 
-func studioTelemetryOptions(cfg *config.Config, studioVersion string) telemetry.Options {
+// desktopTelemetryOn reads the user-level setting as it is now. A file that does
+// not parse is not consent, and neither the project config nor a migration
+// rewrite is involved; a missing file keeps the documented default (on).
+func desktopTelemetryOn() bool {
+	cfg, err := config.LoadForEditReadOnlyStrict(config.UserConfigPath())
+	return err == nil && cfg != nil && cfg.DesktopTelemetry()
+}
+
+func studioTelemetryOptions(ctx context.Context, cfg *config.Config, studioVersion string) telemetry.Options {
 	return telemetry.Options{
+		Context:      ctx,
 		Mode:         "on",
 		Version:      studioVersion,
 		Surface:      surface.Studio,
 		SuppressPing: !cfg.DesktopTelemetry(),
+		PingAllowed:  desktopTelemetryOn,
 		HomeDir:      config.ReasonixHomeDir(),
 		Interactive:  true,
 		Proxy:        cfg.NetworkProxySpec(),

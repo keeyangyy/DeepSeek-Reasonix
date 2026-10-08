@@ -183,11 +183,14 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
     if (focus) box.current?.focus();
   }, [focus]);
 
+  // The kernel's own report that no turn is live ends a stop even when the
+  // turn-done event never reached this window.
+  const kernelIdle = status?.running === false;
   useEffect(() => {
-    if (running) return;
+    if (running && !kernelIdle) return;
     stoppingRef.current = false;
     setStopping(false);
-  }, [running]);
+  }, [running, kernelIdle]);
 
   const sizeBox = useCallback(() => {
     const el = box.current;
@@ -756,7 +759,7 @@ export function Composer({ port, status, running, quote, restore, focus, onSubmi
                 if (stoppingRef.current) return;
                 stoppingRef.current = true;
                 setStopping(true);
-                void port.cancel().catch((e: unknown) => {
+                void port.cancel().then(onChanged, (e: unknown) => {
                   stoppingRef.current = false;
                   setStopping(false);
                   onError(e);

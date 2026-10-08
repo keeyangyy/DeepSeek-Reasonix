@@ -57,7 +57,7 @@ type claudeHookDocument struct {
 var claudeStopBlockingEvents = map[string]bool{"Stop": true, "SubagentStop": true}
 
 // claudeToolScopedHookEvents are the events whose "matcher" field is
-// evaluated against a tool name (see internal/ext/hook's MatchesTool); other
+// evaluated against a tool name (see internal/ext/hook's matchTool); other
 // events ignore matcher entirely, so a matcher tool-name compatibility issue
 // doesn't apply to them.
 var claudeToolScopedHookEvents = map[string]bool{
@@ -104,7 +104,7 @@ func claudeMatcherNeverFires(matcher string) bool {
 }
 
 // claudeMatcherIncludesTool reports whether a Claude matcher can select the
-// given tool using the same anchored-regex semantics as hook.MatchesTool.
+// given tool using the same anchored-regex semantics as hook.matchTool.
 // Empty and "*" matchers select every tool. Malformed regexes select none at
 // runtime and therefore do not include the target here.
 func claudeMatcherIncludesTool(matcher, toolName string) bool {

@@ -102,3 +102,31 @@ func TestHoldingIntoAPausedQueueDecidesUnderTheAdmissionLock(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRetryOfUnappliedSteerQueuesItAndKeepsThePause(t *testing.T) {
+	c, _, _, _, _ := steeringTurn(t)
+	st, err := c.ensureInbox()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := c.EnqueueInbox(InboxRequest{Submit: "stopped", Source: "test", Intent: sessioninbox.IntentSteer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetStateCoded(rec.ItemID, sessioninbox.StateUncertain, sessioninbox.BlockSteerUnapplied, "unapplied"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetInboxPaused(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RetryInboxItem(rec.ItemID); err != nil {
+		t.Fatal(err)
+	}
+	snap := c.InboxSnapshot()
+	if len(snap.Items) != 1 || snap.Items[0].State != sessioninbox.StateQueued || snap.Items[0].BlockCode != "" {
+		t.Fatalf("item = %+v, want queued with the block cleared", snap.Items)
+	}
+	if !snap.Paused {
+		t.Fatal("a retry must not release the pause that also holds the other entries")
+	}
+}

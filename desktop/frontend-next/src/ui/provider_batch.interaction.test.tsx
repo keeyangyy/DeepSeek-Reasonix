@@ -123,7 +123,7 @@ it("holds Save, Revert, refresh and the per-row verify while it runs", async () 
   await userEvent.click(all());
   await waitFor(() => expect(g.open).toHaveLength(2));
   expect(all().disabled).toBe(true);
-  expect((screen.getByRole("button", { name: "刷新模型目录" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "从服务商读取可用模型" }) as HTMLButtonElement).disabled).toBe(true);
   expect((screen.getByRole("button", { name: "验证模型 m3" }) as HTMLButtonElement).disabled).toBe(true);
   expect((screen.getByRole("button", { name: /^保存/ }) as HTMLButtonElement).disabled).toBe(true);
 });

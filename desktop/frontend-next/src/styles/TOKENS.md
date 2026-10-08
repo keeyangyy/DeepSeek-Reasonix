@@ -103,6 +103,14 @@ grid to break.
   itself now, with dark ink on it. `--err` carries its own ink for the same
   reason: a danger button borrowed `--accent-fg`, which held only while the two
   hues happened to share a lightness.
+- Text takes the ink, never the base.
+  - Light `--warn` reads 4.58:1 on white and 3.86:1 on the floating layer, under
+    the 4.5 line.
+  - A label, count or note coloured `--warn`, `--ok` or `--err` uses
+    `--warn-ink`, `--ok-ink` or `--err-ink`.
+  - Borders, washes and glyph marks (status symbols, check ticks, hover icons)
+    stay on the base: a graphic needs 3:1, which the base clears.
+  - `ink-text.test.ts` fails a bare hue as `color` outside its glyph list.
 - An ink is read on every tint it lands on, not only the lightest one. The
   light `--accent-ink` cleared the popover's own surface at 6.4:1 and the
   selected row inside it — that same surface with 7% text mixed in — at 4.40,

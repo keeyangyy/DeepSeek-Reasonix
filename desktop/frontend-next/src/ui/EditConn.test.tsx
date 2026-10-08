@@ -35,7 +35,7 @@ it("keeps vision capability discovered while refreshing a saved source", async (
   };
 
   render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
 
   const modelName = await screen.findByText(visionModel);
   const row = modelName.closest(".mline") as HTMLElement;
@@ -129,7 +129,7 @@ it("preserves configured models that a refreshed catalog no longer returns", asy
   };
 
   render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
 
   expect(await screen.findByText("deepseek-new")).toBeTruthy();
   const preserved = screen.getByText("deepseek-hidden").closest(".mline") as HTMLElement;

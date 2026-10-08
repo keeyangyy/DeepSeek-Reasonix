@@ -324,7 +324,7 @@ func (b *builder) wireTools() error {
 	b.addIsolation()
 	registerSessionTools(t.reg, opts.Ablation, b.roots, b.session.dir, b.prompt.memory.Store)
 
-	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg, t.sub.inheritedEffort)}
+	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg, t.sub.inheritedFor)}
 	t.cmds = loadCommands(opts, root)
 	addInstallSourceTool(b.ctx, t.reg, t.host, root, b.balanceClient, t.specOptions, opts.Stderr)
 	registerSkillTools(t.reg, opts.Ablation, b.prompt.skillStore, b.prompt.implicitSkills, t.runners, t.cmds)
@@ -581,6 +581,7 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		session:            ext.session(),
 		ui:                 ext.hub,
 		onWarning:          ext.warn,
+		onSidecarDown:      ext.sidecarDown,
 		skipPromptStrategy: shouldSkipPromptStrategy(b.opts.PreviousPlan),
 		previousDispatcher: b.opts.PreviousDispatcher,
 	}, ext.mgr)

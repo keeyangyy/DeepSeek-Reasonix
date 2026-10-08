@@ -216,10 +216,7 @@ func (s *updateSink) Emit(e event.Event) {
 		// Surface warnings to the host as a message chunk so they're not lost;
 		// info-level notices stay out of band.
 		if e.Level == event.LevelWarn && e.Text != "" {
-			s.send(messageChunk{
-				SessionUpdate: "agent_message_chunk",
-				Content:       textBlock("\n\n[warning] " + e.Text),
-			})
+			s.send(warningChunk(e))
 		}
 
 	case event.CompactionDone:

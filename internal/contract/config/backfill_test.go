@@ -1827,7 +1827,7 @@ func TestNormalizeLegacyMimoProviderCatalogsBackfillsOfficialMimoAPIStub(t *test
 	if !ok {
 		t.Fatal("mimo-api provider missing")
 	}
-	wantModels := []string{"mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-omni"}
+	wantModels := []string{"mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.6-pro-ultraspeed", "mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-omni"}
 	if !reflect.DeepEqual(p.ModelList(), wantModels) {
 		t.Fatalf("mimo-api models = %v, want %v", p.ModelList(), wantModels)
 	}
@@ -1880,7 +1880,7 @@ func TestNormalizeLegacyMimoProviderCatalogsBackfillsOfficialMimoTokenPlanStub(t
 	if !ok {
 		t.Fatal("mimo-token-plan provider missing")
 	}
-	if !reflect.DeepEqual(p.ModelList(), []string{"mimo-v2.5-pro", "mimo-v2.5"}) {
+	if !reflect.DeepEqual(p.ModelList(), []string{"mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro", "mimo-v2.5"}) {
 		t.Fatalf("mimo-token-plan models = %v, want token plan catalog", p.ModelList())
 	}
 	if p.Price == nil || p.Price.Currency != "CNY" {

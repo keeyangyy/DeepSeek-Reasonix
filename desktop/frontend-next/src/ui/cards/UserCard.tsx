@@ -7,6 +7,7 @@ import { reason } from "../../i18n/kernel";
 import { t } from "../../i18n";
 import { StudioIcon } from "../StudioIcon";
 import { messageSource } from "../source";
+import { touchKeyboard } from "../touchKeyboard";
 import { useViewer } from "../../state/viewer";
 
 export function UserCard({
@@ -86,7 +87,7 @@ export function UserCard({
                     ev.preventDefault();
                     ev.stopPropagation();
                     setDraft(null);
-                  } else if (ev.key === "Enter" && !ev.shiftKey && !ev.nativeEvent.isComposing) {
+                  } else if (ev.key === "Enter" && !ev.shiftKey && !touchKeyboard() && !ev.nativeEvent.isComposing) {
                     ev.preventDefault();
                     resend();
                   }

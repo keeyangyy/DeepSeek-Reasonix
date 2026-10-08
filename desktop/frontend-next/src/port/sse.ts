@@ -1,5 +1,5 @@
 import { PLAN_ACTIONS, type PlanAction } from "./session";
-import type { AccountState, AgentPort, Appearance, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
+import type { AccountState, AgentPort, Appearance, ChipCall, CompactionSettings, Completion, DeviceGrant, ProviderProbe, UpdateProgress, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, HookDryRun, HookEntry, MemoryCatalog, MemoryEdit, MemoryEntry, UsageQuery, UsageReport, McpDraft, PluginExport, Queue, Queued, NotifyPrefs, TrayPrefs, WorkspaceInfo } from "./port";
 import { HttpError, type ChangeDiff, type CommitProposal, type CommitRequest, type CommitResult, type WorkspaceFile, type WorkspaceFiles, type WorkspaceChanges } from "./port";
 import { SseFeedback } from "./sse_feedback";
 import type { StoragePlan, StorageQuery, StorageState } from "./storage";
@@ -189,6 +189,14 @@ export class SsePort extends SseFeedback implements AgentPort {
 
   setRole(role: string, ref: string) {
     return this.post("/roles", { role, ref });
+  }
+
+  roleOverrides() {
+    return this.get<Record<string, RoleOverride[]>>("/roles/overrides");
+  }
+
+  clearRoleOverride(role: string, key: string) {
+    return this.post("/roles/overrides/clear", { role, key });
   }
 
   storage(query?: StorageQuery) {
@@ -700,16 +708,16 @@ export class SsePort extends SseFeedback implements AgentPort {
     return this.post(paused ? "/inbox/pause" : "/inbox/resume");
   }
   cancel() {
-    return this.post("/cancel");
+    return this.postAcked("/cancel");
   }
   // Approve(id, allow, session, persist) — "always" is a session grant, not a
   // persisted config change.
   planDecision(id: string, action: PlanAction) {
-    return this.postDecision("/plan-decision", { id, action: PLAN_ACTIONS[action] });
+    return this.postAcked("/plan-decision", { id, action: PLAN_ACTIONS[action] });
   }
 
   approve(id: string, verdict: ApprovalVerdict) {
-    return this.postDecision("/approve", {
+    return this.postAcked("/approve", {
       id,
       allow: verdict !== "deny",
       // A rule written down also covers the rest of this session, so the answer
@@ -719,7 +727,7 @@ export class SsePort extends SseFeedback implements AgentPort {
     });
   }
   answer(id: string, answers: { questionId: string; selected: string[] }[]) {
-    return this.postDecision("/answer", {
+    return this.postAcked("/answer", {
       id,
       answers: answers.map((a) => ({ QuestionID: a.questionId, Selected: a.selected })),
     });
@@ -758,8 +766,11 @@ export class SsePort extends SseFeedback implements AgentPort {
   setPreset(preset: Preset) {
     return this.post("/preset", { preset });
   }
-  setModel(ref: string, asDefault = false) {
-    return this.post("/model", asDefault ? { ref, default: true } : { ref });
+  setModel(ref: string) {
+    return this.post("/model", { ref });
+  }
+  setDefaultModel(ref: string) {
+    return this.post("/default-model", { ref });
   }
   setEffort(effort: string) {
     return this.post("/effort", { effort });

@@ -23,10 +23,10 @@ export function Agents({ tasks, onOpen }: { tasks: Task[]; onOpen?: (taskId: str
   if (tasks.length === 0) return null;
 
   return (
-    <Grp id="agents" name={t("子代理")} aside={live ? t("{n} 个运行中", { n: live }) : undefined}>
+    <Grp id="agents" name={t("子代理")}>
       <Row
         k={t("数量")}
-        v={live ? <span className="lk">{t("{n} 并行", { n: live })}</span> : agentsIn(tasks)}
+        v={<span className={live ? "lk" : undefined}>{t("运行中 {live} / 共 {total}", { live, total: agentsIn(tasks) })}</span>}
       />
       <div className="agents">
         {shown.map((x) => (

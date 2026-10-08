@@ -158,6 +158,15 @@ describe("screenshots", () => {
 });
 
 describe("sending", () => {
+  it("tells the sender the report is under review when the receipt says so", async () => {
+    const { port } = setup();
+    port.sendFeedback = vi.fn(async () => ({ receipt: "FB-AAAA-0001", status: "received", createdAt: "2026-10-01T00:00:00Z", redacted: false, underReview: true })) as AgentPort["sendFeedback"];
+    await fill();
+    await userEvent.click(send());
+    expect(await screen.findByText("已收到你的反馈")).toBeTruthy();
+    expect(screen.getByText(/正在审核中/)).toBeTruthy();
+  });
+
   it("sends the whole report once and shows the receipt", async () => {
     const { port } = setup();
     const spy = vi.spyOn(port, "sendFeedback");
@@ -245,6 +254,30 @@ describe("refusals", () => {
     expect(alert.getAttribute("data-code")).toBe(code);
     expect(body().value).toBe("侧栏在缩放窗口后丢失选中项");
     expect(send().disabled).toBe(false);
+  });
+
+  it("says which window a typed 429 ran out of and when it resets, and keeps the form", async () => {
+    const { port } = setup();
+    const resetsAt = new Date(Date.now() + 5 * 3_600_000).toISOString();
+    port.sendFeedback = vi.fn(async () => {
+      throw new HttpError(429, "x", { code: FEEDBACK_CODE.rateLimited, error: "hourly limit reached", params: { limit: "install_daily", resetsAt, retryAfterSeconds: 18000 } });
+    });
+    await fill();
+    await userEvent.click(send());
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("今天的反馈次数已用完。将在");
+    expect(alert.textContent).not.toMatch(/小时的反馈|18000|太频繁/);
+    expect(alert.getAttribute("data-code")).toBe(FEEDBACK_CODE.rateLimited);
+    expect(body().value).toBe("侧栏在缩放窗口后丢失选中项");
+    expect(send().disabled).toBe(false);
+  });
+
+  it("shows the mock's typed refusal end to end through the port", async () => {
+    sessionStorage.setItem("rx-mock-feedback-fault", "feedback.rate_limited@install_hourly");
+    setup();
+    await fill();
+    await userEvent.click(send());
+    expect((await screen.findByRole("alert")).textContent).toContain("这一小时的反馈次数已用完。将在");
   });
 
   it("gives every code a message no other code shares", async () => {
@@ -450,5 +483,24 @@ describe("dialog", () => {
     setup({ limits: { bodyBytes: 4000, nameChars: 40, contactChars: 80, images: 2, uploadBytes: 100 } as FeedbackEnv["limits"] });
     await ready();
     await waitFor(() => expect(document.querySelectorAll(".fbk-shots li")).toHaveLength(2));
+  });
+});
+
+describe("feedback dialog size", () => {
+  it("fills the window on request and returns to the reading column", async () => {
+    setup({}, "mine");
+    const dialog = screen.getByRole("dialog");
+    const toggle = screen.getByRole("button", { name: "铺满窗口" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(dialog.hasAttribute("data-wide")).toBe(false);
+
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(dialog.hasAttribute("data-wide")).toBe(true);
+    expect(screen.getByRole("tab", { name: "我的反馈" }).getAttribute("aria-selected")).toBe("true");
+
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(dialog.hasAttribute("data-wide")).toBe(false);
   });
 });

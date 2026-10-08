@@ -305,10 +305,6 @@ const unappliedSteerCap = 400
 
 func codedNoticeText(it *Item) string {
 	switch it.Code {
-	case event.NoticeCodeContextBudget:
-		if f, ok := event.DecodeContextBudgetFigures(it.Detail); ok {
-			return fmt.Sprintf(i18n.M.NoticeContextBudgetFmt, f.Percent, f.Remaining)
-		}
 	case event.NoticeCodeCompacted:
 		return i18n.M.NoticeCompacted
 	case event.NoticeCodeCompactDeclined:
@@ -324,6 +320,10 @@ func codedNoticeText(it *Item) string {
 			return fmt.Sprintf(i18n.M.NoticeUnappliedSteerFmt, textutil.TruncateGraphemes(textutil.SanitizeDisplay(it.Detail), unappliedSteerCap, "…"))
 		}
 		return textutil.TruncateGraphemes(textutil.SanitizeDisplay(it.Text), unappliedSteerCap, "…")
+	case event.NoticeCodeExtensionSkipped:
+		if p, ok := event.DecodeExtensionSkipped(it.Detail); ok && p.Reason == event.ExtensionSkipReasonNoLiveSidecar {
+			return fmt.Sprintf(i18n.M.NoticeExtSkippedFmt, p.Extension, p.Point)
+		}
 	}
 	return it.Text
 }

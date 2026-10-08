@@ -86,8 +86,8 @@ type Messages struct {
 
 	// terminal transcript rows the kernel does not word.
 	TUIDeclinedFmt          string // an approval the user refused — %s tool, %s subject
-	NoticeContextBudgetFmt  string // the model was warned the compaction trigger is near — %d percent, %d tokens left
 	NoticeUnappliedSteerFmt string // guidance that arrived too late for its turn — %s the guidance
+	NoticeExtSkippedFmt     string // an optional extension skipped, its sidecar not running — %s extension, %s point
 	TUIQuestion             string // an answered question that carried no prompt
 	TUISubagentCallsFmt     string // calls a sub-agent made under its task — %d count
 	TUIChartMoreRowsFmt     string // rows of a chart table past the preview — %d count
@@ -745,6 +745,9 @@ type Messages struct {
 	// usage / help
 	UsageBody             string // full multi-line help text
 	StandaloneConsoleHint string
+
+	// Feedback is the /feedback list standing and refusal wording.
+	Feedback FeedbackText
 }
 
 // M is the active catalogue. DetectLanguage replaces it; English is the

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "./testkit";
 import { Composer } from "./Composer";
 import { MockPort } from "../port/mock";
-import { HttpError } from "../port/port";
+import { DeliveryError, HttpError } from "../port/port";
 import type { AgentPort, ApprovalMode, Attachment, Completion, ModelEntry, Preset, SessionStatus } from "../port/port";
 import { draftKey } from "./drafts";
 
@@ -276,6 +276,63 @@ describe("composer run controls", () => {
     expect(screen.queryByRole("button", { name: "插话" })).toBeNull();
     view.rerender(<Composer {...props} running={false} />);
     await waitFor(() => expect(screen.queryByRole("button", { name: "正在停止…" })).toBeNull());
+  });
+});
+
+describe("composer stop under a starved window", () => {
+  const props = (port: MockPort, over: Partial<{ onError: (e: unknown) => void; onChanged: () => void }> = {}) => ({
+    port: port as unknown as AgentPort,
+    focus: 0,
+    onSubmit: vi.fn(async () => true),
+    onChanged: over.onChanged ?? vi.fn(),
+    onError: over.onError ?? vi.fn(),
+  });
+
+  it("ends a stop the kernel confirmed when the turn-done event never arrives", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "cancel").mockResolvedValue();
+    const p = props(port);
+    const view = render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await screen.findByRole("button", { name: "正在停止…" });
+    await waitFor(() => expect(p.onChanged).toHaveBeenCalled());
+    view.rerender(<Composer {...p} status={status({ running: false })} running />);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "正在停止…" })).toBeNull());
+    expect((screen.getByRole("button", { name: "停下" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not end a stop while the kernel still reports the turn live", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "cancel").mockResolvedValue();
+    const p = props(port);
+    const view = render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await screen.findByRole("button", { name: "正在停止…" });
+    view.rerender(<Composer {...p} status={status({ running: true, plan: true })} running />);
+    expect(screen.getByRole("button", { name: "正在停止…" })).toBeTruthy();
+  });
+
+  it.each(["kernel_busy", "unreachable", "ui_stalled"] as const)("hands back an unconfirmed stop as a %s fault instead of staying pending", async (fault) => {
+    const port = new MockPort();
+    const err = new DeliveryError(fault);
+    vi.spyOn(port, "cancel").mockRejectedValue(err);
+    const p = props(port);
+    render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await waitFor(() => expect(p.onError).toHaveBeenCalledWith(err));
+    expect((screen.getByRole("button", { name: "停下" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(p.onChanged).not.toHaveBeenCalled();
+  });
+
+  it("lets a stop be asked again after it was left unconfirmed", async () => {
+    const port = new MockPort();
+    const cancel = vi.spyOn(port, "cancel").mockRejectedValueOnce(new DeliveryError("ui_stalled")).mockResolvedValue();
+    const p = props(port);
+    render(<Composer {...p} status={status({ running: true })} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await waitFor(() => expect(p.onError).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(2));
   });
 });
 

@@ -1,7 +1,8 @@
 // Package workspacelease excludes overlapping write extents across sessions.
 // Readers remain concurrent; unknown extents claim the whole workspace.
 // Claims remain held until every participating run ends so another session
-// cannot overwrite a turn's earlier mutations during its verification.
+// cannot overwrite a turn's earlier mutations during its verification, except
+// while the session waits on a person (Yield).
 package workspacelease
 
 import (
@@ -87,6 +88,7 @@ type Owner struct {
 	acquiredAt    time.Time
 	lastAsk       time.Time
 	scope         pathLeaseState
+	holds         holdState
 }
 
 // State is a sanitized process-local snapshot used by Desktop to explain a
@@ -273,8 +275,13 @@ func (o *Owner) AcquireWrite(ctx context.Context) error {
 // AcquirePaths retains the complete write extent until the last run ends.
 // Missing or unresolvable extents conservatively claim the whole workspace.
 func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
+	_, err := o.acquire(ctx, paths, false)
+	return err
+}
+
+func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(), error) {
 	if o == nil {
-		return nil
+		return func() {}, nil
 	}
 	if o.skipWriteSerialization {
 		// Serialization turned off: report the write as granted without taking
@@ -289,8 +296,9 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
 		if o.acquired && coversPaths(o.scope.paths, claim) {
+			end := o.holdLocked(hold)
 			o.mu.Unlock()
-			return nil
+			return end, nil
 		}
 		if o.acquiring {
 			done := o.acquireDone
@@ -299,7 +307,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 			case <-done:
 				continue
 			case <-ctx.Done():
-				return ctx.Err()
+				return nil, ctx.Err()
 			}
 		}
 		o.acquiring = true
@@ -315,6 +323,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 		o.mu.Lock()
 		o.acquiring = false
 		o.waiting = false
+		end := func() {}
 		if err == nil {
 			o.acquired = true
 			o.scope.paths = claim
@@ -322,6 +331,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 				o.acquiredAt = time.Now()
 				o.releaseSystem = release
 			}
+			end = o.holdLocked(hold)
 		}
 		close(done)
 		releaseIfIdle := o.releaseIfIdleLocked()
@@ -329,7 +339,7 @@ func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
 		if releaseIfIdle != nil {
 			releaseIfIdle()
 		}
-		return err
+		return end, err
 	}
 }
 
@@ -337,10 +347,20 @@ func (o *Owner) releaseIfIdleLocked() func() {
 	if !o.acquired || o.acquiring || o.activeRuns != 0 {
 		return nil
 	}
+	return o.releaseLocked(true)
+}
+
+// releaseLocked drops the claim. A yield (final false) is a pause inside one
+// account: the held time so far is banked and no account is closed.
+func (o *Owner) releaseLocked(final bool) func() {
 	release := o.releaseSystem
 	o.acquired = false
 	o.releaseSystem = nil
 	o.scope.paths = nil
+	if !final {
+		o.stats.Held += time.Since(o.acquiredAt)
+		return release
+	}
 	closed, report := o.closeStatsLocked(time.Now())
 	notice := o.onRelease
 	return func() {

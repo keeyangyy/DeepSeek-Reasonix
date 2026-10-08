@@ -200,10 +200,13 @@ telemetry 请求之前只询问一次。提示为 `[Y/n]`：直接回车、输�
 数量和时效上限的本地队列中，等待后续启动重试。
 
 ping 包含一个 CLI 专用的随机 128-bit 安装 ID、CLI 版本、OS、架构和 `cli` surface
-标记。计数批次使用同一个 ID 做每日活跃安装去重，只包含固定 bucket，例如 CLI 模式、
+标记。这个 ID 与桌面端安装 ID 分离，不是账号、硬件、仓库或 session 标识。
+
+计数批次使用同一个 ID 做每日活跃安装去重，只包含固定 bucket，例如 CLI 模式、
 运行配置档、权限/会话模式、turn 延迟、finish reason、cache hit 区间、通用
-Provider/工具错误分类、compaction、恢复计数和归一化界面语言。这个 ID 与桌面端安装
-ID 分离，不是账号、硬件、仓库或 session 标识。
+Provider/工具错误分类、compaction、恢复计数、每轮 token 量级区间、工作区写锁争用区间和归一化界面语言。
+
+不回答就关闭提示（输入结束、Ctrl+D）不会保存任何选择，也不会上传；下次启动会再问。
 
 Reasonix 绝不会上传 prompt、回答、reasoning、工具名/参数/输出、路径、仓库/分支、
 session ID、精确 token/费用、Provider/model 名称、base URL 或环境变量。

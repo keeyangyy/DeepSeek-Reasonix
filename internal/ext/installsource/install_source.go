@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"reasonix/internal/base/fileutil"
 	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/tool"
@@ -616,6 +617,26 @@ func (t *Tool) resolvePath(p string) string {
 		p = abs
 	}
 	return filepath.Clean(p)
+}
+
+// refuseNetworkSource stops a local source spelled as a network path before
+// plan stats, walks or parses it: on Windows that lookup is a connection to the
+// named machine, and a plan-only call runs without approval. Only a path below a
+// network project root passes.
+func (t *Tool) refuseNetworkSource(source string) error {
+	if isURL(source) || strings.HasPrefix(source, "git:github.com/") {
+		return nil
+	}
+	roots := []string{t.root}
+	err := fileutil.NetworkScope(source, roots)
+	if err == nil {
+		err = fileutil.NetworkScope(t.resolvePath(source), roots)
+	}
+	if err != nil {
+		return networkSourceError{tool.Refusal{Code: fileutil.CodeNetworkPathOutsideScope, Message: fmt.Sprintf(
+			"install_source: `%s` is a network path, outside this workspace; it was refused by its spelling and never looked up", source)}}
+	}
+	return nil
 }
 
 // Approval binds operational material; display projection must never collapse distinct credentials.

@@ -43,6 +43,9 @@ var errChunksFailing = errors.New("appupdate: the chunk store kept failing")
 // asked for, or whose index is not the one the manifest names.
 var errDeltaMismatch = errors.New("appupdate: the published delta does not match the release")
 
+// errDeltaTooLarge is a delta whose missing chunks outweigh the full package.
+var errDeltaTooLarge = errors.New("appupdate: the chunked update would download more than the full package")
+
 // errNoDelta is a release or an install a delta is not offered to at all,
 // which is not a delta abandoned and carries no reason to report.
 var errNoDelta = errors.New("appupdate: no chunked update is offered here")
@@ -91,9 +94,18 @@ func (c *capability) stageDelta(ctx context.Context, install update.Install, tar
 	if err := os.RemoveAll(backup); err != nil {
 		return update.TreeHandoff{}, failAs(DeltaDisk, err)
 	}
+	return c.stageFromIndex(ctx, t, install, target, cacheDir, d, x, backup)
+}
+
+// stageFromIndex plans against a proven index and fetches only when the chunks
+// the install lacks cost less than the full package.
+func (c *capability) stageFromIndex(ctx context.Context, t update.Transport, install update.Install, target, cacheDir string, d update.Delta, x delta.Index, backup string) (update.TreeHandoff, error) {
 	plan, err := delta.PlanFrom(x, install.Layout.Root)
 	if err != nil {
 		return update.TreeHandoff{}, failAs(DeltaDisk, err)
+	}
+	if !plan.Worthwhile(x) {
+		return update.TreeHandoff{}, failAs(DeltaTooLarge, fmt.Errorf("%w: %d of the release's bytes are missing here", errDeltaTooLarge, plan.MissingBytes))
 	}
 	work := filepath.Join(cacheDir, "delta")
 	chunks := filepath.Join(work, "chunks")

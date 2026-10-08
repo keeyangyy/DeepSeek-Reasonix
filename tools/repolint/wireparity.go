@@ -133,6 +133,9 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/frontend/serve/provider_check.go", "providerCheck", tsProviderFile, "ProviderCheck"},
 	{"internal/frontend/serve/provider_check.go", "providerModelCheck", tsProviderFile, "ProviderModelCheck"},
 	{"internal/frontend/serve/settings.go", "modelEntry", tsModelFile, "ModelEntry"},
+	// A per-profile entry that outranks a role's global model. A scope the page
+	// cannot read offers a clear the kernel will refuse.
+	{"internal/frontend/serve/roles.go", "roleOverride", tsModelFile, "RoleOverride"},
 	// The report form draws what the kernel will send and reads back what
 	// became of it; a field the page cannot read is a status it cannot show.
 	{"internal/platform/feedback/types.go", "Env", tsFeedbackFile, "FeedbackEnvInfo"},
@@ -142,6 +145,8 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/platform/feedback/types.go", "Reply", tsFeedbackFile, "FeedbackReply"},
 	{"internal/platform/feedback/types.go", "ReplyReceipt", tsFeedbackFile, "FeedbackReplyReceipt"},
 	{"internal/platform/feedback/types.go", "Mine", tsFeedbackFile, "FeedbackMine"},
+	{"internal/platform/feedback/types.go", "Profile", tsFeedbackFile, "FeedbackProfile"},
+	{"internal/platform/feedback/types.go", "EffectiveLimits", tsFeedbackFile, "FeedbackEffectiveLimits"},
 	{"internal/frontend/serve/feedback.go", "feedbackEnvView", tsFeedbackFile, "FeedbackEnv"},
 	{"internal/frontend/serve/feedback.go", "feedbackSubmitBody", tsFeedbackFile, "FeedbackRequest"},
 	{"internal/frontend/serve/feedback.go", "feedbackImageBody", tsFeedbackFile, "FeedbackImage"},

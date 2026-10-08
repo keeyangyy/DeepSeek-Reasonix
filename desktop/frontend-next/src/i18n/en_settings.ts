@@ -19,6 +19,9 @@ export const EN_SETTINGS: Record<string, string> = {
   "默认模型": "Default model",
   "当前对话和大多数任务": "This conversation and most tasks",
   "随主模型": "Follows the default",
+  "「{key}」已被配置固定为 {model}，这里的选择对它不起作用。": "“{key}” is pinned to {model} by configuration, so the choice here does not apply to it.",
+  "改回跟随这里": "Follow this choice",
+  "来自项目配置，需在项目里修改": "Set by the project config; change it there",
   "在「模型服务」添加决策来源": "Add a decision source under Model services",
   "按用途选择模型": "Models by use",
   "默认模型用于当前对话和大多数任务，其他用途默认跟随它；只有要为某件事换一个模型时才改。切换会保留对话并重建运行时，任务执行期间无法修改。":
@@ -35,8 +38,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "添加一个模型服务后，在这里查看和修改它。": "Add a model service to see and change it here.",
   "选择一个服务查看和修改；地址、密钥与模型列表保存后生效。自定义中转站的协议与模型会在连接后自动探测。":
     "Pick a service to see and change it; the address, key and model list take effect when saved. A custom gateway's protocol and models are detected once it connects.",
-  "这个端点还有 {n} 个模型不在列表里：{names}。点「刷新模型目录」把它们加进来。":
-    "This endpoint has {n} more models not in the list: {names}. Use Refresh model catalog to add them.",
+  "这个端点还有 {n} 个模型不在列表里：{names}。点「从服务商读取可用模型」把它们加进来。":
+    "This endpoint has {n} more models not in the list: {names}. Use Read available models from provider to add them.",
   "添加来源": "Add source",
   "完成标准": "Completion standard",
   "系统根据任务风险自动决定需要的验证程度，不再要求手动选择均衡或交付。": "Reasonix chooses the needed verification level from task risk; there is no longer a Balanced or Delivery choice.",
@@ -477,6 +480,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "生成摘要的请求运行满 30 分钟仍未完成，已停止":
     "The request that writes the summary was still running after 30 minutes and was stopped",
   "摘要在输出上限处被截断，没有采用": "The summary hit the output limit and was discarded",
+  "摘要模型没有按要求的标题给出摘要，没有采用": "The summarizer did not return a briefing under the required headings, so it was not used",
   "待折叠的内容缩减后仍超过单次摘要请求的容量": "The content to fold still exceeds one summary request after shortening",
   "摘要生成期间对话发生了变化，已放弃这次折叠": "The conversation changed while the summary was written, so this fold was dropped",
   "摘要没有记下这段内容里的任何一处改动，已放弃这次折叠": "The summary recorded none of this span's changes, so this fold was dropped",
@@ -719,7 +723,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "验证连接并读取": "Check connection and read models",
   "连接可用 · 找到 {n} 个模型": "Connection works · {n} models found",
   "接口地址已补全为 {url}": "Address completed to {url}",
-  "刷新模型目录时，模型列表只在 {url} 下响应。聊天若能正常使用就不用改；可选：把接口地址改成它。": "The model list only answers at {url}. If chat already works, no change is needed; optionally set the address to it.",
+  "读取可用模型时，模型列表只在 {url} 下响应。聊天若能正常使用就不用改；可选：把接口地址改成它。": "The model list only answers at {url}. If chat already works, no change is needed; optionally set the address to it.",
   "启用的模型": "Enabled models",
   "目录只用于发现，不是白名单。直接输入服务商给出的原始模型 ID 即可。": "The catalogue is for discovery, not a whitelist. You can enter any exact model ID supplied by the service.",
   "阈值需至少为 1,000，并小于模型上下文窗口。": "The threshold must be at least 1,000 and below the model context window.",

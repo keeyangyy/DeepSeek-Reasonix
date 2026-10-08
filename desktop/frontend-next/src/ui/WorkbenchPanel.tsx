@@ -9,6 +9,7 @@ import type {
   WorkspaceChange,
   WorkspaceFile,
 } from "../port/port";
+import { openPage, pageForEmptyColumn } from "./browser_open";
 import { AgentBrowserPanel, ManualBrowserPanel, UNREAD_TABS } from "./BrowserPanel";
 import { DiffView } from "./cards/DiffView";
 import { StudioIcon } from "./StudioIcon";
@@ -275,8 +276,7 @@ export function WorkbenchPanel({
     // A shell that draws views opens a view here too: a framed page is refused
     // by any site sending X-Frame-Options or frame-ancestors, as many do.
     if (host().drawsBrowserViews()) {
-      port
-        .browserOpen("about:blank", true)
+      pageForEmptyColumn(port)
         .then((tab) => pick(`browser:${tab.target}`))
         .catch((e) => setFailed(reason(e)));
       return;
@@ -455,7 +455,7 @@ export function WorkbenchPanel({
       return;
     }
     try {
-      const tab = await port.browserOpen("about:blank", true);
+      const tab = await openPage(port, "about:blank");
       pick(`browser:${tab.target}`);
     } catch (e) {
       setFailed(reason(e));

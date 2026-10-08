@@ -205,6 +205,21 @@ describe("WorkbenchPanel", () => {
     expect(screen.getByRole("tab", { name: "Link" }).getAttribute("aria-selected")).toBe("true");
   });
 
+  it("selects a link's page again after the previous one was closed, with the agent's tab still active", async () => {
+    const user = userEvent.setup();
+    const props = { port: new MockPort(), manual: true, shown: false, scheme: "dark" as const, changes: [], onCloseManual: vi.fn(), onSurfaces: vi.fn(), onExternal: vi.fn() };
+    const agent = { id: "b1", target: "t1", url: "https://top.baidu.com", title: "Agent page", active: true };
+    const first = { id: "b2", target: "t2", url: "https://example.com", title: "First", active: false };
+    const second = { id: "b3", target: "t3", url: "https://example.org", title: "Second", active: false };
+    const { rerender } = render(<WorkbenchPanel {...props} tabs={[agent]} />);
+    rerender(<WorkbenchPanel {...props} tabs={[agent, first]} />);
+    expect(screen.getByRole("tab", { name: "First" }).getAttribute("aria-selected")).toBe("true");
+    await user.click(screen.getByRole("button", { name: "关闭 First" }));
+    rerender(<WorkbenchPanel {...props} tabs={[agent]} />);
+    rerender(<WorkbenchPanel {...props} tabs={[agent, second]} />);
+    expect(screen.getByRole("tab", { name: "Second" }).getAttribute("aria-selected")).toBe("true");
+  });
+
   it("lists dot folders only once hidden files are asked for, and remembers the choice", async () => {
     const user = userEvent.setup();
     localStorage.removeItem("rx-show-hidden-files");

@@ -1,6 +1,8 @@
-import { HttpError, KernelBusyError } from "./http_error";
+import { DeliveryError, HttpError } from "./http_error";
+import type { DeliveryFault } from "./http_error";
 import type { Attachment, DroppedRef } from "./attachment";
-export { HttpError, KernelBusyError };
+export { DeliveryError, HttpError };
+export type { DeliveryFault };
 export type { Attachment, DroppedRef };
 
 import type { AccountState, AccountUser, DeviceGrant } from "./account";
@@ -15,7 +17,7 @@ import type { UsageQuery, UsageReport } from "./usage";
 export { DEFAULT_USAGE_DAYS } from "./usage";
 export type { MemoryEdit } from "./memory";
 export type { Money, UsageDay, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
-import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments } from "./model";
+import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, Preset, RewindPlan, RewindResult, RewindScope, SessionEntry, SessionStatus, WalletLine, WalletReading, PlanAction } from "./session";
 import type { ContextBreakdown, ShellOption, ShellSettings } from "./shell";
@@ -31,7 +33,7 @@ export type { AccountState, AccountUser, ApprovalDefault, ApprovalMode, Approval
   HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource, JobEntry, McpCatalog, McpDraft,
   McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, MemoryCatalog,
   MemoryEntry, ModelEntry, ModelMode, ModelPrice, NetworkProbe, NetworkSettings, Preset, RewindPlan,
-  RewindResult, RewindScope, RoleAssignments, ScopeLayer, SessionEntry, SessionStatus,
+  RewindResult, RewindScope, RoleAssignments, RoleOverride, ScopeLayer, SessionEntry, SessionStatus,
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
   VersionHub, WalletLine, WalletReading, ChangeDiff, CommitFile, CommitProposal, CommitRequest, CommitResult, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceFile, WorkspaceFiles, WorkspaceInfo };
 
@@ -309,6 +311,11 @@ export interface AgentPort {
   // Persisted, then the runtime is rebuilt: boot reads every role model while
   // assembling, so an assignment cannot reach a runtime that is already up.
   setRole(role: string, ref: string): Promise<void>;
+  // Entries that win over a role's global model, per role. The global value
+  // roles() reports is not what runs while one of these exists.
+  roleOverrides(): Promise<Record<string, RoleOverride[]>>;
+  // Removes one user-config entry and rebuilds, so the global model takes over.
+  clearRoleOverride(role: string, key: string): Promise<void>;
   storage(query?: StorageQuery): Promise<StorageState>;
   planStorageMove(root: string, dir: string): Promise<StoragePlan>;
   moveStorage(root: string, dir: string): Promise<StoragePlan>;
@@ -566,8 +573,12 @@ export interface AgentPort {
   // The person's answer to "trust this folder?" for the session's workspace.
   decideWorkspaceTrust(trust: "trusted" | "declined"): Promise<void>;
   setPreset(preset: Preset): Promise<void>;
-  // Switches this session only; asDefault also records it as the model new sessions start on.
-  setModel(ref: string, asDefault?: boolean): Promise<void>;
+  // Switches this session only.
+  setModel(ref: string): Promise<void>;
+  // Records the model new sessions start on in the config of the machine this
+  // port answers for. A brokered pane's default lives on the machine its models
+  // come from, so its refusal is typed: settings.default_model_brokered.
+  setDefaultModel(ref: string): Promise<void>;
   setEffort(effort: string): Promise<void>;
   // "" turns the session's model mode off.
   setModelMode(mode: string): Promise<void>;

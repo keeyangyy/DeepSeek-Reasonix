@@ -57,6 +57,7 @@ const STATUS: [string, string, string][] = [
   ["studio", '.tool-state[data-state="running"]', "--net"],
   ["studio", ".run-live", "--net"],
   ["studio", ".activity-running", "--net"],
+  ["studio", ".studio-runstate[data-running] .studio-runlabel", "--net"],
 ];
 
 describe("decorative roles are not painted with a status hue", () => {
@@ -68,6 +69,15 @@ describe("decorative roles are not painted with a status hue", () => {
       for (const token of tokens) expect(body).toContain(`var(${token})`);
     });
   }
+});
+
+it("keeps composer labels quiet until the pane is running", () => {
+  const css = sheet("studio");
+  const label = css.match(/^\.studio-runlabel\s*\{([^}]*)\}/m)?.[1] ?? "";
+  expect(label).toMatch(/font:\s*inherit/);
+  expect(label).not.toMatch(/padding:|background:|font-weight:/);
+  expect(bodies(css, ".studio-runstate[data-waiting] .studio-runlabel")).toBe("");
+  expect(bodies(css, ".studio-runstate[data-idle] .studio-runlabel")).toBe("");
 });
 
 describe("status roles keep the status hues", () => {

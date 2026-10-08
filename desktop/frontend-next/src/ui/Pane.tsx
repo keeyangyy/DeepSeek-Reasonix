@@ -194,7 +194,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
   const refreshStatus = useCallback(() => port.status().then(applyStatus).catch(() => {}), [port, applyStatus]);
 
-  const [wallet, refreshWallet] = useWallet(port);
+  const [wallet, refreshWallet] = useWallet(port, accountOf(status?.modelRef));
   const hideAmounts = useHidesAmounts();
 
   const revalue = useCallback(() => {
@@ -661,11 +661,11 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             className="studio-runstate"
             role="status"
             aria-live="polite"
+            data-running={running && !blocked ? "" : undefined}
             data-waiting={blocked ? "" : undefined}
             data-idle={running || blocked ? undefined : ""}
           >
-            <RMark />
-            <span>{t(chipLabel(s, running))}</span>
+            <span className="studio-runlabel"><RMark /><span>{t(chipLabel(s, running))}</span></span>
             <RunTokens sent={sent} received={received} estimated={s.outLive > 0} />
           </div>
         )}
@@ -744,7 +744,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
           )}
           {cost && <span className="studio-meter-cost"><span>{t("本轮")}</span><b>{hideAmounts ? MASK : cost}</b></span>}
           <button className="studio-meter-mask" type="button" data-action="metrics.hide-amounts" aria-pressed={hideAmounts} aria-label={hideAmounts ? t("显示金额") : t("隐藏金额")} title={hideAmounts ? t("显示金额") : t("隐藏金额")} onClick={() => setHidesAmounts(!hideAmounts)}><StudioIcon name={hideAmounts ? "eyeoff" : "eye"} /></button>
-          {wallet.kind === "read" && <button className="studio-meter-wallet" data-action="settings.section" data-value="usage" aria-label={t("查看钱包余额")} onClick={() => onSettings("usage")}><StudioIcon name="wallet" /><b>{hideAmounts ? MASK : wallet.reading.display}</b></button>}
+          {wallet.kind === "read" && <button className="studio-meter-wallet" data-short={wallet.reading.available ? undefined : "true"} title={wallet.reading.available ? undefined : t("余额不足")} data-action="settings.section" data-value="usage" aria-label={wallet.reading.available ? t("查看钱包余额") : `${t("查看钱包余额")}, ${t("余额不足")}`} onClick={() => onSettings("usage")}><StudioIcon name="wallet" /><b>{hideAmounts ? MASK : wallet.reading.display}</b></button>}
           <DeckChips tasks={rail.tasks} jobs={jobs} open={deck} onOpen={setDeck} onCancelJob={(id) => port.cancelJob(id).then(refreshStatus, fail)} />
         </div>
         {/* Below the box, under a ceiling of their own. Both arrive unbidden and
@@ -757,7 +757,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
               <button onClick={() => dispatch({ kind: "__error", text: "" } as never)}>{t("知道了")}</button>
             </div>
           )}
-          <RuntimeBar notices={s.runtime} onSeen={(id) => dispatch({ kind: "__runtime_seen", id } as never)} watch={s} onStall={(a) => a === "stop" ? void port.cancel().catch(fail) : a === "continue" ? void submit(t("继续")) : dispatch({ kind: a === "mute" ? "__stall_mute" : "__stall_dismiss" } as never)} />
+          <RuntimeBar notices={s.runtime} onSettings={onSettings} onSeen={(id) => dispatch({ kind: "__runtime_seen", id } as never)} watch={s} onStall={(a) => a === "stop" ? void port.cancel().catch(fail) : a === "continue" ? void submit(t("继续")) : dispatch({ kind: a === "mute" ? "__stall_mute" : "__stall_dismiss" } as never)} />
         </div>
       </div>
 

@@ -50,7 +50,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /plan-decision", s.planDecision)
 	mux.HandleFunc("POST /plan", s.plan)
 	mux.HandleFunc("POST /preset", s.preset)
-	mux.HandleFunc("POST /model", s.model)
+	s.registerModelRoutes(mux)
 	mux.HandleFunc("POST /effort", s.effort)
 	mux.HandleFunc("POST /model-mode", s.modelMode)
 	mux.HandleFunc("POST /compact", s.compact)

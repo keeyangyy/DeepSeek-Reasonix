@@ -54,10 +54,16 @@ interface Props {
   checkDisabled?: boolean;
   onToggle: (m: string) => void;
   onAdd: (m: string) => void;
+  // The same read the section header offers, placed where a missing model is noticed.
+  onFetch?: () => void;
+  fetching?: boolean;
+  fetchDisabled?: boolean;
+  fetchFail?: string;
 }
 
 export function ModelChoice({
   models, picked, vision, def, onDefault, onVision, visionLocked, facts, onCheck, checkDisabled, onToggle, onAdd,
+  onFetch, fetching, fetchDisabled, fetchFail,
 }: Props) {
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
@@ -101,7 +107,19 @@ export function ModelChoice({
           }}
         />
         {query && <span className="cnt">{hits.length} / {models.length}</span>}
+        {onFetch && (
+          <button className="mfetch" data-action="provider.probe" onClick={onFetch} disabled={fetchDisabled}>
+            {t(fetching ? "正在从服务商读取…" : "没找到？从服务商读取可用模型")}
+          </button>
+        )}
       </div>
+      {fetchFail && (
+        <div className="find" data-lvl="err" role="alert">
+          <span className="t">{t("读取模型列表失败")}</span>
+          <span className="why">{fetchFail}</span>
+          <span className="why">{t("可以直接输入完整模型 ID 添加。")}</span>
+        </div>
+      )}
 
       <div className="mrows">
         {shown.map((m) => (

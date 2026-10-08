@@ -1,4 +1,5 @@
-import { HttpError, KernelBusyError } from "../port/port";
+import { DeliveryError, HttpError } from "../port/port";
+import type { DeliveryFault } from "../port/port";
 import { t } from "./index";
 
 // What the kernel says when it refuses, in the language the reader uses.
@@ -46,6 +47,7 @@ const SAID: Record<string, string> = {
   "workspace.file_failed": "文件操作失败，请重试",
   "workspace.path_outside_tree": "该路径不在当前工作区内",
   "workspace.write_outside_scope": "写入目标不在工作区可写范围内。这是文件工具的写入范围，不是操作系统沙箱；要允许写入，请在 设置 → 沙箱 → 额外可写目录 中添加目标文件夹",
+  "workspace.network_path_outside_scope": "该路径指向网络上的另一台机器，不在当前工作区内。文件工具只按路径写法拒绝它，不会去访问；工作区本身在网络共享上时，其下的路径可用",
   "workspace.files_failed": "无法读取工作区文件列表",
   "workspace.file_unreadable": "该文件不是可编辑文本或超过大小限制",
   "provider.model_in_use": "该来源正在使用中，请先切换模型再删除",
@@ -103,6 +105,7 @@ const SAID: Record<string, string> = {
   "shell.unavailable_over_http": "HTTP 上不提供 shell 命令",
   "roles.unknown": "不存在「{role}」这个角色",
   "roles.model_unknown": "没有已配置的模型匹配「{model}」",
+  "roles.override_not_in_user_config": "「{key}」不在用户配置里，可能已被清除，或来自项目配置",
   "shell.editing_disabled": "这台服务器未开放 shell 设置",
   "account.signin_disabled": "这台服务器未开放账号登录",
   "backup.signed_out": "登录账号后才能使用云备份",
@@ -124,6 +127,8 @@ const SAID: Record<string, string> = {
   "workspace.limit_reached": "项目列表已满（32 个），请先移除一个项目再添加",
   "workspace.changing_disabled": "这台服务器不支持切换工作区",
   "settings.unknown_preset": "不存在该预设",
+  "settings.unknown_model": "没有找到这个模型，默认模型没有改动",
+  "settings.default_model_brokered": "这个窗格的默认模型由模型所在的那台机器决定，请在本机的窗格里设置",
   "drop.too_many_paths": "本次拖入 {count} 个，最多允许 {limit} 个",
   "attachment.unsupported_image": "这个文件的格式暂不支持（{format}）。支持的图片格式：{supported}。可以先转换格式再添加。",
   "attachment.too_large": "这个文件超过 {limit_mb} MB 的上限，请压缩或拆分后再添加。",
@@ -157,6 +162,7 @@ const SAID: Record<string, string> = {
   // ── 来源：连接与授权 ─────────────────────────────────────────────
   "provider.editing_disabled": "这台服务器不允许修改模型来源",
   "browser.open_failed": "打不开这个网页：{error}",
+  "browser.network_path": "内置浏览器不会打开指向网络上另一台机器的路径，只按路径写法拒绝，不会去访问",
   "browser.engine_missing": "没有找到可用的浏览器。请安装 Chrome、Edge 或 Chromium，或在配置里用 [browser] executable 指定路径，新会话才会读到",
   "browser.engine_failed": "内置浏览器没能启动，稍后再试一次",
   "browser.profile_busy": "内置浏览器的资料目录正被另一个浏览器占用。关掉其他 Studio 窗口或用同一资料目录的浏览器后再试",
@@ -459,13 +465,19 @@ export function say(reason: Reason | null | undefined, fallback = ""): string {
  *  window's language, anything else prints as itself. One call so no display
  *  site has to know which kind it caught. */
 export function reason(e: unknown): string {
-  if (e instanceof KernelBusyError) return t("内核繁忙或无法连接，这次回答可能没有被收到，重试前请先确认");
+  if (e instanceof DeliveryError) return t(UNCONFIRMED[e.fault]);
   if (e instanceof HttpError && e.reason) return say(e.reason, e.message);
   // Nothing came back but a status: printing message here would put a path and
   // a number in front of the user. The status is the only identity there is.
   if (e instanceof HttpError && !e.detailed) return t("请求未能送达内核（HTTP {status}）", { status: e.status });
   return e instanceof Error ? e.message : String(e);
 }
+
+const UNCONFIRMED: Record<DeliveryFault, string> = {
+  kernel_busy: "内核繁忙，这次操作可能没有被收到，重试前请先确认",
+  unreachable: "无法连接内核，这次操作可能没有送达，重试前请先确认",
+  ui_stalled: "本界面无响应，这次操作可能没有送达内核，重试前请先确认",
+};
 
 /** codes is what the parity check reads. */
 export const codes = SAID;

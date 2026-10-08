@@ -89,9 +89,9 @@ it("caps what the overlay draws and says so", () => {
   expect(screen.getByRole("dialog").textContent).toContain("仅显示前 200000 个字符");
 });
 
-it("keeps the count stable when the last running delegate finishes", () => {
+it("counts only running delegates, reaching 0 when the last one finishes", () => {
   const n = (ts: Task[]) => render(<Host tasks={ts} />).container.querySelector('[data-action="deck.agents"] b')?.textContent;
-  expect(n([task("a", true, "A"), task("b", false, "B")])).toBe("2");
+  expect(n([task("a", true, "A"), task("b", false, "B")])).toBe("1");
   cleanup();
-  expect(n([task("a", false, "A"), task("b", false, "B")])).toBe("2");
+  expect(n([task("a", false, "A"), task("b", false, "B")])).toBe("0");
 });

@@ -18,9 +18,22 @@ describe("the Subagents panel for a background child", () => {
   it("reads running while the child works", () => {
     expect(draw("tool")).toContain('data-status="running"');
   });
+  it("counts a queued child as running", () => {
+    const html = draw("queued");
+    expect(html).toContain('data-status="running"');
+    expect(html).toContain("运行中 1 / 共 1");
+  });
   it("reads delivered once it has finished", () => {
     const html = draw("completed");
     expect(html).toContain('data-status="done"');
-    expect(html).not.toContain("运行中");
+    expect(html).not.toContain('data-status="running"');
+  });
+});
+
+describe("a session restored from disk", () => {
+  it("counts no restored sub-agent as running", () => {
+    const s = [...base, { kind: "tool_progress", tool: { id: "c1", name: "reasonix.subagent.status", output: "completed" } } as SessionEvent].reduce(reduce, initialState);
+    const html = renderToStaticMarkup(<Agents tasks={railOf(s.items, s.executions, s.subagentPhase).tasks} />);
+    expect(html).toContain("运行中 0 / 共 1");
   });
 });

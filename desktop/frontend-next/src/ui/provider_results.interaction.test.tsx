@@ -29,8 +29,8 @@ const said = () => summary()?.textContent ?? "";
 
 it("shows a refresh failure inside the model section, under its button", async () => {
   draw({ checkProvider: vi.fn(async () => ({ ok: false, code: "provider.probe.path_not_found", httpStatus: 404 })) });
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
-  const failure = await screen.findByText("刷新模型目录失败");
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
+  const failure = await screen.findByText("读取模型列表失败");
   expect(list().contains(failure)).toBe(true);
   expect(failure.closest(".find")?.getAttribute("role")).toBe("alert");
   expect(failure.closest(".find")?.textContent).toContain("HTTP 404");
@@ -39,14 +39,14 @@ it("shows a refresh failure inside the model section, under its button", async (
 it("says so when a refresh finds nothing new, instead of staying silent", async () => {
   draw({ checkProvider: vi.fn(async () => ({ ok: true, models: ["alpha", "beta", "gamma"] })) });
   expect(screen.queryByText("没有发现新模型")).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
   const note = await screen.findByText("没有发现新模型");
   expect(list().contains(note)).toBe(true);
 });
 
 it("reports what a refresh added and what it kept, in the model section", async () => {
   draw({ checkProvider: vi.fn(async () => ({ ok: true, models: ["alpha", "delta"] })) });
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
   const note = await screen.findByText(/发现 1 个新模型/);
   expect(list().contains(note)).toBe(true);
   expect(note.textContent).toContain("2 个已配置模型本次未返回");
@@ -57,10 +57,10 @@ it("clears the refresh result once the address changes, and a later failure repl
     .mockResolvedValueOnce({ ok: true, models: ["alpha", "beta", "gamma"] })
     .mockResolvedValueOnce({ ok: false, code: "provider.probe.path_not_found", httpStatus: 404 });
   draw({ checkProvider });
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
   await screen.findByText("没有发现新模型");
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
-  await screen.findByText("刷新模型目录失败");
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
+  await screen.findByText("读取模型列表失败");
   expect(screen.queryByText("没有发现新模型")).toBeNull();
 });
 

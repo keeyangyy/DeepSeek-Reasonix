@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import { hidesAmounts, onHidesAmountsChange } from "../state/prefs";
@@ -39,14 +39,28 @@ export function useHidesAmounts(): boolean {
   return useSyncExternalStore(onHidesAmountsChange, hidesAmounts, hidesAmounts);
 }
 
-/** The wallet only moves when a turn spends, so the caller decides when to read. */
-export function useWallet(port: AgentPort): [Wallet, () => void] {
+/** The wallet only moves when a turn spends, so the caller decides when to read.
+ *  It belongs to `source` — the account (connection) that answers it — so a
+ *  change of source empties it at once and reads again, and only the latest
+ *  read may land. */
+export function useWallet(port: AgentPort, source?: string): [Wallet, () => void] {
   const [wallet, setWallet] = useState<Wallet>(ABSENT);
+  const latest = useRef(0);
   const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    const land = (w: Wallet) => { if (mine === latest.current) setWallet(w); };
     port
       .balance()
-      .then((reading) => setWallet(reading ? { kind: "read", reading } : ABSENT))
-      .catch((e) => setWallet({ kind: "unread", why: reason(e) }));
+      .then((reading) => land(reading ? { kind: "read", reading } : ABSENT))
+      .catch((e) => land({ kind: "unread", why: reason(e) }));
   }, [port]);
+  const held = useRef(source);
+  useEffect(() => {
+    if (held.current !== undefined && held.current !== source) {
+      setWallet(ABSENT);
+      refresh();
+    }
+    held.current = source;
+  }, [source, refresh]);
   return [wallet, refresh];
 }

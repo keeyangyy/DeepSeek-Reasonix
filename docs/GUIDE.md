@@ -207,12 +207,17 @@ after consent are silent and never change stdout, stderr, or the process exit
 code; unsent counters stay in a bounded local queue for a later invocation.
 
 The ping contains a dedicated random 128-bit CLI install ID, CLI version, OS,
-architecture, and the `cli` surface marker. Counter batches use that same ID for
-daily active-install deduplication and contain only fixed buckets such as CLI
-mode/profile, permission/session mode, turn latency, finish reason, cache-hit
-range, generic Provider/tool error class, compaction, recovery counters, and
-normalized UI language. This ID is separate from the desktop install ID and is
-not an account, hardware, repository, or session identifier.
+architecture, and the `cli` surface marker. This ID is separate from the desktop
+install ID and is not an account, hardware, repository, or session identifier.
+
+Counter batches use that same ID for daily active-install deduplication and
+contain only fixed buckets such as CLI mode/profile, permission/session mode,
+turn latency, finish reason, cache-hit range, generic Provider/tool error class,
+compaction, recovery counters, per-turn token-volume buckets, workspace-lease
+contention buckets, and normalized UI language.
+
+Closing the prompt without answering (end of input, Ctrl+D) stores nothing and
+uploads nothing; it asks again the next time.
 
 Reasonix never uploads prompts, answers, reasoning, tool names/arguments/output,
 paths, repositories/branches, session IDs, exact token or cost values,

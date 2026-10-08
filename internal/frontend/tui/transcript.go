@@ -260,6 +260,7 @@ func (t *Transcript) Apply(ev eventwire.Event) {
 		t.Terminal, t.EndReason = terminalOf(ev)
 		t.sealSays()
 		t.sealTools(ev.Err != "")
+		t.sealPrompts()
 		if ev.Receipt != nil && ev.Receipt.SaysSomething {
 			t.Items = append(t.Items, Item{ID: t.id(), Kind: ItemReceipt, Receipt: ev.Receipt})
 		}
@@ -534,6 +535,17 @@ func (t *Transcript) sealTools(failed bool) {
 			if failed && it.Tool.Err == "" && it.Tool.Output == "" {
 				it.Tool.Err = "interrupted"
 			}
+		}
+	}
+}
+
+// sealPrompts closes the prompts still open when the turn ends: the kernel drops
+// its pending decisions with the turn, so none of them can be answered any more.
+func (t *Transcript) sealPrompts() {
+	for i := range t.Items {
+		it := &t.Items[i]
+		if (it.Kind == ItemApproval || it.Kind == ItemAsk) && it.Verdict == "" {
+			it.Verdict = "expired"
 		}
 	}
 }

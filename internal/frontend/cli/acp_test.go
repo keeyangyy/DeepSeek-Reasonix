@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"reasonix/internal/base/i18n"
-	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -305,89 +304,6 @@ api_key_env = "REASONIX_TEST_KEY"
 	work, _ = findACPConfigOption(state.ConfigOptions, "work_mode")
 	if work.CurrentValue != "balanced" || state.RuntimeProfile != "balanced" {
 		t.Fatalf("legacy full profile = %+v / %q, want balanced", work, state.RuntimeProfile)
-	}
-}
-
-func TestACPTaskProfileDefaults(t *testing.T) {
-	cfg := config.Default()
-	cfg.Agent.SubagentModel = "default-model"
-	cfg.Agent.SubagentEffort = "high"
-	cfg.Agent.SubagentModels = map[string]string{"task": "task-model"}
-	cfg.Agent.SubagentEfforts = map[string]string{"task": "max"}
-
-	model, effort := acpTaskProfileDefaults(cfg)
-	if model != "task-model" || effort != "max" {
-		t.Fatalf("task profile defaults = %q/%q, want task-model/max", model, effort)
-	}
-
-	cfg.Agent.SubagentModels = nil
-	cfg.Agent.SubagentEfforts = nil
-	model, effort = acpTaskProfileDefaults(cfg)
-	if model != "default-model" || effort != "high" {
-		t.Fatalf("fallback task profile defaults = %q/%q, want default-model/high", model, effort)
-	}
-}
-
-func TestACPSubagentProviderResolverHonorsProfile(t *testing.T) {
-	cfg := config.Default()
-	cfg.Providers = []config.ProviderEntry{
-		{
-			Name:             "parent",
-			Kind:             acpTestProviderKind,
-			Model:            "parent-model",
-			ContextWindow:    111,
-			SupportedEfforts: []string{"low", "high"},
-		},
-		{
-			Name:             "sub",
-			Kind:             acpTestProviderKind,
-			Models:           []string{"sub-model"},
-			Default:          "sub-model",
-			ContextWindow:    222,
-			SupportedEfforts: []string{"low", "high"},
-		},
-	}
-	parent, ok := cfg.ResolveModel("parent")
-	if !ok {
-		t.Fatal("parent model did not resolve")
-	}
-
-	resolve := newACPSubagentProviderResolver(cfg, parent, netclient.ProxySpec{})
-	prov, _, ctxWin, err := resolve("sub/sub-model", "HIGH")
-	if err != nil {
-		t.Fatalf("resolve sub profile: %v", err)
-	}
-	got := prov.(*acpTestProvider).cfg
-	if got.Model != "sub-model" || got.Extra["effort"] != "high" || ctxWin != 222 {
-		t.Fatalf("resolved profile = model:%q effort:%v ctx:%d, want sub-model/high/222", got.Model, got.Extra["effort"], ctxWin)
-	}
-
-	prov, _, ctxWin, err = resolve("", "low")
-	if err != nil {
-		t.Fatalf("resolve effort-only profile: %v", err)
-	}
-	got = prov.(*acpTestProvider).cfg
-	if got.Model != "parent-model" || got.Extra["effort"] != "low" || ctxWin != 111 {
-		t.Fatalf("effort-only profile = model:%q effort:%v ctx:%d, want parent-model/low/111", got.Model, got.Extra["effort"], ctxWin)
-	}
-}
-
-func TestACPSubagentProviderResolverRejectsInvalidEffort(t *testing.T) {
-	cfg := config.Default()
-	cfg.Providers = []config.ProviderEntry{{
-		Name:             "parent",
-		Kind:             acpTestProviderKind,
-		Model:            "parent-model",
-		SupportedEfforts: []string{"low", "high"},
-	}}
-	parent, ok := cfg.ResolveModel("parent")
-	if !ok {
-		t.Fatal("parent model did not resolve")
-	}
-
-	resolve := newACPSubagentProviderResolver(cfg, parent, netclient.ProxySpec{})
-	if _, _, _, err := resolve("", "max"); err == nil {
-		t.Fatal("invalid effort should fail before ACP task falls back to the parent profile")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"reasonix/internal/base/i18n"
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/eventwire"
 )
 
@@ -50,17 +51,13 @@ func TestTranscriptRowsTheKernelDoesNotWordAreTranslated(t *testing.T) {
 // shown as the kernel's English.
 func TestCodedNoticesFollowTheUILanguage(t *testing.T) {
 	inChinese(t)
-	budget := &Item{Code: "context_budget", Text: "Context at 83% of the compaction threshold", Detail: `{"percent":83,"remaining":135785}`}
-	if got := renderNotice(budget); !strings.Contains(got, "83%") || !strings.Contains(got, "135785") || strings.Contains(got, "compaction threshold") {
-		t.Fatalf("budget notice = %q", got)
-	}
 	steer := &Item{Code: "unapplied_steer", Text: "Guidance was not applied: sync", Detail: "sync"}
 	if got := renderNotice(steer); !strings.Contains(got, "引导没有生效") || !strings.Contains(got, "sync") || strings.Contains(got, "Guidance was not applied") {
 		t.Fatalf("steer notice = %q", got)
 	}
-	broken := &Item{Code: "context_budget", Text: "kernel english", Detail: "not json"}
-	if got := renderNotice(broken); !strings.Contains(got, "kernel english") {
-		t.Fatalf("an undecodable payload must fall back to the kernel's text, got %q", got)
+	unknown := &Item{Code: "no_such_code", Text: "kernel english", Detail: "not json"}
+	if got := renderNotice(unknown); !strings.Contains(got, "kernel english") {
+		t.Fatalf("a code with no wording must fall back to the kernel's text, got %q", got)
 	}
 }
 
@@ -78,10 +75,10 @@ func TestUnappliedSteerTextIsSanitisedAndCapped(t *testing.T) {
 
 func TestFoldedCodedNoticeShowsTheLatestPayload(t *testing.T) {
 	tr := fold(
-		eventwire.Event{Kind: "notice", Level: "warn", Code: "context_budget", Text: "a", Detail: `{"percent":76,"remaining":50}`},
-		eventwire.Event{Kind: "notice", Level: "warn", Code: "context_budget", Text: "b", Detail: `{"percent":93,"remaining":9}`},
+		eventwire.Event{Kind: "notice", Level: "warn", Code: "unapplied_steer", Text: "a", Detail: "first"},
+		eventwire.Event{Kind: "notice", Level: "warn", Code: "unapplied_steer", Text: "b", Detail: "second"},
 	)
-	if len(tr.Items) != 1 || tr.Items[0].Count != 2 || tr.Items[0].Detail != `{"percent":93,"remaining":9}` {
+	if len(tr.Items) != 1 || tr.Items[0].Count != 2 || tr.Items[0].Detail != "second" {
 		t.Fatalf("items = %+v", tr.Items)
 	}
 }
@@ -103,5 +100,25 @@ func TestCompactionNoticesAndCardNameTheirReasonInTheUILanguage(t *testing.T) {
 	card := &Item{Done: true, Compaction: &eventwire.Compaction{Trigger: "auto", Code: "cancelled"}}
 	if got := renderCompaction(card, 80); !strings.Contains(got, "压缩被取消") {
 		t.Fatalf("cancelled card = %q", got)
+	}
+}
+
+// A skipped extension is worded from its typed payload: named, located, and
+// with the way out, in the UI language; a payload this build cannot read keeps
+// the kernel's English.
+func TestSkippedExtensionNoticeFollowsTheUILanguage(t *testing.T) {
+	inChinese(t)
+	detail := event.ExtensionSkipped{Extension: "aipush-ask-bridge", Point: "tool.before", Reason: event.ExtensionSkipReasonNoLiveSidecar}.Encode()
+	got := renderNotice(&Item{Code: event.NoticeCodeExtensionSkipped, Text: "english", Detail: detail})
+	for _, want := range []string{"aipush-ask-bridge", "tool.before", "配套后台程序没有运行", "/plugins"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("notice %q lacks %q", got, want)
+		}
+	}
+	if strings.Contains(got, "{") || strings.Contains(got, "english") {
+		t.Fatalf("payload or fallback leaked into %q", got)
+	}
+	if got := renderNotice(&Item{Code: event.NoticeCodeExtensionSkipped, Text: "kernel english", Detail: "not json"}); !strings.Contains(got, "kernel english") {
+		t.Fatalf("unreadable payload must keep the kernel's text, got %q", got)
 	}
 }

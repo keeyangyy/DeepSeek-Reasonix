@@ -43,7 +43,7 @@ var (
 
 var slugSegment = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
-func slugPart(s string) bool { return slugSegment.MatchString(s) && s != "." && s != ".." }
+func slugPart(s string) bool { return slugSegment.MatchString(s) && !strings.HasPrefix(s, ".") }
 
 // Package is one listed capability as the registry describes it. Every field is
 // the publisher's claim; none of it decides what gets installed.

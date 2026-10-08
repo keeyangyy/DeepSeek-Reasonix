@@ -27,6 +27,9 @@ func (t *Tool) plan(ctx context.Context, req request) ([]action, []string, error
 	if isURL(req.Source) {
 		return t.planURL(ctx, req)
 	}
+	if err := t.refuseNetworkSource(req.Source); err != nil {
+		return nil, nil, err
+	}
 	path := t.resolvePath(req.Source)
 	if info, err := os.Stat(path); err == nil {
 		return t.planLocal(req, path, info)
@@ -181,11 +184,13 @@ func parseGitHubRepoSource(source string) (githubRepoSource, bool) {
 		}
 		parts = append(parts, part)
 	}
-	if len(parts) < 2 || !packageNameRe.MatchString(parts[0]) {
+	if len(parts) < 2 || !isPackageSegment(parts[0]) {
 		return githubRepoSource{}, false
 	}
 	repo := strings.TrimSuffix(parts[1], ".git")
-	if !packageNameRe.MatchString(repo) {
+	// Not isPackageSegment: GitHub allows repos with a leading dot (".github"),
+	// so only the dot-only names ("." and "..", e.g. from "...git") are refused.
+	if !packageNameRe.MatchString(repo) || strings.Trim(repo, ".") == "" {
 		return githubRepoSource{}, false
 	}
 	out := githubRepoSource{Owner: parts[0], Repo: repo}

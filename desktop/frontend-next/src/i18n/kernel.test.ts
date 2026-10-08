@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { boot, STORAGE } from "./index";
 import { ACCOUNT_SIGNIN_DISABLED, PROVIDER_EDIT_DISABLED, SAVED_NOT_APPLIED, codes, reason } from "./kernel";
-import { HttpError, KernelBusyError } from "../port/port";
+import { DeliveryError, HttpError } from "../port/port";
 
 // Pinned, not defaulted: with nothing stored the window follows the machine, so
 // on an English runner every assertion about a Chinese sentence would be about
@@ -45,6 +45,17 @@ describe("what a reader is told a refusal was", () => {
       localStorage.setItem(STORAGE, "en"); boot();
       const english = reason(error);
       expect(english).toContain("box");
+      expect(english).not.toBe(chinese);
+      expect(english).not.toBe("fixture fallback");
+    }
+  });
+  it("explains a refused network path in both languages", () => {
+    for (const code of ["workspace.network_path_outside_scope", "browser.network_path"]) {
+      localStorage.setItem(STORAGE, "zh"); boot();
+      const chinese = reason(coded("fixture fallback", code));
+      expect(chinese).not.toBe("fixture fallback");
+      localStorage.setItem(STORAGE, "en"); boot();
+      const english = reason(coded("fixture fallback", code));
       expect(english).not.toBe(chinese);
       expect(english).not.toBe("fixture fallback");
     }
@@ -93,9 +104,12 @@ describe("what a reader is told a refusal was", () => {
     expect(said).not.toContain("/skills/enabled");
   });
 
-  it("names a decision the kernel never answered as busy or unreachable", () => {
-    const said = reason(new KernelBusyError());
-    expect(said).toBe("内核繁忙或无法连接，这次回答可能没有被收到，重试前请先确认");
+  it("tells a busy kernel, an unreachable one and a stalled window apart", () => {
+    const said = (["kernel_busy", "unreachable", "ui_stalled"] as const).map((f) => reason(new DeliveryError(f)));
+    expect(new Set(said).size).toBe(3);
+    expect(said[0]).toContain("内核繁忙");
+    expect(said[1]).toContain("无法连接内核");
+    expect(said[2]).toContain("本界面无响应");
   });
 
   it("keeps a detailed answer the kernel had no code for", () => {

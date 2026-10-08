@@ -70,6 +70,7 @@ export const ACTIONS: UIAction[] = [
   // The way out of a window whose assets an update replaced underneath it.
   { id: "chrome.reload", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.receipt", kind: "view", target: "none", proof: "interaction" },
+  { id: "chrome.keep-awake", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preset", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preview", kind: "view", target: "none", proof: "interaction" },
@@ -198,6 +199,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.retry-mine", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "feedback.link", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.focus", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.expand", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.close", kind: "view", target: "none", proof: "interaction" },
   { id: "backup.category", kind: "view", target: "entity", proof: "interaction" },
   { id: "backup.label", kind: "view", target: "none", proof: "interaction" },
@@ -354,6 +356,7 @@ export const ACTIONS: UIAction[] = [
   { id: "provider.rename", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "provider.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "roles.model", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "roles.override.clear", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "permissions.rule-level", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "sandbox.workspace-root", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Where compaction starts. Declaring it rebuilds the runtime, which is why

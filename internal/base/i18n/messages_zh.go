@@ -32,6 +32,7 @@ var Chinese = Messages{
 		"summary_timeout":                  "生成摘要的请求停滞了：连续 6 分钟没有任何输出",
 		"summary_ceiling":                  "生成摘要的请求运行满 30 分钟仍未完成，已停止",
 		"summary_truncated":                "摘要在输出上限处被截断，没有采用",
+		"summary_not_digest":               "摘要模型没有按要求的标题给出摘要，没有采用",
 		"summary_input_too_large":          "待折叠的内容缩减后仍超过单次摘要请求的容量",
 		"hook_refused":                     "扩展拒绝了这次折叠",
 		"persist_failed":                   "折叠结果没能保存",
@@ -90,8 +91,8 @@ var Chinese = Messages{
 	ResumePickSearch:        "搜索：",
 	ResumePickNoMatch:       "没有匹配的会话",
 	TUIDeclinedFmt:          "已拒绝 %s %s",
-	NoticeContextBudgetFmt:  "上下文已用到压缩阈值的 %d%%，已告知模型约剩 %d 个词元的空间。",
 	NoticeUnappliedSteerFmt: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：\n%s",
+	NoticeExtSkippedFmt:     "扩展 %s 的配套后台程序没有运行，本次在 %s 已被跳过。用 /plugins 查看并启动它，或停用该扩展。",
 	TUIQuestion:             "提问",
 	TUISubagentCallsFmt:     "%d 次子代理调用",
 	TUIChartMoreRowsFmt:     "… 还有 %d 行",
@@ -774,4 +775,6 @@ var Chinese = Messages{
   密钥通过 api_key_env 从环境变量注入（如 DEEPSEEK_API_KEY）。
   运行 'reasonix setup' 生成配置；详见 docs/SPEC.md。
 `,
+
+	Feedback: feedbackChinese,
 }

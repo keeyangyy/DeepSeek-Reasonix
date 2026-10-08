@@ -25,12 +25,14 @@ export class HttpError extends Error {
   }
 }
 
-// A decision submit the kernel never answered within its bounded wait. The
-// request may or may not have landed, so the identity is the class itself:
-// a caller retries and the kernel's stale-decision refusal settles the rest.
-export class KernelBusyError extends Error {
-  constructor() {
-    super("kernel busy or unreachable");
-    this.name = "KernelBusyError";
+export type DeliveryFault = "kernel_busy" | "unreachable" | "ui_stalled";
+
+// A call the kernel never answered within its bounded wait. The request may or
+// may not have landed, so the identity is the fault: the kernel was slow, could
+// not be reached, or this window's own event loop was too starved to say which.
+export class DeliveryError extends Error {
+  constructor(readonly fault: DeliveryFault) {
+    super("request unconfirmed: " + fault);
+    this.name = "DeliveryError";
   }
 }

@@ -92,7 +92,7 @@ it("renders the same failure in English", async () => {
 it("refreshing the catalogue reports a typed failure instead of inventing one", async () => {
   const port = { checkProvider: vi.fn(async () => ({ ok: false, code: "provider.probe.path_not_found", httpStatus: 404 })) } as unknown as Port;
   render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
   const alert = await screen.findByText(/该路径没有模型清单/);
   expect(alert.textContent).toContain("HTTP 404");
   expect(screen.queryByText("这个端点没报出任何聊天模型")).toBeNull();
@@ -102,7 +102,7 @@ it("refreshing the catalogue reports a typed failure instead of inventing one", 
 it("refreshing still adds the models a passing check found", async () => {
   const port = { checkProvider: vi.fn(async () => ({ ok: true, models: ["relay-chat", "relay-new"] })) } as unknown as Port;
   render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} onRevert={() => {}} />);
-  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+  await userEvent.click(screen.getByRole("button", { name: "从服务商读取可用模型" }));
   await waitFor(() => expect(screen.getAllByText("relay-new").length).toBeGreaterThan(0));
 });
 

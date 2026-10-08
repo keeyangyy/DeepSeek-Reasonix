@@ -53,13 +53,14 @@ Jobs in the run:
 | --- | --- | --- |
 | `resolve` | Validates the tag shape and that the commit is on `studio`. | fails on any other ref |
 | `signing-contract` | Validates `.signpath/contracts/release-signing.yml` against the workflows that reach the Certum credentials and prints its fingerprint. | fails on an undeclared signing workflow |
-| `build` | Builds windows/amd64, darwin/amd64, darwin/arm64, linux/amd64; signs macOS. With signing on, the Windows leg uploads its bundle instead of packaging it. | Apple secrets are required |
-| `windows-sign-payload` | Only with `STUDIO_SIGNING_ENABLED=true`. Refuses a bundle whose PE files differ from the declared list, signs the release PE files, verifies them and the two Microsoft-signed DLLs, and records a digest of the whole signed tree as a job output. Installs no toolchain. | shared concurrency group `certum-signing`, environment `studio-release` |
-| `windows-package` | Builds the installer and zip from the signed tree as it came. Holds no secrets. | none |
-| `windows-verify-package` | Checks the payload against the recorded digest, unpacks the zip and the installer, requires both trees to match the payload file for file, and outputs the SHA-256 of both packages. Holds no secrets and no environment. | none |
-| `windows-sign-installer` | Requires both packages to hash to the checked values, signs the installer, verifies its signature, and outputs the signed installer's SHA-256. Opens no archive. | shared concurrency group `certum-signing`, environment `studio-release` |
+| `build` | Builds windows/amd64, windows/arm64 (on a native `windows-11-arm` runner), darwin/amd64, darwin/arm64, linux/amd64; signs macOS. Every PE image in a Windows bundle must carry its architecture's machine type. With signing on, each Windows leg uploads its bundle instead of packaging it. | Apple secrets are required |
+| `windows-sign-payload` | Only with `STUDIO_SIGNING_ENABLED=true`. One leg per architecture, run one after the other (`max-parallel: 1`). Refuses a bundle whose PE files differ from the declared list or are not all the leg's architecture, signs the release PE files, verifies them and the two Microsoft-signed DLLs, and records a digest of the whole signed tree as a job output. Installs no toolchain. | shared concurrency group `certum-signing`, environment `studio-release` |
+| `windows-package` | Builds each architecture's installer and zip from its signed tree as it came; the arm64 installer is packed with `ELECTRON_BUILDER_7Z_FILTER=BCJ`. Holds no secrets. | none |
+| `windows-verify-package` | Per architecture: checks the payload against the recorded digest, unpacks the zip and the installer, requires both trees to match the payload file for file and the installer to carry exactly its architecture's application archive, and outputs the SHA-256 of both packages. Holds no secrets and no environment. | none |
+| `windows-sign-installer` | One leg per architecture, run one after the other. Requires both packages to hash to the checked values, signs the installer, verifies its signature, and outputs the signed installer's SHA-256. Opens no archive. | shared concurrency group `certum-signing`, environment `studio-release` |
+| `windows-install-smoke` | Runs `scripts/install-smoke.ps1` (the script pull requests run against the unsigned installer) with each architecture's installer on a runner of that architecture: silent per-user install, waits for the files to settle, checks the installed tree (the declared PE set, every image's architecture, the shell's own architecture, the kernel starting) and uninstalls. Holds no secrets and no environment. | `publish` waits for it |
 | `cli` | Builds `reasonix` archives for six OS/arch targets plus `SHA256SUMS`. | fails on a missing archive |
-| `publish` | Renders the notes with their authors, minisigns, writes `latest.json`, creates the GitHub release (a stable tag is GitHub latest only when it is the highest stable `studio-v*` tag; a candidate is a prerelease), mirrors to R2. `latest.json` goes to R2 only, never to the GitHub release. | environment `studio-release`; skipped unless all four Windows signing jobs succeeded or signing is off; an unresolved `#N` stops it before signing |
+| `publish` | Renders the notes with their authors, minisigns, writes `latest.json`, creates the GitHub release (a stable tag is GitHub latest only when it is the highest stable `studio-v*` tag; a candidate is a prerelease), mirrors to R2. `latest.json` goes to R2 only, never to the GitHub release. | environment `studio-release`; skipped unless `windows-install-smoke` and all four Windows signing jobs (every leg) succeeded, or signing is off (the smoke still runs); an unresolved `#N` stops it before signing |
 | `cli-gate` | Only with `STUDIO_PUBLISHES_CLI=true`. Requires `CLI_PUBLISH_FROZEN=true`. Checks out nothing and reads no secret. | fails while 1.x is not frozen, and then no other CLI job runs |
 | `cli-tag` | Only with `STUDIO_PUBLISHES_CLI=true`. For a stable or `-preview.N` version, creates the tag `vX.Y.Z` on the studio commit with the release tag identity (`RELEASE_TAG_TOKEN`, see below); an existing tag on that commit is kept, one elsewhere fails. | environment `studio-release`; runs after `publish` and `cli-gate`; checks out nothing, one inline step reads the token |
 | `cli-channels` | Only with `STUDIO_PUBLISHES_CLI=true` (unset today; 1.x owns the channels). Publishes `reasonix` and `@reasonix/cli-*` to npm with `--provenance`, then updates the Homebrew cask (not for a candidate). | no environment and no approval; `id-token: write` on this job only; runs after `publish`, `cli-gate` and `cli-tag` |
@@ -108,10 +109,13 @@ Verify a published package with `npm view reasonix dist.attestations`: the attes
 
 | ID | Expected | Command |
 | --- | --- | --- |
-| V1 | The release exists with 21 assets (per-platform packages, `.minisig` files, CLI archives, `SHA256SUMS`; no `latest.json`). A stable tag is not a prerelease and is GitHub latest when it is the highest stable tag; a candidate is a prerelease. | `gh release view studio-vX.Y.Z --json isPrerelease,assets --jq '.isPrerelease, (.assets \| length)'` |
+| V1 | The release exists with 25 assets (per-platform packages, `.minisig` files, CLI archives, `SHA256SUMS`; no `latest.json`). A stable tag is not a prerelease and is GitHub latest when it is the highest stable tag; a candidate is a prerelease. | `gh release view studio-vX.Y.Z --json isPrerelease,assets --jq '.isPrerelease, (.assets \| length)'` |
 | V2 | The catalog lists the new version first. | `curl -s https://dl.reasonix.io/studio/versions.json \| jq -r '.versions[0].tag'` |
 | V3 | The manifest is served from the mirror, and, once a Studio release is GitHub latest, the path 1.x updaters fall back to answers 404. | `curl -sI https://dl.reasonix.io/studio-vX.Y.Z/latest.json \| head -1`; `curl -sI https://github.com/esengine/DeepSeek-Reasonix/releases/latest/download/latest.json \| head -1` |
 | V4 | The body contains the version notes and the standing install text. | `gh release view studio-vX.Y.Z --json body --jq .body` |
+| V5 | The manifest carries both Windows platforms, each resolving to its own installer. | `curl -s https://dl.reasonix.io/studio-vX.Y.Z/latest.json \| jq -r '.platforms["windows-amd64"].url, .platforms["windows-arm64"].url'` |
+| V6 | The arm64 installer is signed, and every PE image in it is ARM64 except the 32-bit `resources/elevate.exe` and uninstaller. | On Windows: `Get-AuthenticodeSignature ReasonixStudio-windows-arm64-installer.exe`, then `node desktop/electron/packaging/pe.js <unpacked-zip-dir> arm64` over the extracted portable zip. |
+| V7 | `windows-install-smoke` ran both legs and `windows-sign-payload` / `windows-sign-installer` each show an amd64 and an arm64 leg. | `gh run view <run> --json jobs --jq '.jobs[] \| select(.name \| test("Windows\|Certum")) \| "\(.name) \(.conclusion)"'` |
 
 ## 5. Recovery
 
@@ -122,6 +126,7 @@ Verify a published package with `npm view reasonix dist.attestations`: the attes
 | A signing job fails with an error titled `studio-signing.*`. | A credential or an expected-signer variable is missing or malformed; the title names which. | Fix it (section 7), then dispatch the same tag. |
 | A signing job fails at `Connect to Certum` or `Sign the executables`. | SimplySign login, OTP or certificate problem. | Run the smoke test (section 7). To ship unsigned instead, set `STUDIO_SIGNING_ENABLED=false` and dispatch. |
 | A signing job fails with `Unexpected signer subject` or `thumbprint`. | The certificate changed, or a value was copied wrong. | Compare with the smoke test's summary; correct `STUDIO_SIGNING_SUBJECT` or `CERTUM_KEY_ID`. |
+| One architecture's signing leg failed. | The legs of `windows-sign-payload` and `windows-sign-installer` are independent and serial. | Rerun the failed jobs only (`gh run rerun <run> --failed`): the other architecture's legs keep their results, and the failed leg's dependents run again. The unsigned bundle, signed payload and packaged artifacts are kept for one day, so a rerun the next day fails on an expired artifact: start the whole run again instead (`gh workflow run release-studio.yml --ref studio -f tag=studio-vX.Y.Z`, section 5). |
 | A signing job waits before starting. | A Studio or 1.x smoke test or release holds `certum-signing`. | Wait. A second run queued behind the same group cancels the earlier queued one; dispatch again if that happens. |
 | Signing is restored after an unsigned release. | Artifacts were published unsigned. | Set `STUDIO_SIGNING_ENABLED=true` and dispatch the same tag; `publish` replaces the assets. |
 | The body is missing or wrong. | Notes are read from the tag's commit, not the branch. | `gh release edit studio-vX.Y.Z --notes-file <file>`; append the standing text from the previous body. |
@@ -233,7 +238,9 @@ The release PE files as of 2.20.3:
 | --- | --- |
 | Embedded signature only | Verification reads each file's embedded signature through SignTool. `Get-AuthenticodeSignature` answers from the Windows catalog for `d3dcompiler_47.dll`. |
 | `elevate.exe` pin | The hash belongs to the electron-builder in the lockfile. An upgrade that changes it fails `windows-verify-package`; review the new file and update the pin. |
-| One architecture | The installer must carry exactly one application archive, `app-64.7z`. |
+| One architecture | The installer must carry exactly one application archive: `app-64.7z` for amd64, `app-arm64.7z` for arm64. |
+| Architecture of the files | Every PE image in a signed tree and in the installed tree is built for the leg's architecture; only the installer-written 32-bit `resources/elevate.exe` differs. |
+| arm64 packing filter | The arm64 installer is packed with `ELECTRON_BUILDER_7Z_FILTER=BCJ`. 7-Zip's default ARM64 filter produces an archive the NSIS extractor cannot decode: the installer exits 0 and installs no executable. The package check cannot see this, because it unpacks with the runner's newer 7-Zip, so `windows-install-smoke` runs the installer. |
 | Installer code | The NSIS code comes from `windows-package`. Its application tree is checked; its installer logic is not. |
 
 How the payload is carried from signing to publishing:
@@ -272,3 +279,10 @@ Studio and 1.x signing jobs and smoke tests share the concurrency group `certum-
 | `cli/stable/latest.json`, `cli/preview/latest.json` | `cli-pointer` | what `reasonix upgrade` reads through `crash.reasonix.io/v1/cli/releases/<channel>/latest.json`; only ever moves to a newer version |
 | `cli/releases/vX.Y.Z/latest.json` | `cli-pointer` | immutable record of one CLI release; a rerun with different content fails |
 | `versions.json` | desktop line | never written by this workflow |
+
+### Platform keys
+
+`latest.json` keys `platforms` (and `deltas`) as `<GOOS>-<GOARCH>`, derived from the artifact name by `studio-manifest` and asked for by the running kernel through `runtime.GOOS` and `runtime.GOARCH`.
+
+- The key is the binary's own architecture, not the machine's. An x64 build running under ARM64 emulation asks for `windows-amd64` and keeps updating to the amd64 installer; it is not moved to a native build.
+- When a client tries to install a release whose manifest lacks its key (and, on Linux, a matching `native_packages` key), staging fails with `update.no_package` naming the release page; no other architecture's package is substituted. A missing `deltas` entry means the full package is downloaded.
