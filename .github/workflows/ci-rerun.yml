@@ -68,6 +68,10 @@ jobs:
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" || true)"
+            # The size line makes an empty fetch visible: gh's refusal to print
+            # escape sequences left this at 0 on every job, which is how the
+            # retry silently judged every failure "deterministic".
+            echo "$name: job log size=${#log}"
             if ! printf '%s' "$log" | grep -Eq "$flake_re"; then
               echo "::warning::$name failed without a known flake signature; leaving the run red"
               {
