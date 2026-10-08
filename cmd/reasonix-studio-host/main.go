@@ -92,7 +92,7 @@ func studioInstall(shell shellIdentity) *update.Install {
 // because the running build's own row is added regardless.
 const (
 	forkCatalogURL  = "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/studio-latest/versions.json"
-	forkCatalogRows = 3
+	forkCatalogRows = 5
 )
 
 // forkCatalog is this fork's own catalog: Studio's shape, this fork's key.
