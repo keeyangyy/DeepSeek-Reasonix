@@ -158,7 +158,11 @@ func TestRecursiveRecoveryPreservesOuterCallBudget(t *testing.T) {
 
 func TestMergeTreeRechecksBudgetBeforeNewRound(t *testing.T) {
 	prov := &extractStubProvider{reply: strings.Repeat("digest ", 320)}
-	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{ContextWindow: 2000}, event.Discard)
+	// The window keeps headroom over the merge budget: the compaction
+	// instruction grew (folded-work index wording), and a window at the exact
+	// boundary would fail on prompt size before the call-budget recheck the
+	// test is about.
+	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{ContextWindow: 2200}, event.Discard)
 	run := newChunkedSummaryRun(a)
 	run.calls = maxChunkedSummaryCalls - 3
 	parts := []string{

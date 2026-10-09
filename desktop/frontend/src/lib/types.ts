@@ -2035,6 +2035,7 @@ export interface AgentView {
   compactRatio?: number; // Advanced global default; older backends omit it.
   effectiveCompactRatio?: number; // Active local session after project overrides.
   compactRatioOverridden?: boolean;
+  foldIndex?: boolean; // Folded-work index on compaction summaries; older backends omit it and default on.
 }
 
 export interface BotAllowlistView {

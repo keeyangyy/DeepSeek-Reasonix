@@ -139,6 +139,9 @@ func copyValidContextProjection(originalPath, targetPath string, msgs []provider
 		coveredPrefixHash(msgs, n) != st.Projection.CoveredPrefixHash {
 		return false, nil
 	}
+	// A copied projection starts the target session's recall budget fresh,
+	// same as a fork: the parent's spend must not limit the copy.
+	st.Recall = RecallLedger{Generation: st.Generation}
 	if err := SaveCompactionState(targetPath, st); err != nil {
 		return false, err
 	}

@@ -522,6 +522,11 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 		}
 	}
 	cctx := tool.WithContextCompressor(withCallContext(ctx, plan.call.ID, a.svc.sink, a.svc.asker, a.planMode.Load()), a)
+	// The recall and budget bindings ride the same call context as the
+	// compressor: parent and child agents share one tool schema without
+	// sharing projection state.
+	cctx = tool.WithContextRecaller(cctx, a)
+	cctx = tool.WithContextBudgetReporter(cctx, a)
 	if a.svc.interactionBroker != nil {
 		cctx = mcpinteraction.WithBroker(cctx, a.svc.interactionBroker)
 	}

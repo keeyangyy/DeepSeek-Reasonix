@@ -1405,6 +1405,7 @@ function normalizeSettingsView(view: SettingsView | null | undefined): SettingsV
     ? Number(agent.effectiveCompactRatio)
     : agent.compactRatio;
   agent.compactRatioOverridden = Boolean(agent.compactRatioOverridden);
+  agent.foldIndex = agent.foldIndex !== false;
   return {
     ...view,
     webSearchModel: view.webSearchModel || "auto",
@@ -4133,6 +4134,10 @@ export function ModelsSection({ s, busy, apply, backgroundApply, subtab, onboard
     return await apply(() => app.SetCompactRatio(ratio));
   };
 
+  const persistFoldIndex = async (enabled: boolean) => {
+    return await apply(() => app.SetFoldIndex(enabled));
+  };
+
   const focusCompactRatioCustom = () => {
     setCompactRatioCustomEditing(true);
     requestAnimationFrame(() => compactRatioCustomInputRef.current?.focus());
@@ -4510,6 +4515,19 @@ export function ModelsSection({ s, busy, apply, backgroundApply, subtab, onboard
               </div>
             </SettingsField>
             {compactRatioOverrideHint && <div className="provider-fetch-banner provider-fetch-banner--warn">{compactRatioOverrideHint}</div>}
+            <SettingsField label={t("settings.foldIndex")} hint={t("settings.foldIndexHint")} stacked>
+              <label className="set-check">
+                <input
+                  type="checkbox"
+                  checked={agent.foldIndex !== false}
+                  disabled={busy}
+                  onChange={(e) => {
+                    if (!busy) void persistFoldIndex(e.target.checked);
+                  }}
+                />
+                {t("settings.foldIndexLabel")}
+              </label>
+            </SettingsField>
           </SettingsSection>
         </div>
       ) : null}

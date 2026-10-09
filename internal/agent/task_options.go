@@ -28,6 +28,7 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 		ContextWindow:            ctxWin,
 		RecentKeep:               t.recentKeep,
 		CompactRatio:             t.compactRatio,
+		FoldIndex:                t.foldIndex,
 		ArchiveDir:               t.archiveDir,
 		KeepPolicy:               t.keepPolicy,
 		ResponseLanguage:         ResponseLanguageFromContext(ctx),
@@ -72,6 +73,7 @@ type TaskToolOptions struct {
 	ToolResultSnipRatio                   float64
 	CompactRatio                          float64
 	CompactForceRatio                     float64
+	FoldIndex                             *bool
 	Temperature                           float64
 	ContextEditing, ArchiveDir, SysPrompt string
 	Gate                                  Gate

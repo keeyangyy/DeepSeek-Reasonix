@@ -266,6 +266,15 @@
       }
     },
     {
+      "name": "context_budget",
+      "description": "Report how much context room is left before this conversation is automatically compacted. Call it before committing to work whose output you may not be able to finish reading — a broad search, a large file, a long build log — so you can narrow the command instead of spending the rest of the window discovering it was too big. `tokens_remaining` counts down to the compaction trigger, not to the physical window, because the fold is what you can still act ahead of.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
       "name": "edit_file",
       "description": "Replace an exact string in a file with another. old_string must occur exactly once; add surrounding context to disambiguate. Use for targeted edits instead of rewriting the whole file.",
       "parameters": {
@@ -330,6 +339,36 @@
         "required": [
           "path"
         ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "recall",
+      "description": "Bring folded conversation back: read the #n positions listed under \"Folded work index\" in a compaction summary, or search the whole folded region by query when no index line names what you need. Prefer re-reading a file over recalling it — a current copy beats a folded one. One budget per compaction covers both, and a request past it is refused whole, not truncated.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "description": "Search hits (default 8).",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "positions": {
+            "description": "Read these #n addresses, from an index line or a search hit, without the '#'.",
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "type": "array"
+          },
+          "query": {
+            "description": "Search for these words instead. A tool result matches on its output and is addressed by its call.",
+            "type": "string"
+          }
+        },
         "type": "object"
       }
     },

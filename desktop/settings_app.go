@@ -190,6 +190,7 @@ type AgentView struct {
 	CompactRatio           float64 `json:"compactRatio,omitempty"`
 	EffectiveCompactRatio  float64 `json:"effectiveCompactRatio,omitempty"`
 	CompactRatioOverridden bool    `json:"compactRatioOverridden,omitempty"`
+	FoldIndex              bool    `json:"foldIndex"`
 }
 
 type BotAllowlistView struct {
@@ -1104,6 +1105,7 @@ func (a *App) Settings() SettingsView {
 			ReasoningLanguage:      cfg.ReasoningLanguage(),
 			CompactRatio:           cfg.Agent.CompactRatio,
 			EffectiveCompactRatio:  cfg.Agent.CompactRatio,
+			FoldIndex:              cfg.FoldIndexEnabled(),
 		},
 		Bot:                           botSettingsView(cfg.Bot),
 		DesktopLanguage:               cfg.DesktopLanguage(),
@@ -3584,6 +3586,15 @@ func (a *App) SetCompactRatio(ratio float64) error {
 		return c.SetCompactRatio(ratio)
 	})
 	return err
+}
+
+// SetFoldIndex toggles the folded-work index on compaction summaries (and the
+// recall tool that reads it). The setting applies from the next compaction on;
+// existing summaries keep whatever index they already carry.
+func (a *App) SetFoldIndex(enabled bool) error {
+	return a.applyConfigChange(func(c *config.Config) error {
+		return c.SetFoldIndex(enabled)
+	})
 }
 
 func (a *App) SetReasoningLanguage(lang string) error {
