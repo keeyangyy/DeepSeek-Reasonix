@@ -306,7 +306,9 @@ for (const path of localeChunks) {
   // The sub-agent status strip adds two labels per dialect (running count,
   // overflow count) plus the fold header's sub-agent count; the measured chunks
   // move just past the previous ceiling, so retain the next one-decimal one.
-  const budget = name.startsWith("zh-TW-") ? 63.3 * 1024 : 62.5 * 1024;
+  // The folded-work index setting adds three labels per dialect (the switch
+  // and its hints); measured chunks move past the prior ceilings again.
+  const budget = name.startsWith("zh-TW-") ? 63.5 * 1024 : 62.7 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
