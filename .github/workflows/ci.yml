@@ -5,6 +5,9 @@ on:
     branches: [wails-mine]
   pull_request:
     branches: [wails-mine]
+  # Fallback entry when the platform's push-event pipeline drops a push:
+  # dispatch creates the run directly and runs the same matrix.
+  workflow_dispatch:
 
 # Windows runners sporadically hit Go runtime preemption failures
 # (runtime.preemptM: duplicatehandle failed) unrelated to repo code;
