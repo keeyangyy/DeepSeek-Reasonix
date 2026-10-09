@@ -2,7 +2,7 @@ module reasonix
 
 go 1.26.0
 
-toolchain go1.26.6
+toolchain go1.26.9
 
 require (
 	charm.land/bubbles/v2 v2.2.1
