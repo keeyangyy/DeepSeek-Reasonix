@@ -641,6 +641,16 @@ func (c *Config) ColdResumePruneEnabled() bool {
 	return *c.Agent.ColdResumePrune
 }
 
+// FoldIndexEnabled reports whether compaction digests carry a folded-work
+// index with recall. Default true: the index is what makes folded content
+// reachable again, and a host that never says anything keeps it.
+func (c *Config) FoldIndexEnabled() bool {
+	if c == nil || c.Agent.FoldIndex == nil {
+		return true
+	}
+	return *c.Agent.FoldIndex
+}
+
 // ResponseLanguage normalizes the top-level language preference for final
 // answers. Empty means auto: replies follow the current user turn.
 func (c *Config) ResponseLanguage() string {
@@ -1337,6 +1347,9 @@ type AgentConfig struct {
 	// ColdResumePrune elides stale tool results when a session reopens past the
 	// provider cache window. nil = default enabled.
 	ColdResumePrune *bool `toml:"cold_resume_prune"`
+	// FoldIndex gates the folded-work index on compaction summaries and the
+	// recall tool that reads it. nil = default enabled.
+	FoldIndex *bool `toml:"fold_index"`
 	// PlanModeReadOnlyCommands is retained for old config/session round trips. Main
 	// Plan bash calls now use the ordinary Permissions classifier and Sandbox.
 	PlanModeReadOnlyCommands []string `toml:"plan_mode_read_only_commands"`

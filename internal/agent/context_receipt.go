@@ -127,6 +127,10 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 	// Do not advance projection version on failure; generation still advances so
 	// CAS losers and concurrent writers cannot overwrite a newer success.
 	state.Generation++
+	// The generation advanced but nothing succeeded, so the recall budget must
+	// not reset with it: keep the spend by moving the ledger's generation
+	// along, or a failure loop would refill what the budget already refused.
+	state.Recall.Generation = state.Generation
 	// LastReceipt carries the blocked signal; clear legacy top-level mirrors.
 	state.BlockedInputHash = ""
 	state.BlockedReason = ""

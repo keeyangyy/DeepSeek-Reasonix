@@ -108,7 +108,14 @@ context_window = 32000
 
 	var found bool
 	for _, m := range reqs[compacted].Messages {
-		if strings.Contains(m.Content, constraint) {
+		content := m.Content
+		// The folded-work index deliberately quotes the opening words of a
+		// folded user turn as a one-line address; that bounded line is the
+		// feature, not the verbatim retention this test guards against.
+		if i := strings.Index(content, "## Folded work index"); i >= 0 {
+			content = content[:i]
+		}
+		if strings.Contains(content, constraint) {
 			found = true
 		}
 	}

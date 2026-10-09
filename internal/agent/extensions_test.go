@@ -1192,7 +1192,9 @@ func TestCompactionCompleteReplace(t *testing.T) {
 			if err := json.Unmarshal(payload, &in); err != nil {
 				return protocol.InterceptResult{}, err
 			}
-			if in.Summary != "SUMMARY TEXT" {
+			// The hook sees the digest exactly as recall will address it: the
+			// produced prose followed by the host-written folded-work index.
+			if !strings.HasPrefix(in.Summary, "SUMMARY TEXT") {
 				t.Errorf("complete payload summary = %q, want the produced summary", in.Summary)
 			}
 			return replaceWith(t, dispatch.CompactionCompletePayload{Summary: "EXTENSION SUMMARY"}), nil

@@ -843,6 +843,13 @@ func (a *Agent) steerQueueLen() int {
 // fires (e.g. 0.8). The status line uses it to show headroom to the next compact.
 func (a *Agent) CompactRatio() float64 { return a.compactRatio }
 
+// foldIndexEnabled reports whether compaction digests carry a folded-work
+// index. Nil keeps the feature on: the config default is enabled, and an
+// agent built without an explicit setting must not silently lose it.
+func (a *Agent) foldIndexEnabled() bool {
+	return a.foldIndex == nil || *a.foldIndex
+}
+
 // CompactNow forces one projection compaction (canonical transcript untouched).
 func (a *Agent) CompactNow(ctx context.Context, instructions string) error {
 	_, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{
@@ -913,6 +920,8 @@ type Options struct {
 	// RecentKeep fall back to defaults when unset.
 	ContextWindow int
 	CompactRatio  float64
+	// FoldIndex gates the folded-work index and recall. nil = default enabled.
+	FoldIndex *bool
 	// Deprecated compatibility inputs. New agents ignore these fields; automatic
 	// maintenance is controlled only by CompactRatio.
 	SoftCompactRatio       float64
@@ -1109,6 +1118,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 			maxSubagentDepth:       maxSubagentDepth,
 			contextWindow:          opts.ContextWindow,
 			compactRatio:           opts.CompactRatio,
+			foldIndex:              opts.FoldIndex,
 			recentKeep:             opts.RecentKeep,
 			archiveDir:             opts.ArchiveDir,
 			legacyAnchorSafetyGate: opts.LegacyAnchorSafetyGate,

@@ -121,6 +121,15 @@ const (
 	CompactionNoop
 )
 
+// RecallLedger tracks what this compaction generation has spent pulling
+// folded content back. Carrying the generation it belongs to is what resets
+// the budget: a stale generation reads as an unspent one, with no reset call
+// to forget.
+type RecallLedger struct {
+	Generation  uint64 `json:"generation,omitempty"`
+	SpentTokens int    `json:"spent_tokens,omitempty"`
+}
+
 // CompactionState is the session context sidecar payload.
 type CompactionState struct {
 	SchemaVersion      int                        `json:"schema_version"`
@@ -140,9 +149,13 @@ type CompactionState struct {
 	// NativeContextEditingAccepted latches the first successful native request.
 	// ContextEditingFallbackLocal persists the only allowed request-shape switch:
 	// an explicit unsupported response before that latch was set.
-	NativeContextEditingAccepted bool      `json:"native_context_editing_accepted,omitempty"`
-	ContextEditingFallbackLocal  bool      `json:"context_editing_fallback_local,omitempty"`
-	UpdatedAt                    time.Time `json:"updated_at"`
+	NativeContextEditingAccepted bool `json:"native_context_editing_accepted,omitempty"`
+	ContextEditingFallbackLocal  bool `json:"context_editing_fallback_local,omitempty"`
+	// Recall budgets this generation's reads of the folded region. Appended
+	// under schema 4 as an omitempty field: readers that do not know it
+	// ignore it, and fail-closed schema handling is unchanged.
+	Recall    RecallLedger `json:"recall,omitempty"`
+	UpdatedAt time.Time    `json:"updated_at"`
 }
 
 // CompactionTelemetry is the structured observability record for one
