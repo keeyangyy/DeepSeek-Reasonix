@@ -221,7 +221,7 @@ jobs:
               # step: it costs one package (~8m) rather than a whole sweep, and
               # these three are exactly the packages that blow the budget on a
               # loaded runner. Anything else stays red immediately.
-              if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|panic: test timed out after|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat"; then
+              if ! printf '%s' "$output" | grep -Eq "found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime.semasleep|runtime.semawakeup|waitforsingleobject wait_failed|setevent failed|unexpected return pc|TempDir RemoveAll cleanup|panic: test timed out after|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat|exceeded its total test deadline"; then
                 printf '%s\n' "$output"
                 exit "$status"
               fi
