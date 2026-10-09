@@ -61,6 +61,7 @@ var acceptsDefaultSnip = map[string]bool{
 	"code_index":    true,
 	"complete_step": true,
 	"compress":      true,
+	"context_budget": true,
 	"delete_range":  true,
 	"delete_symbol": true,
 	"edit_file":     true,
@@ -68,6 +69,7 @@ var acceptsDefaultSnip = map[string]bool{
 	"move_file":     true,
 	"multi_edit":    true,
 	"notebook_edit": true,
+	"recall":        true, // transcript-shaped result; a generic head/tail split loses lines, not structure
 	"todo_write":    true,
 	"update_goal":   true,
 	"view_image":    true, // short metadata only; image bytes travel outside text snipping
