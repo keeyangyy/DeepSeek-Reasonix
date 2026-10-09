@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
+
+	"reasonix/internal/config"
 )
 
 func TestParseDesktopLaunchArgsStripsLegacySafeMode(t *testing.T) {
@@ -87,6 +89,15 @@ func TestMain(m *testing.M) {
 	os.Setenv("REASONIX_STATE_HOME", dir+"/state")
 	os.Setenv("REASONIX_CACHE_HOME", dir+"/cache")
 	os.Setenv("AppData", dir)
+	// RED LINE (2026-10-09 incident): ReasonixHomeDir() resolves REASONIX_HOME
+	// first; an inherited value punches through every redirection above, so
+	// tests would read and write the operator's live home. Unset + fail closed.
+	os.Unsetenv("REASONIX_HOME")
+	if home := config.ReasonixHomeDir(); home == "" || !strings.Contains(home, "reasonix-desktop-test") {
+		println("desktop TestMain: isolation failed closed — ReasonixHomeDir() =", home)
+		println("refusing to run tests against a non-isolated home (data-loss red line)")
+		os.Exit(1)
+	}
 	// Tests fail closed for telemetry. Any test that expects a request must
 	// replace the relevant endpoint with an httptest.Server explicitly.
 	crashEndpoint = "http://127.0.0.1:0/v1/report"
