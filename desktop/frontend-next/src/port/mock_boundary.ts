@@ -136,6 +136,7 @@ export class MockBoundary extends MockShell {
     return { ...this.remember };
   }
 
+
   private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml" };
 
   async displayCurrency(): Promise<DisplayCurrencySettings> {

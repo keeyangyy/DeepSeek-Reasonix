@@ -121,17 +121,22 @@ func SubagentWriteClaim(ctx context.Context) WritePathSet {
 	return SubagentWriteGrant(ctx).Scope()
 }
 
-// serializeWholeWorkspace gates whether a writer that could not declare write
-// paths claims the whole workspace for exclusive use. It ships on; boot sets it
-// once from the user config. It is atomic so a build that sets it cannot race a
-// session already asking Overlaps.
-var serializeWholeWorkspace atomic.Bool
+// undeclaredRelaxed lifts the whole-workspace hold a writer with no
+// write_paths takes; leaseOff also stops claims from excluding each other.
+// SetWriteLeaseTiers writes both once, before any runtime is assembled.
+var (
+	undeclaredRelaxed atomic.Bool
+	leaseOff          atomic.Bool
+)
 
-func init() { serializeWholeWorkspace.Store(true) }
-
-// SetSerializeWholeWorkspace sets the boot-time value of the gate above. Left
-// untouched, whole-workspace claims keep serializing writers.
-func SetSerializeWholeWorkspace(on bool) { serializeWholeWorkspace.Store(on) }
+// SetWriteLeaseTiers records the session's write-lease tiers: relaxUndeclared
+// for the relaxed one, off for the tier that takes no claim at all. The zero
+// value is the strict upstream behaviour, so a process that never calls this
+// keeps serializing exactly as before.
+func SetWriteLeaseTiers(relaxUndeclared, off bool) {
+	undeclaredRelaxed.Store(relaxUndeclared)
+	leaseOff.Store(off)
+}
 
 // WholeWorkspaceWriteClaim claims the entire workspace for a writer that did
 // not declare write_paths. Such tasks may only run serially among writers.
@@ -143,16 +148,21 @@ func WholeWorkspaceWriteClaim(workspaceRoot string) (WritePathSet, error) {
 	return WritePathSet{WholeWorkspace: true, WorkspaceRoot: root}, nil
 }
 
+// UndeclaredWriterClaim is the claim for a writer that declared no write_paths:
+// the whole workspace under the strict tier, nothing at all under the relaxed
+// and off tiers. A declared path that cannot be resolved still goes through
+// WholeWorkspaceWriteClaim, so those callers are untouched.
+func UndeclaredWriterClaim(workspaceRoot string) (WritePathSet, error) {
+	if undeclaredRelaxed.Load() {
+		return WritePathSet{}, nil
+	}
+	return WholeWorkspaceWriteClaim(workspaceRoot)
+}
+
 // Overlaps reports whether two write claims conflict (identical, parent/child,
 // or case-equivalent on case-insensitive filesystems).
 func (s WritePathSet) Overlaps(other WritePathSet) bool {
 	if s.Empty() || other.Empty() {
-		return false
-	}
-	if !serializeWholeWorkspace.Load() && (s.WholeWorkspace || other.WholeWorkspace) {
-		// Serialization turned off: an opaque writer's whole-workspace claim
-		// stops conflicting with anything, so one session's `go build` no
-		// longer blocks another's. Every caller of Overlaps sees this.
 		return false
 	}
 	if s.WholeWorkspace || other.WholeWorkspace {

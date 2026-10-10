@@ -1049,10 +1049,6 @@ type AgentConfig struct {
 	// (the default), "optimistic", or "off". See write_lease.go for what each
 	// one covers.
 	WriteLease string `toml:"write_lease"`
-	// SerializeOpaqueWriters is the earlier spelling of the same setting: true
-	// meant "strict", false meant "off". Read so an existing config keeps its
-	// meaning; WriteLease wins when both are present.
-	SerializeOpaqueWriters *bool `toml:"serialize_opaque_writers"`
 	// CodeMode offers run_script: a Starlark script whose tool calls each pass
 	// the ordinary checks, so dependent steps cost one round trip.
 	CodeMode bool `toml:"code_mode"`

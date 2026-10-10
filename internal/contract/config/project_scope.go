@@ -148,7 +148,6 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLeaseMode(), ProjectUserOnly)
 	}
 	c.Agent.WriteLease = h.writeLease
-	c.Agent.SerializeOpaqueWriters = nil
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if NormalizeToolApprovalMode(c.Desktop.DefaultToolApprovalMode) != NormalizeToolApprovalMode(h.approvalMode) {

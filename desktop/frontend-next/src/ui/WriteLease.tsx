@@ -17,23 +17,33 @@ const MODE_NAME: Record<string, string> = {
 };
 
 const MODE_WHY: Record<string, string> = {
-  strict: "声明了 write_paths 的写者按路径互斥；未声明路径的写者（bash、MCP、未获 write_paths 的子代理）占用整个工作区，因而与其他写者一律互斥。",
-  optimistic: "仅声明了 write_paths 的写者按路径互斥；未声明路径的写者不再占用整个工作区，可与其他会话并行。",
-  off: "本会话不取跨会话写锁：既不阻塞其他会话，也不被其阻塞。会话内子代理仍按声明路径与写者名额（max_parallel_writers）排队。",
+  strict: "声明写入路径的写者按路径互斥；未声明路径的写者占用整个工作区，与其他写入一律排队。",
+  optimistic: "声明写入路径的写者仍按路径互斥；未声明路径的写者不再占用整个工作区，可与其他写入并行。",
+  off: "本会话不取写锁：写入不再受保护，也不再参与路径互斥，子代理之间同样如此。",
 };
 
 export function WriteLease({ port, onChanged }: { port: AgentPort; onChanged: () => void }) {
   const [state, setState] = useState<WriteLeaseSettings | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     port
       .writeLease()
-      .then(setState)
-      .catch(() => setState(null));
+      .then((s) => {
+        setState(s);
+        setLoaded(true);
+      })
+      .catch(() => {
+        setState(null);
+        setLoaded(true);
+      });
   }, [port]);
 
+  // The first read is still in flight: render nothing rather than flash an
+  // error that is not one.
+  if (!loaded) return null;
   if (!state) return <div className="empty">{t("无法读取写锁档位。")}</div>;
 
   const pick = async (mode: string) => {
@@ -80,6 +90,9 @@ export function WriteLease({ port, onChanged }: { port: AgentPort; onChanged: ()
           <span className="v">{t(MODE_WHY[state.effective] ?? MODE_WHY.strict)}</span>
         </div>
       )}
+      {state.mode === "off" && (
+        <p className="rmthint">{t("关闭后，其他会话的写入可能覆盖你的；确认能接受该风险再关闭。")}</p>
+      )}
       {error && <div className="why">{error}</div>}
     </div>
   );
@@ -93,7 +106,7 @@ export function WriteLeaseGroup({ port, onChanged }: { port: AgentPort; onChange
     <Group
       id="write-lease"
       title={t("写锁档位")}
-      hint={t("跨会话写锁的适用范围：标准写锁＝声明了 write_paths 的写者按路径互斥，未声明路径的写者占用整个工作区；宽松写锁＝仅声明了 write_paths 的写者按路径互斥，未声明路径的写者不占用工作区；关闭写锁＝本会话不取跨会话写锁。会话内子代理始终按声明路径与写者名额排队。修改会重建运行时，任务运行期间无法变更。")}
+      hint={t("三档决定本会话的写锁范围，对子代理与跨会话同样生效。修改会重建运行时，任务运行期间无法变更。")}
     >
       <WriteLease port={port} onChanged={onChanged} />
     </Group>

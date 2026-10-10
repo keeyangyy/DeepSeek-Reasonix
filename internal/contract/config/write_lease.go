@@ -25,23 +25,20 @@ func NormalizeWriteLeaseMode(mode string) string {
 	}
 }
 
-// WriteLeaseMode is the setting with the legacy key folded in: an earlier config
-// wrote serialize_opaque_writers, where true meant strict and false meant off.
-// Absent both, the answer is strict.
+// WriteLeaseMode is the setting with the default folded in: an absent or empty
+// value reads as strict.
 func (a AgentConfig) WriteLeaseMode() string {
 	if strings.TrimSpace(a.WriteLease) != "" {
 		return NormalizeWriteLeaseMode(a.WriteLease)
 	}
-	if a.SerializeOpaqueWriters != nil && !*a.SerializeOpaqueWriters {
-		return WriteLeaseOff
-	}
 	return WriteLeaseStrict
 }
 
-// SerializeWholeWorkspace reports whether a writer that declares no write_paths
-// still claims the whole workspace for exclusive use.
-func (a AgentConfig) SerializeWholeWorkspace() bool {
-	return a.WriteLeaseMode() != WriteLeaseOptimistic
+// RelaxedWriteLease reports whether a writer that declares no write_paths
+// stops holding the whole workspace, while declared paths still exclude
+// other sessions.
+func (a AgentConfig) RelaxedWriteLease() bool {
+	return a.WriteLeaseMode() == WriteLeaseOptimistic
 }
 
 // SkipWriteLease reports whether this session takes no cross-session write lease.

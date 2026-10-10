@@ -253,15 +253,6 @@ func TestProjectCannotSkipTheGlobalRememberConfirmation(t *testing.T) {
 	}
 }
 
-// The legacy key is the same setting, so a project file may not turn the lease
-// off through it either.
-func TestProjectCannotTurnTheWriteLeaseOffByTheOldKey(t *testing.T) {
-	cfg, _ := loadScoped(t, "", "[agent]\nserialize_opaque_writers = false\n")
-	if got := cfg.Agent.WriteLeaseMode(); got != WriteLeaseStrict {
-		t.Fatalf("a project file turned the lease off by the legacy key: %q", got)
-	}
-}
-
 func TestProjectCannotChooseToolApprovalPosture(t *testing.T) {
 	cfg, _ := loadScoped(t, "", "[desktop]\ndefault_tool_approval_mode = \"yolo\"\n")
 	if got := cfg.DesktopDefaultToolApprovalMode(); got == "yolo" {

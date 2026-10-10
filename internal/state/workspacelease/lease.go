@@ -75,6 +75,10 @@ type Owner struct {
 	// entirely: no call takes the workspace lock, so opaque writers stop
 	// blocking other sessions. The zero value keeps the lease.
 	skipWriteSerialization bool
+	// relaxWholeWorkspace keeps an undeclaring writer from holding the whole
+	// workspace against other sessions; declared paths still exclude others.
+	// The zero value holds the workspace for every writer.
+	relaxWholeWorkspace bool
 
 	mu            sync.Mutex
 	activeRuns    int
@@ -125,6 +129,13 @@ type Option func(*Owner)
 // default (not passing this option) keeps serializing.
 func WithoutWriteSerialization() Option {
 	return func(o *Owner) { o.skipWriteSerialization = true }
+}
+
+// WithoutWholeWorkspaceHold keeps an undeclaring writer from holding the whole
+// workspace against other sessions; declared paths still exclude other
+// sessions, and queueing inside one session is unchanged.
+func WithoutWholeWorkspaceHold() Option {
+	return func(o *Owner) { o.relaxWholeWorkspace = true }
 }
 
 // New returns a Delivery-session lease owner for workspaceRoot. lockDir must be
@@ -293,6 +304,12 @@ func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (func(),
 		ctx = context.Background()
 	}
 	claim := o.normalizePaths(paths)
+	if o.relaxWholeWorkspace && claim == nil && len(paths) == 0 {
+		// Optimistic: a writer that declared no paths does not hold the whole
+		// workspace against other sessions; one that declared paths the host
+		// could not resolve still takes the whole workspace, as under strict.
+		return func() {}, nil
+	}
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
