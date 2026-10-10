@@ -143,8 +143,7 @@ func NewDeviceShare(page fs.FS) *DeviceShare {
 	if trust := deviceTrustPath(); trust != "" {
 		// Adopted only when the switch is on at startup; the hook stays wired
 		// either way and reads the setting when it runs, so the panel switch
-		// takes effect without a restart. Off forgets: an empty set removes
-		// the file.
+		// takes effect without a restart, and off forgets (an empty set removes the file).
 		if rememberPairedDevices() {
 			registry.Restore(loadDeviceTrust(trust))
 		}
