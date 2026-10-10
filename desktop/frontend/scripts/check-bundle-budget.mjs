@@ -450,6 +450,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-10-07: the sidebar permanent-delete entry — the row button, the item in
 // both context menus, the purge branch on both archive entry points, and its
 // labels — adds 0.6 KiB (2429.6 KiB measured); widen to 2430.
-const rawInitialBudgetKiB = 2_430;
+// 2026-10-11: transcript row ordering and receipt identity add 0.3 KiB
+// (2430.5 KiB measured; HEAD baseline 2430.2 KiB). Widen the raw ceiling to
+// 2431; all gzip budgets remain unchanged.
+const rawInitialBudgetKiB = 2_431;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

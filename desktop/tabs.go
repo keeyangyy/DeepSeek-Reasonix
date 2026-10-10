@@ -1411,7 +1411,7 @@ func displayEventFromEnvelope(envelope turnevent.Envelope) (event.Event, bool) {
 	}
 	if w.DecisionReceipt != nil {
 		e.DecisionReceipt = &provider.DecisionReceipt{
-			ID: w.DecisionReceipt.ID, Kind: w.DecisionReceipt.Kind, Tool: w.DecisionReceipt.Tool,
+			ID: w.DecisionReceipt.ID, OccurrenceID: w.DecisionReceipt.OccurrenceID, Kind: w.DecisionReceipt.Kind, Tool: w.DecisionReceipt.Tool,
 			Subject: w.DecisionReceipt.Subject, Outcome: w.DecisionReceipt.Outcome,
 		}
 	}

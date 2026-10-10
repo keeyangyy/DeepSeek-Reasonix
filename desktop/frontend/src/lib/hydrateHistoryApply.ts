@@ -266,6 +266,15 @@ export type SignatureItem = {
   reasoning?: string;
   name?: string;
   level?: string;
+  code?: string;
+  decisionReceipt?: {
+    id?: string;
+    occurrenceId?: string;
+    kind?: string;
+    tool?: string;
+    subject?: string;
+    outcome?: string;
+  };
   trigger?: string;
   messages?: number;
   surfaceKey?: string;
@@ -275,6 +284,17 @@ export type SignatureItem = {
 };
 
 export function itemSignature(item: SignatureItem): string {
+  if (item.kind === "notice" && item.decisionReceipt) {
+    const receipt = item.decisionReceipt;
+    return `notice|receipt|${receipt.occurrenceId ?? JSON.stringify([
+      item.code ?? "",
+      receipt.id ?? "",
+      receipt.kind ?? "",
+      receipt.tool ?? "",
+      receipt.subject ?? "",
+      receipt.outcome ?? "",
+    ])}`;
+  }
   switch (item.kind) {
     case "tool": return `tool|${item.id}|${item.name ?? ""}`;
     case "extension": return `extension|${item.surfaceKey ?? ""}|${item.generation ?? 0}`;
@@ -319,10 +339,10 @@ export function pageOverlapsLiveContent(
   // of the live text. Count the prefix relationship as overlap too — otherwise
   // the page-owns-the-turn cleanup is skipped entirely and the rebuilt rows
   // co-mount beside the page copies (the low-frequency duplicate).
-  const liveTexts = liveItems.filter((item) => typeof item.text === "string" && item.text.length > 0);
+  const liveTexts = liveItems.filter((item) => item.kind === "assistant" && typeof item.text === "string" && item.text.length > 0);
   if (liveTexts.length === 0) return false;
   for (const item of pageItems) {
-    if (item.kind === "tool" || item.kind === "extension") continue;
+    if (item.kind !== "assistant") continue;
     const text = typeof item.text === "string" ? item.text : "";
     if (text.length === 0) continue;
     for (const live of liveTexts) {
