@@ -42,9 +42,11 @@ export function Chrome({ port, status, title, steer, onSettings, onBrowser, brow
   const root = status?.workspaceRoot || status?.cwd || "";
   const project = root ? base(root) : "—";
   // The folder mark opens the project itself. Only a shell that can enter a
-  // folder offers it, and only once a pane names where that folder is; the
-  // kernel is still the one that answers where the folder lives.
-  const canOpenProject = !!hub && root !== "" && hostBridge().opensFolders();
+  // folder offers it, and only once a pane names where that folder is; a
+  // pane driven from another machine names a path this shell cannot enter,
+  // so the mark stays disabled there. The kernel is still the one that
+  // answers where the folder lives.
+  const canOpenProject = !!hub && root !== "" && !host && hostBridge().opensFolders();
   const openProject = () => {
     if (hub && root) void hub.openWorkspace(root).catch((e) => onError?.(e));
   };
@@ -77,7 +79,7 @@ export function Chrome({ port, status, title, steer, onSettings, onBrowser, brow
           disabled={!canOpenProject}
           onClick={openProject}
         >
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>
         </button>
         <span className="crumb-proj" title={root}>
           {project}

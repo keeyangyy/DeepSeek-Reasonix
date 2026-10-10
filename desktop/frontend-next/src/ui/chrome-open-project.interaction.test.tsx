@@ -16,7 +16,7 @@ function shellWith(openWorkspace?: (root: string) => Promise<string | null>) {
   return { shell: "electron", platform: "win32", titleBar: false, isWindowMaximised: async () => false, openWorkspace };
 }
 
-async function draw(shell: Record<string, unknown>) {
+async function draw(shell: Record<string, unknown>, host?: string) {
   vi.resetModules();
   (window as unknown as { reasonixHost: unknown }).reasonixHost = shell;
   const { Chrome } = await import("./Chrome");
@@ -38,6 +38,7 @@ async function draw(shell: Record<string, unknown>) {
       onTheme={vi.fn()}
       onFind={vi.fn()}
       hub={hub}
+      host={host}
       onError={vi.fn()}
     />,
   );
@@ -59,6 +60,13 @@ describe("the chrome's project mark", () => {
 
   it("stays shut when the shell cannot enter a folder", async () => {
     const { button, openWorkspace } = await draw(shellWith(undefined));
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(button);
+    expect(openWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("stays shut when the focused pane is driven from another machine", async () => {
+    const { button, openWorkspace } = await draw(shellWith(async () => null), "另一台机器");
     expect((button as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(button);
     expect(openWorkspace).not.toHaveBeenCalled();
