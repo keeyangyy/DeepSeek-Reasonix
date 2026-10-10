@@ -67,6 +67,7 @@ var mirroredWireTypes = []wireMirror{
 	// Who can reach this window from another device. A device the page cannot
 	// list is one the person at the window cannot see to disconnect.
 	{"internal/frontend/serve/device_share.go", "ShareStatus", tsShareFile, "ShareStatus"},
+	{"internal/frontend/serve/device_share.go", "CloudRemoteStatus", tsShareFile, "CloudRemoteStatus"},
 	{"internal/frontend/serve/device_share.go", "ShareAddress", tsShareFile, "ShareAddress"},
 	{"internal/frontend/serve/device_share.go", "ShareOffer", tsShareFile, "ShareOffer"},
 	{"internal/frontend/serve/device_registry.go", "DeviceView", tsShareFile, "PairedDevice"},

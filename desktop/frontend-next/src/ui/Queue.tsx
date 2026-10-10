@@ -98,6 +98,7 @@ export function Queue({ queue, running, onRead, onEdit, onMove, onCancel, onSend
   // shut, because the row's own text is the only thing that may fill it.
   const [unread, setUnread] = useState<{ id: string; why: string } | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const readEpoch = useRef(0);
 
   // The body arrives after the click, so focus waits for the field to exist.
   useEffect(() => {
@@ -108,17 +109,20 @@ export function Queue({ queue, running, onRead, onEdit, onMove, onCancel, onSend
     async (id: string) => {
       // Opening on the preview would put a cut-off line in the box and save it
       // back as the whole instruction.
+      const epoch = ++readEpoch.current;
       setUnread(null);
       let body: string;
       try {
         body = await onRead(id);
       } catch (e) {
+        if (epoch !== readEpoch.current) return;
         // A read that failed is not an empty instruction. Filling the box with
         // "" would have the user retype a line they never saw, and the save
         // replaces the whole entry with it.
         setUnread({ id, why: reason(e) });
         return;
       }
+      if (epoch !== readEpoch.current) return;
       setDraft(body);
       setEditing(id);
     },

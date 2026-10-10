@@ -109,6 +109,7 @@ type CloudRemoteStatus struct {
 	Name     string `json:"name,omitempty"`
 	Online   bool   `json:"online"`
 	Error    string `json:"error,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 type CloudShareOffer struct {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { Checkpoint, RewindPlan, RewindResult, RewindScope } from "../../port/port";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { AgentPort, Checkpoint, RewindPlan, RewindResult, RewindScope } from "../../port/port";
 import type { Item } from "../../state/session";
 import { RewindControl } from "./RewindControl";
 import { CopyButton } from "../CopyButton";
@@ -10,8 +10,18 @@ import { messageSource } from "../source";
 import { touchKeyboard } from "../touchKeyboard";
 import { useViewer } from "../../state/viewer";
 
+const SAVED_IMAGE = /(?:^|\s)@(\.reasonix\/attachments\/clipboard-[\d.-]+\.(?:png|jpe?g|gif|webp|bmp|svg))(?=\s|$)/gi;
+
+function SavedImage({ path, src }: { path: string; src: string }) {
+  const [failed, setFailed] = useState(false);
+  return <div className="user-image">
+    {failed ? <span>{t("图片不可用")}</span> : <img src={src} alt={path.split("/").at(-1)} loading="lazy" width={240} height={160} onError={() => setFailed(true)} />}
+  </div>;
+}
+
 export function UserCard({
   item,
+  port,
   cp,
   onResend,
   onPrepareRewind,
@@ -19,6 +29,7 @@ export function UserCard({
   onUndoRewind,
 }: {
   item: Extract<Item, { t: "user" }>;
+  port?: Pick<AgentPort, "workspaceImageURL">;
   cp?: Checkpoint;
   onResend?: (turn: number, text: string) => Promise<void>;
   onPrepareRewind?: (turn: number, scope: RewindScope) => Promise<RewindPlan>;
@@ -35,6 +46,7 @@ export function UserCard({
   const source = messageSource(item.via, useViewer());
   const reopen = editable && draft === null;
   const rewind = !!(cp && onPrepareRewind && onCommitRewind && onUndoRewind);
+  const images = useMemo(() => [...new Set(Array.from(item.text.matchAll(SAVED_IMAGE), (match) => match[1]))], [item.text]);
 
   useEffect(() => {
     const el = box.current;
@@ -69,7 +81,13 @@ export function UserCard({
         </div>}
         <div className="out">
           {draft === null ? (
-            <div className="txt">{item.text}</div>
+            <>
+              {port && images.length > 0 && <div className="user-images">{images.map((path) => {
+                const src = port.workspaceImageURL(path);
+                return <SavedImage key={src} path={path} src={src} />;
+              })}</div>}
+              <div className="txt">{item.text}</div>
+            </>
           ) : (
             <div className="reask">
               <textarea

@@ -243,7 +243,7 @@ export class MockHub implements HubPort {
     ],
     devices: [],
     cloudDevices: [],
-    cloudRemote: { online: false },
+    cloudRemote: { online: false, reason: "signed_out" },
   };
 
   shareStatus() {

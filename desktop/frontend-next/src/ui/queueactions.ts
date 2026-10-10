@@ -9,6 +9,7 @@ interface Inputs {
   dispatch: ActionDispatch<[SessionEvent]>;
   fail: (e: unknown) => void;
   moved: number;
+  sessionState?: "pending" | "settled";
   sessionPath?: string;
 }
 
@@ -16,7 +17,7 @@ interface Inputs {
  *  a line still in it. Nothing here patches the snapshot: every edit is asked
  *  of the kernel and the answer is read back whole, which is also what puts
  *  another window's lines in front of this one. */
-export function useQueueActions({ port, dispatch, fail, moved, sessionPath }: Inputs) {
+export function useQueueActions({ port, dispatch, fail, moved, sessionState = "settled", sessionPath }: Inputs) {
   const [queue, setQueue] = useState<QueueSnapshot | null>(null);
   // The last line taken back, numbered so the same text twice is two requests.
   const [restored, setRestored] = useState({ n: 0, text: "" });
@@ -26,10 +27,11 @@ export function useQueueActions({ port, dispatch, fail, moved, sessionPath }: In
   // and the CLI's, in front of this one. The optimistic rows say only what was
   // sent from here, and they do not survive a reload.
   useEffect(() => {
+    if (sessionState === "pending" && !moved) return;
     let current = true;
     port.queue().then((q) => current && setQueue(q)).catch(() => current && setQueue(null));
     return () => { current = false; };
-  }, [port, moved, sessionPath]);
+  }, [port, moved, sessionState, sessionPath]);
   const taking = useRef(new Set<string>());
 
   const onQueueEdit = useCallback((id: string, text: string) => void port.editQueued(id, text).catch(fail), [port, fail]);

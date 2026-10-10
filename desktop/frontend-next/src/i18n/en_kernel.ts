@@ -44,6 +44,8 @@ export const EN_KERNEL: Record<string, string> = {
   "该服务器未能启动，开关已恢复原状": "That server would not start; the switch has been put back",
   "该服务器未能启动，且开关未能恢复——重启后将保持刚才设置的状态":
     "That server would not start, and the switch could not be put back - after a restart it will hold what you just set",
+  "这个服务要启动的内容在你启用后变了，请先查看命令并重新启用":
+    "What this server launches changed since you enabled it; review the command and enable it again",
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",

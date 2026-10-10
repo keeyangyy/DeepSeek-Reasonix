@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@t
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Pane } from "./Pane";
 import { MockPort } from "../port/mock";
-import type { HistoryMessage, RewindResult } from "../port/port";
+import { HttpError, type HistoryMessage, type RewindResult } from "../port/port";
 import type { RuntimeView } from "../port/hub";
 import { useRewindActions } from "./rewind";
 
@@ -184,6 +184,59 @@ describe("restoring a rewound prompt to the composer", () => {
     fireEvent.click(screen.getByRole("button", { name: "改完重发" }));
     await waitFor(() => expect(port.submit).toHaveBeenCalledWith("A revised prompt", undefined));
     expect(box().value).toBe("Separate draft");
+  });
+
+  it.each(["prepareRewind", "commitRewind"] as const)("keeps a failed edit available for retry after %s rejects", async (stage) => {
+    const { port, reads } = await open();
+    vi.mocked(port[stage]).mockRejectedValueOnce(new HttpError(500, "checkpoint is gone"));
+    type("Separate draft");
+    fireEvent.click(screen.getByRole("button", { name: "改写" }));
+    const edit = screen.getByRole("textbox", { name: "改写这条消息" }) as HTMLTextAreaElement;
+    const revised = "A revised prompt\n  Keep this indentation  ";
+    fireEvent.change(edit, { target: { value: revised } });
+    const before = reads.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "改完重发" }));
+    await screen.findByText("checkpoint is gone");
+    expect(screen.getByRole("textbox", { name: "改写这条消息" })).toBe(edit);
+    expect(edit.value).toBe(revised);
+    expect(edit.closest(".reask")?.textContent).toContain("checkpoint is gone");
+    expect(box().value).toBe("Separate draft");
+    expect(port.submit).not.toHaveBeenCalled();
+    expect(reads.mock.calls).toHaveLength(before);
+
+    fireEvent.click(screen.getByRole("button", { name: "改完重发" }));
+    await waitFor(() => expect(port.submit).toHaveBeenCalledExactlyOnceWith(revised.trim(), undefined));
+    expect(screen.queryByRole("textbox", { name: "改写这条消息" })).toBeNull();
+    expect(box().value).toBe("Separate draft");
+  });
+
+  it("keeps the edited words when the prepared plan cannot rewind the conversation", async () => {
+    const { port } = await open();
+    vi.mocked(port.prepareRewind).mockResolvedValue({
+      planId: "unavailable", turn: 1, coverage: "full", canFiles: false, canConversation: false,
+      fileCount: 0, requiresConfirmation: false, disabledReason: "conversation boundary is unavailable",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "改写" }));
+    const edit = screen.getByRole("textbox", { name: "改写这条消息" }) as HTMLTextAreaElement;
+    fireEvent.change(edit, { target: { value: "Keep these revised words" } });
+    fireEvent.click(screen.getByRole("button", { name: "改完重发" }));
+    await screen.findByText("conversation boundary is unavailable");
+    expect(screen.getByRole("textbox", { name: "改写这条消息" })).toBe(edit);
+    expect(edit.value).toBe("Keep these revised words");
+    expect(port.commitRewind).not.toHaveBeenCalled();
+    expect(port.submit).not.toHaveBeenCalled();
+  });
+
+  it.each(["prepareRewind", "commitRewind"] as const)("reports a regeneration failure when %s rejects", async (stage) => {
+    const { port, reads } = await open();
+    vi.mocked(port[stage]).mockRejectedValueOnce(new HttpError(500, "checkpoint is gone"));
+    const before = reads.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /按当前配置重试/ }));
+    await screen.findByText("checkpoint is gone");
+    expect(screen.getByText("The image has been reviewed.")).toBeTruthy();
+    expect(port.submit).not.toHaveBeenCalled();
+    expect(reads.mock.calls).toHaveLength(before);
   });
 
   it("leaves restoration out of undo, single-file revert and commits without a prompt", async () => {

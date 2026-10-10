@@ -15,6 +15,8 @@ export const NOTICE_TEXT: Record<string, string> = {
   memory_saved_unasked: "已按你的开关保存了这条记忆，没有逐次询问；要撤回就用 /forget 加这条记忆的名字",
   project_programs_awaiting_approval: "这个项目自带的钩子等程序要你批准后才会运行",
   project_program_changed: "这个项目的程序在批准后被改动过，本次没有运行，需要重新批准",
+  project_mcp_awaiting_approval: "这个项目声明的一个 MCP 服务要你批准后才会运行；详情里是它要启动的命令",
+  project_mcp_changed: "一个已启用的项目 MCP 服务要启动的内容变了，本次没有运行，需要查看命令后重新启用",
   hook_unevaluable: "有一个钩子无法被评估（匹配串无效、无法启动或载荷无法序列化），为安全起见已拦截这次操作；到钩子设置里修复或移除该钩子",
   suspected_injection: "一条外部内容看起来在向智能体下指令，已提醒它只当资料看待",
   await_user: "等待你的输入",

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { App } from "./App";
@@ -22,7 +22,7 @@ async function openWindow() {
   const edit = vi.spyOn(port, "editQueued");
   await port.setQueuePaused(true);
   const queued = await port.queueFollowup(BODY);
-  render(<App hub={hub} />);
+  await act(async () => { render(<App hub={hub} />); });
   await screen.findByRole("button", { name: "改" });
   await waitFor(() => expect(document.querySelector(".studio-runstate[data-running]")).not.toBeNull());
   return { port, queued, cancel, edit };

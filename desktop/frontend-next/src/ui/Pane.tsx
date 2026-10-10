@@ -54,6 +54,8 @@ export type { PaneReport };
 // changed prop to the rail below it.
 const NO_JOBS: JobEntry[] = [];
 
+type SessionRead = { kind: "pending" } | { kind: "settled"; status: SessionStatus | null };
+
 const totalsOf = (st: SessionStatus) => ({
   kind: "__totals",
   hit: st.cacheHit,
@@ -67,7 +69,9 @@ const totalsOf = (st: SessionStatus) => ({
 function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, onReport, onSessionChanged, onTurnDone, pulse, findPulse, onSettings, needsProject, onOpenProject, onKeepHere, theme, dockW, dockMax, onDockW, manualBrowser = false, onManualBrowser, alert }: PaneProps) {
   const [s, dispatch] = useReducer(reduce, initialState);
   const [traj, trajDispatch] = useReducer(reduceTraj, initialTraj);
-  const [status, setStatus] = useState<SessionStatus | null>(null);
+  const [sessionRead, setSessionRead] = useState<SessionRead>({ kind: "pending" });
+  const status = sessionRead.kind === "settled" ? sessionRead.status : null;
+  const ready = sessionRead.kind === "settled";
   const [tab, showView] = useShowView(rt.id, onManualBrowser);
   const [pinned, setPinned] = useState(true);
   const [jump, setJump] = useState(0);
@@ -125,7 +129,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // answers are word-for-word the previous one. Swapping in an equal object
   // would repaint the rail and the composer for no news at all.
   const applyStatus = useCallback((next: SessionStatus) => {
-    setStatus((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    setSessionRead((prev) => (prev.kind === "settled" && prev.status && JSON.stringify(prev.status) === JSON.stringify(next)
+      ? prev : { kind: "settled", status: next }));
   }, []);
 
   const refreshStatus = useCallback(() => port.status().then(applyStatus).catch(() => {}), [port, applyStatus]);
@@ -195,13 +200,15 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     });
     port.status().then((st) => {
       if (!alive) return;
-      setStatus(st);
+      applyStatus(st);
       dispatch(totalsOf(st) as never);
+    }).catch(() => {
+      if (alive) setSessionRead((prev) => prev.kind === "pending" ? { kind: "settled", status: null } : prev);
     });
     return () => {
       alive = false;
     };
-  }, [port]);
+  }, [port, applyStatus]);
 
   useEffect(() => {
     if (!running) {
@@ -265,12 +272,12 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // An MCP server connects lazily and fails at first use, so a turn boundary is
   // also when its status can have changed — no timer of its own needed.
   useEffect(() => {
-    reloadMcp();
-  }, [reloadMcp, status?.sessionPath, running]);
+    if (ready) reloadMcp();
+  }, [ready, reloadMcp, status?.sessionPath, running]);
   useCheckpointRefresh(port, status?.sessionPath, running, setCheckpoints);
   // A call that may write can have moved the tree before the turn ends.
   const refreshTree = useCallback(() => void port.changes().then(setTree).catch(() => setTree(null)), [port]);
-  useEffect(refreshTree, [refreshTree, status?.sessionPath, running, counts.wrote]);
+  useEffect(() => { if (ready || counts.wrote) refreshTree(); }, [ready, refreshTree, status?.sessionPath, running, counts.wrote]);
 
   // One turn can be dozens of model round trips — the session this was measured
   // on ran thirty, from 9k tokens to 57k. Reading the gauge only at the turn
@@ -284,8 +291,9 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const folds = s.items.reduce((n, i) => n + (i.t === "compaction" && i.done ? 1 : 0), 0);
   const roundTrips = s.metrics.hit + s.metrics.miss;
   useEffect(() => {
+    if (!ready && !roundTrips && !folds) return;
     port.context().then(setCtx).catch(() => setCtx(null));
-  }, [port, roundTrips, folds, status?.sessionPath, running]);
+  }, [ready, port, roundTrips, folds, status?.sessionPath, running]);
 
   // The sidebar has to hear about this pane's session twice: when the first
   // turn mints the file (before that there is no row to show) and when the turn
@@ -308,6 +316,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     dispatch,
     fail,
     moved: s.queueMoved,
+    sessionState: sessionRead.kind,
     sessionPath: status?.sessionPath,
   });
   const { onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert } = useRewindActions(port, reloadSession, onRestoreText);
@@ -381,7 +390,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
       <PaneShown.Provider value={shown}>
       <LiveWork.Provider value={live}>
-      <Transcript
+      <Transcript port={port}
         reply={reply}
         onResend={onResend}
         items={s.items}

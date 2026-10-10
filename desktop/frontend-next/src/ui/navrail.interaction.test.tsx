@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "./testkit";
 import { App } from "./App";
@@ -53,64 +53,128 @@ async function open() {
 }
 
 const nav = () => screen.queryByRole("navigation", { name: "主导航" });
+const navEl = () => document.querySelector<HTMLElement>("nav.nav");
 const app = () => document.querySelector<HTMLElement>(".app")!;
+const toggleSidebar = () => userEvent.click(screen.getAllByRole("button", { name: /收起工作区栏|展开工作区栏/ })[0]);
 
 async function openAppearance() {
   await userEvent.click(screen.getByRole("button", { name: "沙盒" }));
   await userEvent.click(await screen.findByRole("tab", { name: /外观/ }));
-  return screen.findByRole("switch", { name: "显示图标栏" });
+  await screen.findByRole("group", { name: "图标栏" });
 }
+const choice = (name: string) => screen.getByRole("button", { name });
+const pressed = (name: string) => choice(name).getAttribute("aria-pressed");
 
-it("draws the icon rail by default, with every entry in it", async () => {
+it("always draws the rail by default, with every entry in it", async () => {
   await open();
   expect(nav()).not.toBeNull();
   expect(app().dataset.nav).toBe("on");
-  for (const name of ["会话", "用量", "工具与权限", "扩展", "记忆", "远程", "账号", "设置"]) {
-    expect(screen.getByRole("navigation", { name: "主导航" }).querySelector(`[aria-label="${name}"]`), name).not.toBeNull();
+  for (const name of ["会话", "用量", "工具与权限", "扩展", "记忆", "远程", "发送反馈", "账号", "设置"]) {
+    expect(within(navEl()!).getByRole("button", { name: new RegExp(`^${name}`) }), name).toBeTruthy();
   }
 });
 
-it("takes the rail away when the appearance switch is turned off, and keeps that across a reload", async () => {
+it.each([
+  [null, "on"],
+  ["on", "on"],
+  ["off", "off"],
+  ["collapsed", "collapsed"],
+  ["true", "on"],
+  ["", "on"],
+])("reads a stored %j as %s", async (stored, mode) => {
+  if (stored !== null) localStorage.setItem(KEY, stored);
+  await open();
+  await openAppearance();
+  const label = { on: "始终显示", collapsed: "仅侧栏收起时显示", off: "不显示" }[mode as "on"];
+  expect(pressed(label)).toBe("true");
+});
+
+it("moves between the three states at once and keeps the choice across a reload", async () => {
   const first = await open();
-  const sw = await openAppearance();
-  expect(sw.getAttribute("aria-checked")).toBe("true");
-  await userEvent.click(sw);
-  expect(sw.getAttribute("aria-checked")).toBe("false");
+  await openAppearance();
+  await userEvent.click(choice("不显示"));
   expect(nav()).toBeNull();
   expect(app().dataset.nav).toBe("off");
   expect(localStorage.getItem(KEY)).toBe("off");
-
-  first.view.unmount();
-  await open();
-  expect(nav()).toBeNull();
-  expect(app().dataset.nav).toBe("off");
-});
-
-it("brings it back when the switch is turned on again", async () => {
-  localStorage.setItem(KEY, "off");
-  await open();
-  expect(nav()).toBeNull();
-  const sw = await openAppearance();
-  expect(sw.getAttribute("aria-checked")).toBe("false");
-  await userEvent.click(sw);
+  await userEvent.click(choice("仅侧栏收起时显示"));
+  expect(localStorage.getItem(KEY)).toBe("collapsed");
+  await userEvent.click(choice("始终显示"));
   expect(nav()).not.toBeNull();
   expect(localStorage.getItem(KEY)).toBe("on");
+  await userEvent.click(choice("仅侧栏收起时显示"));
+  first.view.unmount();
+  await open();
+  expect(app().dataset.nav).toBe("off");
+  expect(localStorage.getItem(KEY)).toBe("collapsed");
+});
+
+it("in collapsed mode follows the sidebar without remounting the rail", async () => {
+  localStorage.setItem(KEY, "collapsed");
+  await open();
+  const el = navEl()!;
+  expect(el).not.toBeNull();
+  expect(app().dataset.rail).toBe("on");
+  expect(app().dataset.nav).toBe("off");
+  expect(nav()).toBeNull();
+  await toggleSidebar();
+  expect(app().dataset.rail).toBe("off");
+  expect(app().dataset.nav).toBe("on");
+  expect(nav()).not.toBeNull();
+  expect(navEl()).toBe(el);
+  await toggleSidebar();
+  expect(app().dataset.nav).toBe("off");
+  expect(navEl()).toBe(el);
+});
+
+it("always mode keeps the rail beside an open sidebar and a closed one", async () => {
+  await open();
+  const el = navEl()!;
+  await toggleSidebar();
+  expect(app().dataset.nav).toBe("on");
+  expect(navEl()).toBe(el);
 });
 
 it("still reaches settings with the rail off", async () => {
   localStorage.setItem(KEY, "off");
   await open();
-  const sw = await openAppearance();
-  expect(sw).toBeTruthy();
+  await openAppearance();
+  expect(pressed("不显示")).toBe("true");
 });
 
-it("hides the rail under the scene fold whatever the setting says, and restores it after", async () => {
-  await open();
-  expect(nav()).not.toBeNull();
-  act(() => room(390));
-  await waitFor(() => expect(nav()).toBeNull());
-  expect(app().dataset.nav).toBe("off");
-  expect(localStorage.getItem(KEY)).toBeNull();
-  act(() => room(1440));
-  await waitFor(() => expect(nav()).not.toBeNull());
+it("never draws the rail under the scene fold, in any state, and restores it after", async () => {
+  for (const mode of ["on", "collapsed", "off"]) {
+    cleanup();
+    localStorage.setItem(KEY, mode);
+    room(1440);
+    await open();
+    await toggleSidebar();
+    expect(nav() !== null, mode).toBe(mode !== "off");
+    act(() => room(390));
+    await waitFor(() => expect(nav()).toBeNull());
+    expect(navEl()).toBeNull();
+    expect(localStorage.getItem(KEY)).toBe(mode);
+    act(() => room(1440));
+    await waitFor(() => expect(nav() !== null).toBe(mode !== "off"));
+  }
+});
+
+it("opens feedback from the rail like the sidebar entry does, badge included", async () => {
+  const hub = new MockHub();
+  const build = hub.portFor.bind(hub);
+  const prepared = new WeakSet();
+  hub.portFor = (rt) => {
+    const port = build(rt);
+    if (!prepared.has(port)) {
+      prepared.add(port);
+      port.providerSetup = async () => null;
+      port.welcomeSeen = async () => true;
+    }
+    return port;
+  };
+  render(<App hub={hub} />);
+  await screen.findByRole("combobox", { name: "任务输入" });
+  const entry = await within(navEl()!).findByRole("button", { name: /发送反馈.*3 项待查看/ });
+  expect(entry.querySelector(".fbk-badge")?.textContent).toBe("3");
+  await userEvent.click(entry);
+  expect(await screen.findByRole("tab", { name: "我的反馈", selected: true })).toBeTruthy();
 });

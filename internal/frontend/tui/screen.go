@@ -498,8 +498,14 @@ func (m *model) onMouse(msg tea.MouseMsg) tea.Cmd {
 			m.scrollBy(wheelRows)
 		}
 	case tea.MouseClickMsg:
-		if msg.Button == tea.MouseRight && s.sel.active && !s.sel.empty() {
-			return m.copySelection()
+		if msg.Button == tea.MouseRight {
+			switch {
+			case s.sel.active && !s.sel.empty():
+				return m.copySelection()
+			case m.composerShown():
+				return m.pasteClipboardText()
+			}
+			return nil
 		}
 		if msg.Button != tea.MouseLeft || mouse.Y >= h {
 			return nil

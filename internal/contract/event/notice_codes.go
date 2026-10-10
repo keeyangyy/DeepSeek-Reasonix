@@ -49,6 +49,9 @@ const (
 	NoticeCodeProjectProgramsAwaitingApproval = "project_programs_awaiting_approval"
 	// An approved workspace program whose files changed; the host did not run it.
 	NoticeCodeProjectProgramChanged = "project_program_changed"
+	// A project-declared MCP server held off until the user approves what it runs:
+	// never approved, or changed since it was. Detail is the launch line.
+	NoticeCodeProjectMCPAwaitingApproval, NoticeCodeProjectMCPChanged = "project_mcp_awaiting_approval", "project_mcp_changed"
 	// A conversation opened from a 1.x log went on in a new session of its own.
 	NoticeCodeSessionContinuedFrom1x = "session_continued_from_1x"
 	// The user config names a default approval mode this build does not know; it loads as ask.

@@ -362,6 +362,7 @@ func (b *builder) wireMCP() {
 		OAuthHTTPClient:       b.balanceClient,
 	}
 	t.mcp = resolveMCPSpecs(opts, cfg, root, t.specOptions)
+	reportProjectMCPAwaitingApproval(b.sink, cfg, root)
 	t.configSpecs, t.mcpSchemaKnown = registerMCPTools(b.ctx, t.host, t.reg, t.mcp, b.sink)
 	b.cleanup = t.host.Close
 	if opts.SharedHost != nil {

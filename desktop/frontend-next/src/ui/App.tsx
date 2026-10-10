@@ -7,6 +7,7 @@ import { Chrome } from "./Chrome";
 import { useLaunchHealth } from "./launchhealth";
 import { Nav } from "./Nav";
 import { useNavRail } from "./navrail";
+import { feedbackEntryTab } from "./feedbackentry";
 import { useLinkRouting } from "./links";
 import { Pane, type PaneReport } from "./Pane";
 import { clearDraftForSession } from "./drafts";
@@ -311,7 +312,7 @@ export function App({ hub }: { hub: HubPort }) {
   }, [setup, welcomed]);
 
   const running = report.run === "running";
-  const { theme, setTheme, scheme, contrast, setContrast, weight, setWeight, look, onLook, pack, reloadThemes } =
+  const { theme, setTheme, scheme, contrast, setContrast, weight, setWeight, effects, look, onLook, pack, reloadThemes } =
     usePaint(hub, runtimes, running, fail);
   // A pane with no session file has never been written to — the empty one every
   // window opens with. Opening a conversation takes it over instead of parking
@@ -363,7 +364,7 @@ export function App({ hub }: { hub: HubPort }) {
   const needsProject = treeRead && !claimed && tree.every((ws) => !ws.remembered);
 
   useFoldAway("rail", setRail);
-  const navRail = useNavRail();
+  const navRail = useNavRail(rail);
   useDrawerCloses(setRail, active, settings);
   useEffect(() => onRoomWidth((width) => setDockLimit(dockMax(width))), []);
   const shownDockW = Math.min(dockW, dockLimit);
@@ -552,7 +553,7 @@ export function App({ hub }: { hub: HubPort }) {
       className="app"
       data-run={report.run}
       data-rail={rail ? "on" : "off"}
-      data-nav={navRail ? "on" : "off"}
+      data-nav={navRail.shown ? "on" : "off"}
       data-browser={browser ? "on" : "off"}
       data-plan={report.status?.plan ? "on" : "off"}
       data-apv={report.status?.toolApprovalMode ?? "ask"}
@@ -581,14 +582,17 @@ export function App({ hub }: { hub: HubPort }) {
         hub={hub} onError={fail}
       />
 
-      {pack?.sky && <Sky />}
+      {pack?.sky && effects !== "reduced" && <Sky />}
 
       <div className="cols">
-        {navRail && (
+        {navRail.drawn && (
           <Nav
             at={settings === false ? null : settings === true ? "" : settings}
             onGo={showPrefs}
             onHome={hidePrefs}
+            onFeedback={() => setFeedback(feedbackEntryTab(feedbackUnread))}
+            feedbackUnread={feedbackUnread}
+            shown={navRail.shown}
           />
         )}
         <Sidebar
