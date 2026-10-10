@@ -6,6 +6,7 @@
 // "ask 的结果放最下面，直到 assistant 结果回复出现才恢复"。
 
 import { initialState, reducer } from "../lib/useController";
+import { buildTranscriptRows, buildTurnModels, EMPTY_FOLDS } from "../lib/transcriptRows";
 
 let passed = 0;
 let failed = 0;
@@ -26,6 +27,12 @@ function startTurn() {
 
 function kinds(s: ReturnType<typeof reducer>): string[] {
   return s.items.map((it) => (it.kind === "tool" ? `tool:${it.name}:${it.status}` : it.kind));
+}
+
+function renderedTimeline(s: ReturnType<typeof reducer>): string[] {
+  const live = s.live?.id ? { id: s.live.id, hasAnswerText: Boolean(s.live.text.trim()), hasReasoning: Boolean(s.live.reasoning), reasoningComplete: s.live.reasoningComplete } : undefined;
+  const rows = buildTranscriptRows(buildTurnModels(s.items, live, s.running), { folds: EMPTY_FOLDS, foldPreference: "expanded", hasOlderHistory: false, creationMode: false, turnForUser: () => 1 });
+  return rows.flatMap((row) => row.kind === "answer" ? [`assistant:${s.live?.id === row.item.id ? s.live.text : row.item.text}`] : row.kind === "tool" ? [`tool:${row.item.name}:${row.item.status}`] : row.kind === "tool-batch" || row.kind === "tool-group" ? row.items.map((item) => `tool:${item.name}:${item.status}`) : row.kind === "process-notice" || row.kind === "notice" ? [`notice:${row.item.decisionReceipt?.kind ?? row.item.text}`] : []);
 }
 
 console.log("\nask order self-repro (多工具并发)");
@@ -73,6 +80,23 @@ console.log("\nask order self-repro (多工具并发)");
   const bashDone = after.filter((k) => k === "tool:Bash:done").length;
   ok(after.length === before, "bash result 填充原位不新增行（before=" + before + " after=" + after.length + "）");
   ok(bashDone === 1, "bash 行只有一行（原位填充，" + bashDone + "）");
+}
+
+// 场景4：Ask answered / receipt / tool result 到达后，最终 transcript 行序仍稳定。
+{
+  let s = startTurn();
+  s = reducer(s, { type: "event", e: { kind: "text", turnId: "t1", text: "I need a choice." } } as never);
+  s = reducer(s, { type: "event", e: { kind: "tool_dispatch", tool: { id: "ask-1", name: "ask", args: "", status: "running" } } } as never);
+  s = reducer(s, { type: "event", e: { kind: "tool_dispatch", tool: { id: "bash-1", name: "Bash", args: "", status: "running" } } } as never);
+  s = reducer(s, { type: "event", e: { kind: "ask_request", turnId: "t1", ask: { id: "ask-1", questions: [{ id: "q1", prompt: "Go?" }] } } } as never);
+  s = reducer(s, { type: "event", e: { kind: "tool_result", tool: { id: "bash-1", name: "Bash", status: "done", content: "ok" } } } as never);
+  s = reducer(s, { type: "event", e: { kind: "prompt_answered", turnId: "t1", itemId: "ask-1", status: "in_progress" } } as never);
+  s = reducer(s, { type: "event", e: { kind: "notice", turnId: "t1", level: "info", code: "decision_receipt", text: "Decision recorded: answered", decisionReceipt: { id: "1", occurrenceId: "receipt-1", kind: "ask", subject: "Go?: yes", outcome: "answered" } } } as never);
+  s = reducer(s, { type: "event", e: { kind: "tool_result", tool: { id: "ask-1", name: "ask", status: "done", content: "answer: yes" } } } as never);
+  s = reducer(s, { type: "event", e: { kind: "text", turnId: "t1", text: "Done." } } as never);
+
+  const rendered = renderedTimeline(s);
+  ok(rendered.join("|") === "assistant:I need a choice.|tool:ask:done|tool:Bash:done|notice:ask|assistant:Done.", "Ask resolution, receipt, and tool result preserve the rendered sequence");
 }
 
 console.log(`\nask self-repro: ${passed} passed, ${failed} failed`);

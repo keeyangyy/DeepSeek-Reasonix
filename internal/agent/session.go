@@ -192,6 +192,9 @@ func (s *Session) AddDecisionReceipt(receipt *provider.DecisionReceipt) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if receipt.OccurrenceID == "" {
+		receipt.OccurrenceID = NewMessageID()
+	}
 	//nolint:modernize // slices.Backward yields element copies; this body writes through the index.
 	for i := len(s.Messages) - 1; i >= 0; i-- {
 		if IsUserAuthoredTurnMessage(s.Messages[i]) {
