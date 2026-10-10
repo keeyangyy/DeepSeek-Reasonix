@@ -57,6 +57,10 @@
 
 <br/>
 
+## ❤️Sponsor
+
+<table><tr><td width="180"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="150"></picture></a></td><td>Thanks to PackyCode for sponsoring this project! Access leading AI models through PackyCode with one API endpoint and one API key, with automatic failover and dedicated high-speed routes for Codex and Claude Code.</td></tr></table>
+
 ## What it is
 
 Reasonix is an open-source AI coding assistant. The program runs on your computer; the AI model is a service you configure, which receives what it reads. You describe a task in plain language; it reads code, edits files and runs commands and tests inside the project folder you choose, and shows you each step.
@@ -272,11 +276,11 @@ A small list of folks whose work has shaped Reasonix the most — the current to
 <!-- reasonix-top-contributors:start -->
 | Contributor | Contributor | Contributor | Contributor |
 | --- | --- | --- | --- |
-| [**SivanCola**](https://github.com/SivanCola) | [**esengine**](https://github.com/esengine) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
-| **reasonix** | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
-| [**Li-Charles-One**](https://github.com/Li-Charles-One) | **merge-order-check** | [**light-front-theory**](https://github.com/light-front-theory) | **Yan Li** |
-| [**eghrhegpe**](https://github.com/eghrhegpe) | **wufengfan** | [**Bernardxu123**](https://github.com/Bernardxu123) | [**HaoyueQin**](https://github.com/HaoyueQin) |
-| [**CVEngineer66**](https://github.com/CVEngineer66) | [**KHG420**](https://github.com/KHG420) | [**JesonChou**](https://github.com/JesonChou) | [**SuMuxi66**](https://github.com/SuMuxi66) |
+| [**SivanCola**](https://github.com/SivanCola) | [**KHG420**](https://github.com/KHG420) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
+| [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**Harbor404**](https://github.com/Harbor404) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
+| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**eghrhegpe**](https://github.com/eghrhegpe) | [**Bernardxu123**](https://github.com/Bernardxu123) |
+| [**HaoyueQin**](https://github.com/HaoyueQin) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) |
+| [**JesonChou**](https://github.com/JesonChou) | [**lanshi17**](https://github.com/lanshi17) | [**par73e**](https://github.com/par73e) | [**SuMuxi66**](https://github.com/SuMuxi66) |
 <!-- reasonix-top-contributors:end -->
 
 Special thanks to [**Bernardxu123**](https://github.com/Bernardxu123) for designing the project logo and intro video.

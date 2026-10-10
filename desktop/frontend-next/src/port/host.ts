@@ -14,6 +14,9 @@ export interface HostInfo {
 }
 
 export interface HostPort {
+  /** Whether this page runs inside the desktop shell, as opposed to a browser
+   *  tab, where the browser's own keys (zoom among them) are the reader's. */
+  inShell(): boolean;
   describe(): Promise<HostInfo>;
   minimiseWindow(): void;
   toggleMaximiseWindow(): void;
@@ -162,6 +165,9 @@ function normalise(platform: string): string {
 }
 
 class ElectronHost implements HostPort {
+  inShell() {
+    return true;
+  }
   constructor(private readonly api: ElectronBridge) {}
   describe() {
     return Promise.resolve({
@@ -250,6 +256,9 @@ class ElectronHost implements HostPort {
 }
 
 class BrowserHost implements HostPort {
+  inShell() {
+    return false;
+  }
   describe() {
     return Promise.resolve({ shell: "browser" as const, platform: "", titleBar: false });
   }

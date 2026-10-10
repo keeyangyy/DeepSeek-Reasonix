@@ -55,6 +55,10 @@
 
 > 抖音：**做游戏的小鱼**（抖音号 `22703872788`）· [二维码](./docs/assets/douyin.png)
 
+## ❤️赞助商
+
+<table><tr><td width="180"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="150"></picture></a></td><td>感谢 PackyCode 赞助了本项目！PackyCode 是一家稳定、高效的 API 中转服务商，统一域名、统一密钥、智能容灾切换。</td></tr></table>
+
 ## 它是什么
 
 Reasonix 是一个开源的 AI 编程助手。程序跑在你的电脑上；AI 模型是你自己配置的服务，它读到的内容会发给这个服务。你用大白话描述任务，它在你选的项目文件夹里读代码、改文件、跑命令和测试，每一步都摆给你看。
@@ -254,11 +258,11 @@ CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**�
 <!-- reasonix-top-contributors:start -->
 | Contributor | Contributor | Contributor | Contributor |
 | --- | --- | --- | --- |
-| [**SivanCola**](https://github.com/SivanCola) | [**esengine**](https://github.com/esengine) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
-| **reasonix** | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
-| [**Li-Charles-One**](https://github.com/Li-Charles-One) | **merge-order-check** | [**light-front-theory**](https://github.com/light-front-theory) | **Yan Li** |
-| [**eghrhegpe**](https://github.com/eghrhegpe) | **wufengfan** | [**Bernardxu123**](https://github.com/Bernardxu123) | [**HaoyueQin**](https://github.com/HaoyueQin) |
-| [**CVEngineer66**](https://github.com/CVEngineer66) | [**KHG420**](https://github.com/KHG420) | [**JesonChou**](https://github.com/JesonChou) | [**SuMuxi66**](https://github.com/SuMuxi66) |
+| [**SivanCola**](https://github.com/SivanCola) | [**KHG420**](https://github.com/KHG420) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
+| [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**Harbor404**](https://github.com/Harbor404) | [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) |
+| [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) | [**eghrhegpe**](https://github.com/eghrhegpe) | [**Bernardxu123**](https://github.com/Bernardxu123) |
+| [**HaoyueQin**](https://github.com/HaoyueQin) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**BuGlessRB**](https://github.com/BuGlessRB) | [**CVEngineer66**](https://github.com/CVEngineer66) |
+| [**JesonChou**](https://github.com/JesonChou) | [**lanshi17**](https://github.com/lanshi17) | [**par73e**](https://github.com/par73e) | [**SuMuxi66**](https://github.com/SuMuxi66) |
 <!-- reasonix-top-contributors:end -->
 
 特别感谢 [**Bernardxu123**](https://github.com/Bernardxu123) 设计的项目 logo和开场视频。
