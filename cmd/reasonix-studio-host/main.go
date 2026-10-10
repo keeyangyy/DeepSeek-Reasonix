@@ -375,7 +375,6 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	// Shut until the person at the window opens it; the context ending stops it
 	// with the rest of the kernel, keeping the phones this machine already adopted.
 	share := serve.NewDeviceShare(page)
-	share.RestoreDevices()
 	share.RestorePort(cfg.SharePort())
 	go func() {
 		<-ctx.Done()

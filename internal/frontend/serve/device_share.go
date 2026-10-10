@@ -54,9 +54,18 @@ type DeviceShare struct {
 	port            int
 	persistPort     func(int) error
 	// persistState records whether the share is open and on what address, so the
-	// next process can reopen it. Nil leaves the share in memory only; a write
-	// failure is the hook's own to log, since the share already did as asked.
-	persistState func(persistedShareState)
+	// next process can reopen it. Nil leaves the share in memory only, which is
+	// what every test builds.
+	persistState func(persistedShareState) error
+	// remember reports whether this install keeps paired phones across restarts.
+	// Nil is the historical behaviour: reopening the share or ending the process
+	// unpairs every device, which is what a directly built share gets.
+	remember func() bool
+}
+
+// remembers reports whether paired phones outlive the door that paired them.
+func (s *DeviceShare) remembers() bool {
+	return s.remember != nil && s.remember()
 }
 
 type shareListener struct {
@@ -127,21 +136,26 @@ type ShareOffer struct {
 
 // NewDeviceShare returns a closed share serving page to devices.
 func NewDeviceShare(page fs.FS) *DeviceShare {
-	return &DeviceShare{registry: NewDeviceRegistry(), cloud: newCloudPresence(), page: page, addresses: PrivateAddresses, persistPort: persistSharePort}
-}
-
-// RestoreDevices adopts the devices a previous process had paired and writes
-// every later change back, so a phone that scanned once keeps its cookie across
-// restarts — until the share closes or that device is removed. The host calls it
-// when it opens a share; a registry nobody hands a path to stays in memory,
-// which is what every test builds.
-func (s *DeviceShare) RestoreDevices() {
-	trust := deviceTrustPath()
-	if trust == "" {
-		return
+	registry := NewDeviceRegistry()
+	// Devices paired before a restart are adopted here, and every later change
+	// writes them back: a phone that scanned once keeps its cookie across
+	// restarts, until the share is closed or that device is removed.
+	if trust := deviceTrustPath(); trust != "" {
+		// Adopted only when the switch is on at startup; the hook stays wired
+		// either way and reads the setting when it runs, so the panel switch
+		// takes effect without a restart. Off forgets: an empty set removes
+		// the file.
+		if rememberPairedDevices() {
+			registry.Restore(loadDeviceTrust(trust))
+		}
+		registry.persist = func(devices []persistedDevice) {
+			if !rememberPairedDevices() {
+				devices = nil
+			}
+			_ = saveDeviceTrust(trust, devices)
+		}
 	}
-	s.registry.Restore(loadDeviceTrust(trust))
-	s.registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(trust, devices) }
+	return &DeviceShare{registry: registry, cloud: newCloudPresence(), page: page, addresses: PrivateAddresses, persistPort: persistSharePort, remember: rememberPairedDevices}
 }
 
 // Attach names the handler devices reach. The hub is built after the share it
@@ -162,7 +176,14 @@ func (s *DeviceShare) Open(ip string) (ShareStatus, error) {
 	}
 	s.turn.Lock()
 	defer s.turn.Unlock()
-	s.stopListeningLocked()
+	// An install that does not remember paired devices gets the share it always
+	// had: opening it again is a fresh door, and the phones of the old one go
+	// with it.
+	if s.remembers() {
+		s.stopListeningLocked()
+	} else {
+		s.closeLocked()
+	}
 	s.mu.Lock()
 	handler := s.handler
 	s.mu.Unlock()
@@ -222,8 +243,22 @@ func (s *DeviceShare) RestoreState() persistedShareState {
 		return persistedShareState{}
 	}
 	s.mu.Lock()
-	s.persistState = func(st persistedShareState) { _ = saveShareState(path, st) }
+	// The hook reads the setting when it runs, so the panel switch takes
+	// effect without a restart; off forgets, and removing the file is what
+	// forgetting records.
+	s.persistState = func(st persistedShareState) error {
+		if !rememberPairedDevices() {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			return nil
+		}
+		return saveShareState(path, st)
+	}
 	s.mu.Unlock()
+	if !rememberPairedDevices() {
+		return persistedShareState{}
+	}
 	return loadShareState(path)
 }
 
@@ -235,7 +270,9 @@ func (s *DeviceShare) recordState(open bool, address string) {
 	persist := s.persistState
 	s.mu.Unlock()
 	if persist != nil {
-		persist(persistedShareState{Open: open, Address: address})
+		if err := persist(persistedShareState{Open: open, Address: address}); err != nil {
+			slog.Warn("serve: phone-access state was not recorded", "err", err)
+		}
 	}
 }
 
@@ -246,10 +283,15 @@ func (s *DeviceShare) Close() {
 	s.closeLocked()
 }
 
-// Shutdown stops listening without forgetting the paired devices. It is what the
-// host calls when the process is going away: nobody withdrew the share, and the
-// next process should adopt the same phones rather than ask for a new code.
+// Shutdown stops listening when the process is going away. An install that
+// remembers paired devices keeps them, so the next process adopts the same phones
+// rather than ask for a new code; one that does not ends up as Close, which is
+// what shipped.
 func (s *DeviceShare) Shutdown() {
+	if !s.remembers() {
+		s.Close()
+		return
+	}
 	s.turn.Lock()
 	defer s.turn.Unlock()
 	s.stopListeningLocked()

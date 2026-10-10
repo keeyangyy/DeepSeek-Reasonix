@@ -98,6 +98,7 @@ func TestMissingTrustFileReadsAsNoDevices(t *testing.T) {
 func TestShutdownKeepsTheDevicesCloseForgets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "device-trust.json")
 	share := NewDeviceShare(nil)
+	share.remember = func() bool { return true }
 	share.registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(path, devices) }
 
 	code, _ := share.registry.Offer()
@@ -131,6 +132,7 @@ func TestShutdownKeepsTheDevicesCloseForgets(t *testing.T) {
 func TestReopeningAShareKeepsThePairedDevices(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "device-trust.json")
 	share := NewDeviceShare(nil)
+	share.remember = func() bool { return true }
 	share.registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(path, devices) }
 	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	share.addresses = func() []ShareAddress { return []ShareAddress{{Interface: "lo", IP: "127.0.0.1", Kind: AddressLAN}} }
@@ -149,5 +151,23 @@ func TestReopeningAShareKeepsThePairedDevices(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("reopening the share forgot the devices on disk: %v", err)
+	}
+}
+
+// TestWithoutTheSwitchShutdownStillForgets is the shipping default: an install that
+// does not remember paired phones keeps the behaviour it always had, so a process
+// going away unpairs the phones it was holding.
+func TestWithoutTheSwitchShutdownStillForgets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "device-trust.json")
+	share := NewDeviceShare(nil)
+	share.registry.persist = func(devices []persistedDevice) { _ = saveDeviceTrust(path, devices) }
+
+	code, _ := share.registry.Offer()
+	if _, _, err := share.registry.Redeem(code, "phone"); err != nil {
+		t.Fatal(err)
+	}
+	share.Shutdown()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("the default install kept devices across a shutdown (stat err = %v)", err)
 	}
 }

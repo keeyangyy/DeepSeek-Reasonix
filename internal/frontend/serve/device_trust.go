@@ -93,11 +93,18 @@ func (d *DeviceRegistry) snapshotLocked() []persistedDevice {
 	return out
 }
 
-// flush hands the persisted set to the hook, outside the lock so a disk write
-// never holds up a request. The hook itself is read under the lock — it is set
-// once, but the race detector cannot know that.
-func (d *DeviceRegistry) flush(snapshot []persistedDevice) {
+// flush hands the persisted set to the hook. The write happens outside the
+// registry lock so a disk write never holds up a request, but a snapshot
+// taken before a later change is dropped here: its rev no longer matches,
+// so a concurrent Redeem's write can never overwrite a Revoke's.
+func (d *DeviceRegistry) flush(snapshot []persistedDevice, rev uint64) {
+	d.persistMu.Lock()
+	defer d.persistMu.Unlock()
 	d.mu.Lock()
+	if d.rev != rev {
+		d.mu.Unlock()
+		return
+	}
 	persist := d.persist
 	d.mu.Unlock()
 	if persist != nil {
@@ -130,4 +137,13 @@ func (d *DeviceRegistry) Restore(saved []persistedDevice) {
 			streams: map[*deviceStream]struct{}{},
 		}
 	}
+}
+
+// rememberPairedDevices reports whether this install keeps phone access across
+// restarts: the share reopens where it was, and the phones that paired against it
+// are adopted. Off, the share is memory-only, so closing it or ending the process
+// unpairs every device, which is what shipped.
+func rememberPairedDevices() bool {
+	cfg, err := config.Load()
+	return err == nil && cfg.Serve.RememberPairedDevices
 }

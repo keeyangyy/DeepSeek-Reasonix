@@ -35,6 +35,12 @@ type DeviceRegistry struct {
 	now     func() time.Time
 	pending pairingOffer
 	devices map[string]*pairedDevice
+	// rev counts every change to the paired set. A snapshot taken before a
+	// later change carries a stale rev and is dropped before it is written,
+	// so a Revoke cannot be overwritten by an older Redeem's write.
+	rev uint64
+	// persistMu serializes the writes that survive the rev check.
+	persistMu sync.Mutex
 	// persist writes the paired set after a change. Called outside the lock, and
 	// nil for a registry that is only ever in memory.
 	persist func([]persistedDevice)
@@ -132,11 +138,12 @@ func (d *DeviceRegistry) Redeem(code, name string) (credential string, view Devi
 		streams: map[*deviceStream]struct{}{},
 	}
 	d.devices[dev.id] = dev
-	view = dev.view()
+	d.rev++
 	saved := d.snapshotLocked()
+	rev := d.rev
 	d.mu.Unlock()
-	d.flush(saved)
-	return credential, view, nil
+	d.flush(saved, rev)
+	return credential, dev.view(), nil
 }
 
 // Authenticate names the device a credential belongs to, and records that it
@@ -184,10 +191,12 @@ func (d *DeviceRegistry) Revoke(id string) bool {
 		return false
 	}
 	delete(d.devices, id)
-	dev.cut()
+	d.rev++
 	saved := d.snapshotLocked()
+	rev := d.rev
 	d.mu.Unlock()
-	d.flush(saved)
+	dev.cut()
+	d.flush(saved, rev)
 	return true
 }
 
@@ -200,8 +209,10 @@ func (d *DeviceRegistry) RevokeAll() {
 	}
 	d.devices = map[string]*pairedDevice{}
 	d.pending = pairingOffer{}
+	d.rev++
+	rev := d.rev
 	d.mu.Unlock()
-	d.flush(nil)
+	d.flush(nil, rev)
 }
 
 // holdStream registers a stream the device opened and derives the context it

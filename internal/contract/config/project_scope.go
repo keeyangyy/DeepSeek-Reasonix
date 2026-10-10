@@ -29,15 +29,16 @@ type heldScope struct {
 	endpoints    heldEndpoints
 	layaPython   string
 	layaLocal    bool
-	// writeLease is the user's write-lease mode. A project file may not change
-	// it: widening or removing the conflict protection is not the clone's to
-	// give away.
 	writeLease string
 	// rememberProject and rememberGlobal are the user's [memory] auto-confirm
 	// switches. A project file may set neither: skipping a confirmation widens
 	// what the agent may persist, and that is the user's call, not the clone's.
 	rememberProject bool
 	rememberGlobal  bool
+	// rememberDevices is the user's [serve] remember_paired_devices. A project
+	// may not set it: a cloned repo must not be able to make a phone the person
+	// paired with stay trusted longer than they chose.
+	rememberDevices bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -63,6 +64,7 @@ func holdUserScope(c *Config) heldScope {
 		writeLease:      c.Agent.WriteLeaseMode(),
 		rememberProject: c.Memory.AutoConfirmProjectRemember,
 		rememberGlobal:  c.Memory.AutoConfirmGlobalRemember,
+		rememberDevices: c.Serve.RememberPairedDevices,
 	}
 }
 
@@ -148,6 +150,12 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.write_lease", c.Agent.WriteLeaseMode(), ProjectUserOnly)
 	}
 	c.Agent.WriteLease = h.writeLease
+	// Keeping paired phones across restarts is the user's alone: it widens how
+	// long a device stays trusted, which is not a clone's to give away.
+	if c.Serve.RememberPairedDevices != h.rememberDevices {
+		c.ignoreProject("serve.remember_paired_devices", fmt.Sprintf("%t", c.Serve.RememberPairedDevices), ProjectUserOnly)
+	}
+	c.Serve.RememberPairedDevices = h.rememberDevices
 	h.narrowSandbox(c, ws)
 	h.narrowPermissions(c)
 	if NormalizeToolApprovalMode(c.Desktop.DefaultToolApprovalMode) != NormalizeToolApprovalMode(h.approvalMode) {

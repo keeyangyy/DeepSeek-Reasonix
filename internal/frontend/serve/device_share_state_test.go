@@ -48,7 +48,7 @@ func TestOpeningTheShareRecordsItsAddress(t *testing.T) {
 	share := NewDeviceShare(nil)
 	lanOnly(t, share)
 	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	share.persistState = func(st persistedShareState) { saved = append(saved, st) }
+	share.persistState = func(st persistedShareState) error { saved = append(saved, st); return nil }
 	t.Cleanup(share.Close)
 
 	if _, err := share.Open("127.0.0.1"); err != nil {
@@ -65,7 +65,7 @@ func TestClosingTheShareRecordsItShut(t *testing.T) {
 	share := NewDeviceShare(nil)
 	lanOnly(t, share)
 	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	share.persistState = func(st persistedShareState) { saved = append(saved, st) }
+	share.persistState = func(st persistedShareState) error { saved = append(saved, st); return nil }
 
 	if _, err := share.Open("127.0.0.1"); err != nil {
 		t.Fatalf("open: %v", err)
@@ -82,17 +82,19 @@ func TestClosingTheShareRecordsItShut(t *testing.T) {
 func TestReopenUsesTheRememberedAddress(t *testing.T) {
 	share := NewDeviceShare(nil)
 	share.Attach(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	// The remembered address comes first in what the share offers, so opening
+	// somewhere else would prove the memory was ignored.
 	share.addresses = func() []ShareAddress {
-		return []ShareAddress{{IP: "127.0.0.1", Kind: AddressLAN}, {IP: "127.0.0.2", Kind: AddressLAN}}
+		return []ShareAddress{{IP: "127.0.0.2", Kind: AddressLAN}, {IP: "127.0.0.1", Kind: AddressLAN}}
 	}
 	t.Cleanup(share.Close)
 
-	st, err := share.Reopen("127.0.0.2")
+	st, err := share.Reopen("127.0.0.1")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	if !st.Open || !strings.HasPrefix(st.Origin, "http://127.0.0.2:") {
-		t.Fatalf("reopened on %q (open=%v), want the remembered 127.0.0.2", st.Origin, st.Open)
+	if !st.Open || !strings.HasPrefix(st.Origin, "http://127.0.0.1:") {
+		t.Fatalf("reopened on %q (open=%v), want the remembered 127.0.0.1", st.Origin, st.Open)
 	}
 }
 
