@@ -166,6 +166,7 @@ func (h *Hub) workspaceSessions(root string, open map[string]string) []treeSessi
 			Legacy: legacy.legacyOf(si.Path),
 		})
 	}
+	legacy.flush()
 	attachVersions(dir, out, h.openSessionsIn(root))
 	return append(h.unlistedOpenSessions(root, out), out...)
 }

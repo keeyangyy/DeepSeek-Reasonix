@@ -66,7 +66,9 @@ func TestLegacyCacheForgetsWhenTheLogAppears(t *testing.T) {
 func TestLegacyCachePersistsAcrossInstances(t *testing.T) {
 	dir := testenv.TempDir(t)
 	oneX := legacySession(t, dir, "onex.jsonl", oneXLogHeader)
-	newLegacyCache(dir).legacyOf(oneX)
+	c := newLegacyCache(dir)
+	c.legacyOf(oneX)
+	c.flush()
 
 	if _, err := os.Stat(filepath.Join(dir, ".session-legacy.json")); err != nil {
 		t.Fatalf("cache file not written: %v", err)
@@ -97,5 +99,54 @@ func TestLegacyCacheTrustsOnlyAStampIdenticalEntry(t *testing.T) {
 	}
 	if newLegacyCache(dir).legacyOf(path) {
 		t.Fatal("a stale entry must be re-decided from the log")
+	}
+}
+
+func TestLegacyCacheWritesOncePerListing(t *testing.T) {
+	dir := testenv.TempDir(t)
+	c := newLegacyCache(dir)
+	a := legacySession(t, dir, "a.jsonl", oneXLogHeader)
+	b := legacySession(t, dir, "b.jsonl", nativeLogHeader)
+
+	c.legacyOf(a)
+	c.legacyOf(b)
+	if _, err := os.Stat(filepath.Join(dir, ".session-legacy.json")); err == nil {
+		t.Fatal("records stay in memory until the listing flushes")
+	}
+
+	c.flush()
+	if _, err := os.Stat(filepath.Join(dir, ".session-legacy.json")); err != nil {
+		t.Fatalf("flush writes the file once: %v", err)
+	}
+}
+
+// The mark has to reach the tree the sidebar draws: the cache decides, but
+// the row is where the person sees it.
+func TestWorkspaceSessionsCarriesTheLegacyMark(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	root := testenv.TempDir(t)
+	sessions := SessionDirFor(root)
+	if err := os.MkdirAll(sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacySession(t, sessions, "onex.jsonl", oneXLogHeader)
+	legacySession(t, sessions, "mine.jsonl", nativeLogHeader)
+
+	h := NewHub(HubOptions{})
+	got := h.workspaceSessions(root, map[string]string{})
+	if len(got) != 2 {
+		t.Fatalf("tree has %d rows, want 2", len(got))
+	}
+	for _, row := range got {
+		switch filepath.Base(row.Path) {
+		case "onex.jsonl":
+			if !row.Legacy {
+				t.Fatal("the 1.x session must carry legacy: true in the tree")
+			}
+		case "mine.jsonl":
+			if row.Legacy {
+				t.Fatal("this build's own session must not carry the mark")
+			}
+		}
 	}
 }

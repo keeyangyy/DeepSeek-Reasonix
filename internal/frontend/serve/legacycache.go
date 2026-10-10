@@ -1,25 +1,19 @@
 package serve
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"sync"
 
-	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/state/sessionstore"
 	"reasonix/internal/state/store"
 )
 
-// legacyCache remembers which conversations were kept by Reasonix 1.x. Deciding
-// that means reading the session's event log head, and the sidebar asks for
-// every row on every render, so the answer is cached beside the project's own
-// session files under .session-legacy.json.
+// legacyCache remembers which conversations were kept by Reasonix 1.x: the
+// answer needs the session's event log head, and the sidebar asks for every
+// row on every render. Persistence lives in stampFile under
+// .session-legacy.json, written once per listing.
 type legacyCache struct {
-	mu      sync.Mutex
-	dir     string
-	loaded  bool
-	entries map[string]legacyEntry
+	file *stampFile[legacyEntry]
 }
 
 type legacyEntry struct {
@@ -29,7 +23,7 @@ type legacyEntry struct {
 }
 
 func newLegacyCache(dir string) *legacyCache {
-	return &legacyCache{dir: dir, entries: map[string]legacyEntry{}}
+	return &legacyCache{file: newStampFile[legacyEntry](filepath.Join(dir, ".session-legacy.json"))}
 }
 
 // legacyOf reports whether the session at sessionPath is a 1.x conversation,
@@ -38,12 +32,17 @@ func newLegacyCache(dir string) *legacyCache {
 func (c *legacyCache) legacyOf(sessionPath string) bool {
 	size, mod := sessionEventLogStamp(sessionPath)
 	name := filepath.Base(sessionPath)
-	if legacy, ok := c.cached(name, size, mod); ok {
-		return legacy
+	if e, ok := c.file.entry(name); ok && e.Size == size && e.Mod == mod {
+		return e.Legacy
 	}
 	legacy := sessionstore.IsForeignSessionLog(sessionPath)
-	c.put(name, legacy, size, mod)
+	c.file.record(name, legacyEntry{Legacy: legacy, Size: size, Mod: mod})
 	return legacy
+}
+
+// flush writes the file at most once per sidebar listing.
+func (c *legacyCache) flush() {
+	c.file.flush()
 }
 
 // sessionEventLogStamp is the cache key: the event log's own size and mtime, or
@@ -54,35 +53,4 @@ func sessionEventLogStamp(sessionPath string) (int64, int64) {
 		return 0, -1
 	}
 	return info.Size(), info.ModTime().UnixNano()
-}
-
-func (c *legacyCache) cached(name string, size, mod int64) (bool, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.load()
-	e, ok := c.entries[name]
-	if !ok || e.Size != size || e.Mod != mod {
-		return false, false
-	}
-	return e.Legacy, true
-}
-
-func (c *legacyCache) put(name string, legacy bool, size, mod int64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.load()
-	c.entries[name] = legacyEntry{Legacy: legacy, Size: size, Mod: mod}
-	if data, err := json.Marshal(c.entries); err == nil {
-		_ = os.WriteFile(filepath.Join(c.dir, ".session-legacy.json"), data, 0o644)
-	}
-}
-
-func (c *legacyCache) load() {
-	if c.loaded {
-		return
-	}
-	c.loaded = true
-	if data, err := fileencoding.ReadFileUTF8(filepath.Join(c.dir, ".session-legacy.json")); err == nil {
-		_ = json.Unmarshal(data, &c.entries)
-	}
 }
