@@ -17,6 +17,9 @@ import {
   historyEntryIdForItemId,
   historyEntryIdForRow,
   reconcileFoldEntries,
+  exceedsTranscriptRenderVolumeBudget,
+  transcriptRenderVolume,
+  NO_LIVE,
   EMPTY_FOLDS,
   type FoldMap,
   type TranscriptRow,
@@ -47,6 +50,57 @@ function eq<T>(actual: T, expected: T, label: string) {
 }
 
 console.log("\ntranscript virtual row model");
+
+{
+  const manyAnswers: Item[] = [];
+  for (let turn = 0; turn < 12; turn += 1) {
+    manyAnswers.push({ kind: "user", id: `volume-u-${turn}`, text: "question" });
+    for (let answer = 0; answer < 29; answer += 1) {
+      manyAnswers.push({ kind: "assistant", id: `volume-a-${turn}-${answer}`, text: "answer", reasoning: "", streaming: false });
+    }
+  }
+  const models = buildTurnModels(manyAnswers);
+  const volume = transcriptRenderVolume(models);
+  eq(models.length, 12, "the render-volume count uses turn models as block owners");
+  eq(volume.assistantMarkdownItems, 348, "the 12-block mixed-session scale counts non-empty outside Markdown");
+  eq(volume.maxAssistantMarkdownItemsPerBlock, 29, "the per-block budget catches dense single turns");
+  ok(exceedsTranscriptRenderVolumeBudget(volume), "the measured 350-answer scale exceeds the auto-window budget");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 12, maxAssistantMarkdownItemsPerBlock: 49, processDisplayItems: 4 }),
+    "a dense single block crosses the per-block budget without a large total");
+  ok(!exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 64, maxAssistantMarkdownItemsPerBlock: 48, processDisplayItems: 384 }),
+    "the exact budget boundary stays in full mode");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 65, maxAssistantMarkdownItemsPerBlock: 48, processDisplayItems: 384 }),
+    "the first answer above the total budget triggers windowing");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 64, maxAssistantMarkdownItemsPerBlock: 49, processDisplayItems: 384 }),
+    "the first dense block above its budget triggers windowing");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 64, maxAssistantMarkdownItemsPerBlock: 48, processDisplayItems: 385 }),
+    "process display items provide a separate conservative budget dimension");
+  const foldable = buildTurnModels([
+    { kind: "user", id: "volume-fold-u", text: "question" },
+    { kind: "assistant", id: "volume-fold-a", text: "answer", reasoning: "thought", streaming: false },
+    { kind: "tool", id: "volume-fold-t", name: "bash", args: "{}", status: "done", readOnly: false },
+  ]);
+  const foldKey = foldable[0]?.segments[0]?.key ?? "";
+  const beforeFold = transcriptRenderVolume(foldable);
+  buildTranscriptRows(foldable, { folds: foldMapWithToggle(EMPTY_FOLDS, foldKey, false), foldPreference: "expanded", hasOlderHistory: false, creationMode: false, turnForUser: () => 1 });
+  buildTranscriptRows(foldable, { folds: foldMapWithToggle(EMPTY_FOLDS, foldKey, true), foldPreference: "expanded", hasOlderHistory: false, creationMode: false, turnForUser: () => 1 });
+  eq(transcriptRenderVolume(foldable).assistantMarkdownItems, beforeFold.assistantMarkdownItems,
+    "opening and closing reasoning folds cannot change the source render-volume count");
+  eq(transcriptRenderVolume(foldable).processDisplayItems, beforeFold.processDisplayItems,
+    "fold layout cannot hide the conservative process-item volume");
+
+  const pendingLiveItems: Item[] = [
+    { kind: "user", id: "volume-live-u", text: "question" },
+    ...Array.from({ length: 64 }, (_, index) => ({ kind: "assistant" as const, id: `volume-live-a-${index}`, text: "answer", reasoning: "", streaming: false })),
+    { kind: "assistant", id: "volume-live-tail", text: "", reasoning: "", streaming: true },
+  ];
+  const noAnswerModels = buildTurnModels(pendingLiveItems, NO_LIVE);
+  const liveAnswer = { id: "volume-live-tail", hasAnswerText: true, hasReasoning: false, reasoningComplete: false };
+  const liveAnswerModels = buildTurnModels(pendingLiveItems, liveAnswer);
+  eq(transcriptRenderVolume(noAnswerModels).assistantMarkdownItems, 64, "empty live placeholder is not counted before its first text token");
+  eq(transcriptRenderVolume(liveAnswerModels, liveAnswer).assistantMarkdownItems, 65, "non-empty live text counts before the item snapshot is patched");
+  ok(exceedsTranscriptRenderVolumeBudget(transcriptRenderVolume(liveAnswerModels, liveAnswer)), "live-only text can cross the volume budget on its first visible frame");
+}
 
 const fixture: Item[] = [
   { kind: "user", id: "u1", text: "first" },

@@ -1106,8 +1106,6 @@ function liveReasoningDurationMs(live?: LiveStream): number | undefined {
   return completedAt - live.reasoningStartedAt;
 }
 
-// applyDeltaSegments folds ordered stream segments into the assistant's live
-// stream in one state transition. Assumes applyEvent's preamble already ran.
 function applyDeltaSegments(s: State, segments: StreamSegment[]): State {
   const active = ensureAssistant(s);
   const id = active.currentAssistant!;
@@ -1118,12 +1116,32 @@ function applyDeltaSegments(s: State, segments: StreamSegment[]): State {
   return deltaChars > 0 ? beginTurnModelActivity(next, now) : next;
 }
 
-// applyStreamBatch is the stream_batch action: one frame's deltas, one reducer
-// pass, one notification. Mirrors applyEvent's preamble for delta events.
 function applyStreamBatch(s: State, segments: StreamSegment[]): State {
   if (s.discardTurn) return s;
   if (s.retry) s = { ...s, retry: undefined };
   return applyDeltaSegments(s, segments);
+}
+
+function rebaseLiveAssistantToPage(pageItems: Item[], state: State) {
+  const current = state.items.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && Boolean(item.messageID) && Boolean(item.id === state.currentAssistant || item.wasStreamed));
+  if (!current) return;
+  const page = pageItems.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.messageID === current.messageID);
+  if (!page) return;
+  const live = state.currentAssistant === current.id && state.live?.id === current.id ? state.live : undefined;
+  if (!live && !current.wasStreamed) return;
+  const text = live ? live.text : current.text, reasoning = live ? live.reasoning : current.reasoning;
+  return {
+    items: pageItems.map((item) => item === page ? {
+      ...page, text, reasoning, streaming: live ? true : current.streaming, wasStreamed: true as const,
+      reasoningComplete: live?.reasoningComplete ?? current.reasoningComplete,
+      reasoningDurationMs: page.reasoningDurationMs ?? current.reasoningDurationMs,
+      workDurationMs: page.workDurationMs ?? current.workDurationMs,
+      memoryCitations: page.memoryCitations ?? current.memoryCitations,
+      searchSources: page.searchSources ?? current.searchSources,
+    } : item),
+    currentAssistant: live ? page.id : state.currentAssistant,
+    live: live ? { ...live, id: page.id } : state.live,
+  };
 }
 
 /** Closed + open user-wait ms for the active turn (approval/ask). */
@@ -1321,7 +1339,7 @@ function applyStreamAttempt(s: State, e: WireEvent): State {
   if (!sa?.id || !sa.action) return s;
   switch (sa.action) {
     case "begin": {
-      const active = stampAssistantMessageID(ensureActiveAssistant(s), sa.messageID ?? "");
+      const active = stampAssistantMessageID(ensureActiveAssistant(s), sa.messageId ?? sa.messageID ?? "");
       // Snapshot only what this attempt may replace in the visible stream.
       // Provider activity timing is closed at discard but remains accumulated so
       // retry backoff is not counted in the completed TPS denominator.
@@ -2296,12 +2314,13 @@ export function reducer(s: State, a: Action): State {
     }
     case "history_older_start": return s.historyOlderLoading && !s.historyOlderError ? s : { ...s, historyOlderLoading: true, historyOlderError: undefined };
     case "history_older_error": return { ...s, historyOlderLoading: false, historyOlderError: a.error };
-    case "history_replace":
+    case "history_replace": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
+      const rebasedAssistant = rebaseLiveAssistantToPage(a.items, s), pageItems = rebasedAssistant?.items ?? a.items;
       return {
         ...s,
-        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, liftLiveToolStatus(a.items, s.items))),
-        historyPrefixCount: a.items.length,
+        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, liftLiveToolStatus(pageItems, s.items))),
+        historyPrefixCount: pageItems.length,
         pendingSubmissionId: undefined,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2313,20 +2332,17 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
-        // The previous streaming row is gone with the replaced items; re-point the
-        // delta stream at the page's in-flight assistant row (see page-owner).
-        currentAssistant: pageAssistantPointer(s.currentAssistant, a.items),
+        currentAssistant: rebasedAssistant?.currentAssistant ?? pageAssistantPointer(s.currentAssistant, pageItems),
+        live: rebasedAssistant?.live ?? (pageItems.some((item) => item.id === s.currentAssistant) ? s.live : undefined),
       };
+    }
     case "history_rebase": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
-      // Deterministic pre-merge filtering: the caller computes removeIds via
-      // replaceRemoveIds (store seam ids ∪ page-same-id ∪ a: prefix ∪
-      // count-guarded page coverage) — the reducer no longer guesses via
-      // post-merge signature scans (the retired findDuplicateItemIds fallback).
-      const remove = a.removeIds && a.removeIds.length > 0 ? new Set(a.removeIds) : undefined;
+      const rebasedAssistant = rebaseLiveAssistantToPage(a.items, s), pageItems = rebasedAssistant?.items ?? a.items;
+      const remove = a.removeIds?.length ? new Set(a.removeIds) : undefined;
       const filtered = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
       const retainedTail = filtered.slice(Math.min(s.historyPrefixCount, filtered.length));
-      const merged = compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...a.items, ...retainedTail]));
+      const merged = compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, [...pageItems, ...retainedTail]));
       assertNoDuplicateItems(merged, "history_rebase");
       noteDedupDrop(s.meta?.sessionPath ?? "", "rebase", a.removeIds?.length ?? 0);
       const rebaseResidual = duplicateItemRows(merged).length;
@@ -2334,7 +2350,7 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         items: merged,
-        historyPrefixCount: a.items.length,
+        historyPrefixCount: pageItems.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
         historyStartTurn: a.startTurn,
@@ -2346,6 +2362,10 @@ export function reducer(s: State, a: Action): State {
         historyDigest: a.digest,
         historyLayoutRevision: s.historyLayoutRevision + 1,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
+        currentAssistant: rebasedAssistant?.currentAssistant ?? (
+          s.currentAssistant && remove?.has(s.currentAssistant) ? pageAssistantPointer(s.currentAssistant, pageItems) : s.currentAssistant
+        ),
+        live: rebasedAssistant?.live ?? (s.currentAssistant && remove?.has(s.currentAssistant) ? undefined : s.live),
       };
     }
     case "latest_compaction": {
@@ -2378,19 +2398,15 @@ export function reducer(s: State, a: Action): State {
     }
     case "history_prepend": {
       if (historyRevisionIsOlder(s.historyRevision, a.revision)) return s;
-      const remove = a.removeIds.length > 0 ? new Set(a.removeIds) : undefined;
+      const rebasedAssistant = rebaseLiveAssistantToPage(a.items, s), pageItems = rebasedAssistant?.items ?? a.items;
+      const remove = a.removeIds.length ? new Set(a.removeIds) : undefined;
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
-      // 卡片先到、历史后到（rebuilt 切回时序）：卡片是 live 产物、语义位置在重建历史之前，
-      // 合并时必须重新放回最前，否则会随 rest 落到全部历史之后。
       const carriedCompactions = rest.filter((item) => item.kind === "compaction");
       const nonCompactionRest = rest.filter((item) => item.kind !== "compaction");
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
-      // Dropped rows may include the row the live buffer is streaming into
-      // (page-owns-the-turn handoff); a dangling pointer would make the next
-      // delta recreate a same-id row.
       const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
-      const merged = compactArchivedToolItems([...carriedCompactions, ...liftLiveToolStatus(a.items, s.items), ...nonCompactionRest]);
+      const merged = compactArchivedToolItems([...carriedCompactions, ...liftLiveToolStatus(pageItems, s.items), ...nonCompactionRest]);
       assertNoDuplicateItems(merged, "history_prepend");
       noteDedupDrop(s.meta?.sessionPath ?? "", "prepend", a.removeIds.length);
       const prependResidual = duplicateItemRows(merged).length;
@@ -2409,10 +2425,8 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "prepend" },
-        // The page owns the in-flight turn now: hand the delta stream to the page's
-        // own assistant row (a cleared pointer would rebuild a tail duplicate).
-        currentAssistant: liveDropped ? pageInFlightAssistantId(a.items) : s.currentAssistant,
-        live: liveDropped ? undefined : s.live,
+        currentAssistant: rebasedAssistant?.currentAssistant ?? (liveDropped ? pageInFlightAssistantId(pageItems) : s.currentAssistant),
+        live: rebasedAssistant?.live ?? (liveDropped ? undefined : s.live),
       };
     }
     // Ref-resolved full content landed for history items already on screen:
@@ -2867,6 +2881,7 @@ export function useController() {
   const historyOlderSeq = useRef(new Map<string, number>());
   const cancelHydrateSeq = useRef(new Map<string, number>());
   const turnEventProjector = useRef(new TurnEventProjector()).current;
+  const pendingTextBatchRef = useRef<{ drain: () => void } | undefined>(undefined);
   const sessionLoadInFlight = useRef(new Map<string, { sessionPath: string; revision?: number; digest?: string; sessionGeneration: number; promise: Promise<void> }>());
   const transcriptSubscriptions = useRef(new Map<string, () => void>());
   const bumpMetaRefreshSeq = useCallback((tabId: string): number => {
@@ -3059,6 +3074,7 @@ export function useController() {
         dispatchTo(tabId, { type: "local_notice", level: "warn", text: errText, preserveRuntime: true });
         addBreadcrumb("tab.hydrate", `history failed ${tabId} ms=${Date.now() - historyStartedAt}`); return;
       }
+      if (projection !== undefined) pendingTextBatchRef.current?.drain();
       const applyProj = projection && {
         items: projection.items, revision: projection.revisionKnown ? projection.revision : undefined, digest: projection.digest || undefined,
       };
@@ -3079,32 +3095,22 @@ export function useController() {
               const liveItems = liveState?.items ?? [];
               const removeIds = duplicateLiveItemIds(projection.items, liveItems);
               removeIds.push(...messageIdCoveredLiveItemIds(projection.items, liveItems));
-              // A2-a: exact turn alignment. The page names the in-flight turn;
-              // that turn's live rows are superseded by it — no content guessing.
               const openTurnId = projection.openTurnId;
               if (openTurnId) {
                 for (const item of liveItems) {
                   if (liveItemTurnId(item.id) === openTurnId) removeIds.push(item.id);
                 }
               }
-              // A page fetched after a full-turn replay carries the turn's
-              // persisted rows; a re-entry replays that turn BEFORE the page
-              // lands with empty rows, so the content guards above miss them —
-              // the page owning the turn's output counts too (bfb949b2).
               if (pageOverlapsLiveContent(projection.items, liveItems) || pageSupersedesInFlightTurn(projection.items, liveItems, projection.totalTurns, projection.openTurnId)) {
                 const prefix = liveState?.activeTurnId ? `a:${liveState.activeTurnId}:` : undefined;
                 for (const item of liveItems) {
                   if ((prefix && item.id.startsWith(prefix)) || projection.items.some((pageItem) => pageItem.id === item.id)) removeIds.push(item.id);
                 }
-                // Frontend-local rows (uN/sN) never match page ids — drop page-covered ones.
                 removeIds.push(...pageCoveredLiveItemIds(projection.items, liveItems));
               }
               return { type: "history_prepend", ...page, removeIds };
             })()
           : { type: "history_replace", ...page });
-        // The page owns every durable row up to the last known sequence; a
-        // still-running full-turn replay would re-project that content on top
-        // of the page (v3 log: co-mounted he:/a: rows). Supersede it.
         turnEventProjector.adoptPage(tabId);
         addBreadcrumb(
           "tab.hydrate",
@@ -3266,6 +3272,7 @@ export function useController() {
       expectedDigest: replay.transcriptDigest,
     });
     if (!projection) return false;
+    pendingTextBatchRef.current?.drain();
     const current = statesRef.current.get(tabId);
     if (!current || !sessionIdentityCurrent(sessionPath, sessionGeneration, current.meta)) return false;
     if (expectedEpoch && runtimeEpochByTabRef.current.get(tabId) !== expectedEpoch) return false;
@@ -3305,8 +3312,6 @@ export function useController() {
       revision: projection.revisionKnown ? projection.revision : undefined,
       digest: projection.digest || undefined,
     });
-    // The rebased page carries the same durable rows the post-floor replay
-    // would rebuild — adopt it instead of co-mounting both.
     turnEventProjector.adoptPage(tabId);
     return true;
   }, [dispatchTo, ensureTranscriptSubscription]);
@@ -3360,9 +3365,6 @@ export function useController() {
       if (!current || !hydrateIdentityCurrent(sessionPath, sessionGeneration, current.meta?.sessionPath, current.meta?.sessionGeneration)) return false;
       const currentRevision = current?.meta?.sessionRevision ?? current?.historyRevision;
       const currentDigest = current?.meta?.sessionDigest ?? current?.historyDigest;
-      // Forward revision drift is a save landing mid-load; only a regression
-      // (rebind/rewind) invalidates the page. The digest is the same-revision
-      // canonical check and is skipped once the revision has moved on.
       if (!current.historyOlderLoading || (current.meta?.sessionPath ?? "") !== sessionPath ||
         !historyPageFingerprintAccepts(sessionRevision, currentRevision, sessionDigest, currentDigest) ||
         (result !== undefined && (!historyPageFingerprintAccepts(sessionRevision, result.revisionKnown ? result.revision : undefined, sessionDigest, result.digest)))) {
@@ -3370,13 +3372,10 @@ export function useController() {
         return false;
       }
       if (!result) {
-        // Superseded (generation moved) or nothing older left.
         dispatchTo(targetTabId, { type: "history_older_error", error: "history page unavailable" });
         return false;
       }
       if (result.kind === "reload") {
-        // Stale cursor: the store reloaded the latest page — replace, and let the
-        // page supersede an in-flight full-turn replay (as 2965/3137 do).
         recordFrontendDiagnostic("history", "history.older-reload", { state: "replace-enter" });
         dispatchTo(targetTabId, {
           type: "history_replace",
@@ -3743,6 +3742,7 @@ export function useController() {
       });
       for (const b of coalesceStreamDeltas(live)) dispatchTo(b.tabId, { type: "stream_batch", segments: b.segments });
     });
+    pendingTextBatchRef.current = textBatch;
     const handleWireEvent = (e: WireEvent) => {
       // TEMP probe: confirm whether compaction events reach the wire handler at
       // all, and where they get dropped (epoch fence / acceptLive). Removed
@@ -3867,6 +3867,7 @@ export function useController() {
     return () => {
       turnEventProjector.unbind(handleWireEvent);
       textBatch.drain();
+      if (pendingTextBatchRef.current === textBatch) pendingTextBatchRef.current = undefined;
       for (const timer of cancelReconcileTimers.current.values()) {
         window.clearTimeout(timer);
       }

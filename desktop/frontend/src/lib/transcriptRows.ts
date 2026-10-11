@@ -214,6 +214,40 @@ export interface TurnModel {
   actionText: string;
 }
 
+export interface TranscriptRenderVolume {
+  assistantMarkdownItems: number;
+  maxAssistantMarkdownItemsPerBlock: number;
+  processDisplayItems: number;
+}
+
+export const TRANSCRIPT_RENDER_VOLUME_BUDGET: TranscriptRenderVolume = {
+  assistantMarkdownItems: 64,
+  maxAssistantMarkdownItemsPerBlock: 48,
+  processDisplayItems: 384,
+};
+
+export function transcriptRenderVolume(models: readonly TurnModel[], live: TranscriptLiveFlags = NO_LIVE): TranscriptRenderVolume {
+  let assistantMarkdownItems = 0, maxAssistantMarkdownItemsPerBlock = 0, processDisplayItems = 0;
+  for (const model of models) {
+    let blockAssistantMarkdownItems = 0;
+    for (const segment of model.segments) {
+      for (const item of segment.outsideItems) {
+        if (item.kind === "assistant" && (item.text.trim() || (live.id === item.id && live.hasAnswerText))) blockAssistantMarkdownItems += 1;
+      }
+      processDisplayItems += segment.displayItems.length;
+    }
+    assistantMarkdownItems += blockAssistantMarkdownItems;
+    maxAssistantMarkdownItemsPerBlock = Math.max(maxAssistantMarkdownItemsPerBlock, blockAssistantMarkdownItems);
+  }
+  return { assistantMarkdownItems, maxAssistantMarkdownItemsPerBlock, processDisplayItems };
+}
+
+export function exceedsTranscriptRenderVolumeBudget(volume: TranscriptRenderVolume): boolean {
+  return volume.assistantMarkdownItems > TRANSCRIPT_RENDER_VOLUME_BUDGET.assistantMarkdownItems
+    || volume.maxAssistantMarkdownItemsPerBlock > TRANSCRIPT_RENDER_VOLUME_BUDGET.maxAssistantMarkdownItemsPerBlock
+    || volume.processDisplayItems > TRANSCRIPT_RENDER_VOLUME_BUDGET.processDisplayItems;
+}
+
 export function turnStableIdentity(model: TurnModel): string {
   if (model.user) {
     const user = model.user;

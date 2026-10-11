@@ -8,6 +8,8 @@ import {
 import {
   defaultTranscriptRenderMode,
   projectTranscriptTimeline,
+  resolveTranscriptRenderMode,
+  shouldAutoWindowTranscript,
   splitWindowedTimeline,
 } from "../lib/transcriptTimeline";
 import type { Item } from "../lib/useController";
@@ -56,6 +58,12 @@ ok(projection.hasOlderHistory, "projection preserves paging state without adding
 
 ok(defaultTranscriptRenderMode(100) === "full", "100 completed turns use full DOM");
 ok(defaultTranscriptRenderMode(101) === "windowed", "101 completed turns enter the window adapter");
+ok(resolveTranscriptRenderMode(12, true, "windowed", true) === "full", "safe mode keeps forced-full priority over a windowed diagnostic override and volume latch");
+ok(resolveTranscriptRenderMode(12, false, "full", true) === "full", "an explicit full diagnostic override stays full despite the volume latch");
+ok(resolveTranscriptRenderMode(12, false, undefined, true) === "windowed", "the automatic volume latch selects windowed mode when no override applies");
+ok(!shouldAutoWindowTranscript(true, "windowed", true), "safe mode does not record an automatic-window trigger");
+ok(!shouldAutoWindowTranscript(false, "full", true), "explicit full mode does not record an automatic-window trigger");
+ok(shouldAutoWindowTranscript(false, undefined, true), "automatic-window trigger requires an exceeded budget without an override");
 const longProjection = projectTranscriptTimeline(buildTranscriptRowBlocks(buildTurnModels(items(1, 101), NO_LIVE, false), options), false);
 const split = splitWindowedTimeline(longProjection);
 ok(split.cold.length === 99 && split.resident.length === 2, "windowed history keeps the two most recent completed turns resident");

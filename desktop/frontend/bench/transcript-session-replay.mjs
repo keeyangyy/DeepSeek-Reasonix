@@ -189,6 +189,10 @@ try {
   }
   browser = await chromium.launch(launchOptions);
   const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+  const maxUpdateWarnings = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Maximum update depth exceeded")) maxUpdateWarnings.push(message.text());
+  });
   await page.goto(`http://127.0.0.1:${address.port}/bench/transcript-session-replay.html`, { waitUntil: "domcontentloaded" });
   await page.evaluate(() => document.fonts.ready);
 
@@ -203,7 +207,15 @@ try {
       tabId: tabA, messages: history.messages, epoch: epochA,
     });
     await page.waitForSelector(".transcript__projection");
+    await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "windowed");
     const base = await page.evaluate((tabId) => window.reasonixReplayProbe.snapshot(tabId), tabA);
+    if (history.source === "synthetic") {
+      const viewport = await page.locator(".transcript").evaluate((element) => ({
+        scrollTop: element.scrollTop,
+        bottomGap: element.scrollHeight - element.scrollTop - element.clientHeight,
+      }));
+      assert.ok(viewport.bottomGap <= 24, `scenario ${scenario}: auto-windowed initial load stays anchored near the transcript tail`);
+    }
     assert.ok(base && base.itemCount > 600, `scenario ${scenario}: production history converter creates a long transcript`);
     assert.equal(base.uniqueItemIds, base.itemCount, `scenario ${scenario}: restored row identities stay unique`);
     assert.ok(base.kinds.user >= 12 && base.kinds.tool > 300 && base.kinds.assistant > 300,
@@ -386,6 +398,90 @@ try {
     process.stdout.write(`  PASS  long ${history.source} transcript replay, chunk pattern ${patterns[scenario].join("/")} (items=${finalA.itemCount}, tools=${finalA.tools.length}, paired long-session switch)\n`);
   }
 
+  const denseTab = "single-block-volume-budget";
+  const denseEpoch = "single-block-volume-epoch";
+  const denseMessages = [{ role: "user", content: "dense turn" }, ...Array.from({ length: 65 }, (_, index) => ({
+    role: "assistant", content: `dense answer ${index}`, reasoning: index % 4 === 0 ? `thought ${index}` : undefined,
+  }))];
+  await page.evaluate(({ tabId, messages, epoch }) => window.reasonixReplayProbe.loadHistory(tabId, messages, epoch), {
+    tabId: denseTab, messages: denseMessages, epoch: denseEpoch,
+  });
+  await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "windowed");
+  const denseSnapshot = await page.evaluate((tabId) => window.reasonixReplayProbe.snapshot(tabId), denseTab);
+  assert.equal(denseSnapshot.kinds.assistant, 65, "single-block density fixture retains every answer");
+  process.stdout.write("  PASS  one dense turn crosses the per-block volume budget without dropping transcript rows\n");
+
+  const anchorTab = "auto-window-anchor";
+  const anchorEpoch = "auto-window-anchor-epoch";
+  const lowVolume = [];
+  for (let turn = 0; turn < 2; turn += 1) {
+    lowVolume.push({ role: "user", content: `anchor turn ${turn}` });
+    for (let answer = 0; answer < 20; answer += 1) lowVolume.push({ role: "assistant", content: `anchor answer ${turn}-${answer}` });
+  }
+  await page.evaluate(({ tabId, messages, epoch }) => window.reasonixReplayProbe.loadHistory(tabId, messages, epoch), {
+    tabId: anchorTab, messages: lowVolume, epoch: anchorEpoch,
+  });
+  await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "full");
+  await page.locator(".transcript").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await page.mouse.move(900, 420);
+  await page.mouse.wheel(0, -1_000);
+  await page.waitForTimeout(50);
+  const beforeAnchor = await page.evaluate(() => {
+    const scroller = document.querySelector(".transcript");
+    if (!scroller) return null;
+    const viewport = scroller.getBoundingClientRect();
+    const row = Array.from(document.querySelectorAll(".transcript__row")).find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      return rect.height > 0 && rect.bottom > viewport.top && rect.top < viewport.bottom;
+    });
+    const block = row?.closest(".transcript__block");
+    return block && row ? { blockKey: block.dataset.transcriptBlockKey, rowKey: row.dataset.rowKey, top: row.getBoundingClientRect().top - scroller.getBoundingClientRect().top, scrollTop: scroller.scrollTop } : null;
+  });
+  assert.ok(beforeAnchor, "below-budget transcript exposes a stable top anchor");
+  const volumeEvents = [];
+  let volumeSeq = 1;
+  for (let answer = 0; answer < 45; answer += 1) {
+    const turnId = `volume-growth-turn-${answer}`;
+    volumeEvents.push({ kind: "turn_started", turnId, seq: volumeSeq++, status: "in_progress", runtimeEpoch: anchorEpoch });
+    volumeEvents.push({ kind: "message", text: `new streamed answer ${answer}`, seq: volumeSeq++, turnId, status: "completed", runtimeEpoch: anchorEpoch });
+    volumeEvents.push({ kind: "turn_done", seq: volumeSeq++, turnId, status: "completed", runtimeEpoch: anchorEpoch });
+  }
+  for (let offset = 0; offset < volumeEvents.length; offset += 15) {
+    const accepted = await page.evaluate(({ tabId, events }) => events.map((event) => window.reasonixReplayProbe.sendLive(tabId, event)), {
+      tabId: anchorTab, events: volumeEvents.slice(offset, offset + 15),
+    });
+    assert.ok(accepted.every(Boolean), "live answer volume grows in accepted event order");
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  }
+  await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "windowed");
+  const afterAnchor = await page.evaluate((key) => {
+    const scroller = document.querySelector(".transcript");
+    const row = Array.from(document.querySelectorAll(".transcript__row")).find((candidate) => candidate.getAttribute("data-row-key") === key);
+    return scroller && row ? { top: row.getBoundingClientRect().top - scroller.getBoundingClientRect().top, scrollTop: scroller.scrollTop, bottomGap: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight } : undefined;
+  }, beforeAnchor.rowKey);
+  assert.ok(afterAnchor !== undefined && Math.abs(afterAnchor.top - beforeAnchor.top) <= 8,
+    `full-to-windowed volume upgrade keeps the reader anchor (before=${JSON.stringify(beforeAnchor)}, after=${JSON.stringify(afterAnchor)})`);
+  process.stdout.write("  PASS  volume threshold crossing preserves the first-screen anchor\n");
+
+  const latchTabA = "auto-window-latch-a";
+  const latchTabB = "auto-window-latch-b";
+  await page.evaluate(({ tabId, messages }) => window.reasonixReplayProbe.loadHistory(tabId, messages), {
+    tabId: latchTabA, messages: history.messages,
+  });
+  await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "windowed");
+  await page.evaluate(({ tabId, messages }) => window.reasonixReplayProbe.loadHistory(tabId, messages), {
+    tabId: latchTabB,
+    messages: [{ role: "user", content: "low-volume surface" }, { role: "assistant", content: "one short answer" }],
+  });
+  await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "full");
+  const lowSurface = await page.evaluate(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode"));
+  assert.equal(lowSurface, "full", "surface B does not inherit surface A's windowed latch");
+  await page.evaluate((tabId) => window.reasonixReplayProbe.switchTab(tabId), latchTabA);
+  await page.waitForFunction(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode") === "windowed");
+  const returnedSurface = await page.evaluate(() => document.querySelector(".transcript__projection")?.getAttribute("data-transcript-render-mode"));
+  assert.equal(returnedSurface, "windowed", "returning to high-volume surface A reevaluates its current volume and upgrades again");
+  process.stdout.write("  PASS  automatic windowing latch resets across A→B→A surface changes\n");
+
   const raceTab = "session-generation-race";
   const oldEpoch = "session-generation-old";
   const newEpoch = "session-generation-new";
@@ -449,6 +545,9 @@ try {
   assert.equal(afterGenerationRace.uniqueItemIds, afterGenerationRace.itemCount,
     "the generation switch leaves all restored and live rows uniquely identified");
   process.stdout.write("  PASS  delayed replay from an old session generation cannot write into the new session\n");
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
+  assert.equal(maxUpdateWarnings.length, 0, "automatic windowing avoids the long-transcript Markdown update-depth warning");
+  process.stdout.write("  PASS  automatic windowing converges without a React maximum-update-depth warning\n");
 } finally {
   await browser?.close();
   await server.close();

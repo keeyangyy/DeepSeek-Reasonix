@@ -74,9 +74,8 @@ export interface WireStreamAttempt {
   action: StreamAttemptAction;
   attempt?: number;
   max?: number;
-  /** Fixed enum only: connection_reset | premature_eof | idle_timeout */
-  reason?: string;
-  messageID?: string;
+  /** reason is a fixed enum; Go sends messageId and messageID remains legacy. */
+  reason?: string; messageId?: string; messageID?: string;
 }
 export interface WireCompaction {
   trigger?: string; // "auto" | "manual"
