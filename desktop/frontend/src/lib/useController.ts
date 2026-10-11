@@ -1706,10 +1706,9 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       const t = e.tool;
       if (!t) return s;
       const next = [...s.items];
-      // Never guess another running card for a missing or stale invocation id.
+      // Only a unique match updates a tool card; unresolved results still reach other consumers.
       const candidates = next.flatMap((item, index) => item.kind === "tool" && (t.id ? item.id === t.id : Boolean(t.name) && item.status === "running" && item.name.toLowerCase() === t.name?.toLowerCase()) ? [index] : []);
-      if (candidates.length !== 1) return s;
-      const idx = candidates[0];
+      const idx = candidates.length === 1 ? candidates[0] : -1;
       if (idx >= 0) {
         const it = next[idx];
         if (it.kind === "tool") {
