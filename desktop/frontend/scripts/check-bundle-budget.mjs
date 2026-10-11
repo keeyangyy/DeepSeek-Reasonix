@@ -453,6 +453,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-10-11: transcript row ordering and receipt identity add 0.3 KiB
 // (2430.5 KiB measured; HEAD baseline 2430.2 KiB). Widen the raw ceiling to
 // 2431; all gzip budgets remain unchanged.
-const rawInitialBudgetKiB = 2_431;
+// Same-path generation fences, unique virtual-block keys, the live-tail
+// placeholder fix, Ask counts, and compact topic actions measure 2432.148 KiB
+// locally. Retain 0.452 KiB of toolchain headroom; gzip/chunk budgets stay put.
+const rawInitialBudgetKiB = 2_432.6;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

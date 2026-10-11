@@ -226,6 +226,14 @@ export function turnStableIdentity(model: TurnModel): string {
   return JSON.stringify(["prelude", first?.kind ?? "", first?.id ?? ""]);
 }
 
+function turnDuplicateDiscriminator(model: TurnModel): string {
+  return JSON.stringify([
+    model.user?.submissionId ?? "",
+    model.user?.createdAt ?? "",
+    model.turnItems.map((item) => [item.kind, item.id]),
+  ]);
+}
+
 // Keep only items the fold body will actually render — an expandable fold over
 // nothing is worse than no fold. Assistant items reach the fold stripped to
 // their reasoning (answer text renders outside), so reasoning presence is the
@@ -588,6 +596,7 @@ function numericRevision(value: string): number { return Number.parseInt(stableS
 export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: BuildRowsOptions): TimelineBlock[] {
   const reversedBlocks: TimelineBlock[] = [];
   const usedKeys = new Set<string>();
+  const usedBlockKeys = new Set<string>();
   const foldExperience = options.sessionExperience
     ?? (options.foldPreference === "expanded" ? "deep" : "standard");
   // The deprecated row-model option represented only the parent process fold.
@@ -643,15 +652,32 @@ export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: 
     ) {
       modelRows.push({ kind: "turn-actions", key: `ta:${user.id}`, turn, text: model.actionText, layoutVariant: "static" });
     }
+    const duplicateDiscriminator = turnDuplicateDiscriminator(model);
     for (let index = modelRows.length - 1; index >= 0; index -= 1) {
       const row = modelRows[index];
-      if (usedKeys.has(row.key)) modelRows[index] = { ...row, key: `${row.key}@${stableStringHash(`${turnStableIdentity(model)}|${row.kind}|${row.key}`)}` };
-      usedKeys.add(modelRows[index].key);
+      let key = row.key;
+      if (usedKeys.has(key)) {
+        const suffix = stableStringHash(`${turnStableIdentity(model)}|${duplicateDiscriminator}|${row.kind}|${row.key}`);
+        key = `${row.key}@${suffix}`;
+        let duplicate = 2;
+        while (usedKeys.has(key)) key = `${row.key}@${suffix}.${duplicate++}`;
+        modelRows[index] = { ...row, key };
+      }
+      usedKeys.add(key);
     }
     const identity = turnStableIdentity(model);
+    const baseBlockKey = `turn:${model.user?.id ?? "prelude"}@${stableStringHash(identity)}`;
+    let blockKey = baseBlockKey;
+    if (usedBlockKeys.has(blockKey)) {
+      const suffix = stableStringHash(duplicateDiscriminator);
+      blockKey = `${baseBlockKey}@${suffix}`;
+      let duplicate = 2;
+      while (usedBlockKeys.has(blockKey)) blockKey = `${baseBlockKey}@${suffix}.${duplicate++}`;
+    }
+    usedBlockKeys.add(blockKey);
     const revisions = modelRows.map((row) => transcriptRowMeasurementVersion(row));
     reversedBlocks.push({
-      key: `turn:${model.user?.id ?? "prelude"}@${stableStringHash(identity)}`,
+      key: blockKey,
       turn,
       phase: model.isActive ? "active" : "completed",
       rows: modelRows,

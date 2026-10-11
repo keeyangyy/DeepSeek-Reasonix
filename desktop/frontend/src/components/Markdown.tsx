@@ -449,17 +449,20 @@ export const Markdown = memo(function Markdown({
 
   const committedView = (
     <>
-      <Suspense fallback={<div className="md" data-transcript-geometry-pending data-transcript-selection-source-fallback>{renderedText}</div>}>
-        {sections.length === 1 ? (
-          <MarkdownRenderer text={renderedText} plainStatusBlocks={plainStatusBlocks} />
-        ) : (
-          <div className="md" data-markdown-sections={sections.length}>
-            {sections.map((section, index) => (
-              <MarkdownRenderer key={index} text={section} plainStatusBlocks={plainStatusBlocks} bare />
-            ))}
-          </div>
-        )}
-      </Suspense>
+      {/* An empty stable prefix has nothing to parse; its geometry fallback pushes the live tail down one row. */}
+      {renderedText.length > 0 && (
+        <Suspense fallback={<div className="md" data-transcript-geometry-pending data-transcript-selection-source-fallback>{renderedText}</div>}>
+          {sections.length === 1 ? (
+            <MarkdownRenderer text={renderedText} plainStatusBlocks={plainStatusBlocks} />
+          ) : (
+            <div className="md" data-markdown-sections={sections.length}>
+              {sections.map((section, index) => (
+                <MarkdownRenderer key={index} text={section} plainStatusBlocks={plainStatusBlocks} bare />
+              ))}
+            </div>
+          )}
+        </Suspense>
+      )}
       {pendingText && <StreamingMarkdownTail text={pendingText} />}
     </>
   );

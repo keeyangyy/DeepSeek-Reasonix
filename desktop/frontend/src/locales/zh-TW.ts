@@ -2298,6 +2298,7 @@ export const zhTW: Record<DictKey, string> = {
   "subagent.strip.more": "等 {n} 個",
   "transcript.thoughtCount": "{n} 段思考",
   "transcript.subagentCount": "{n} 個子代理",
+  "transcript.askCount": "{n} 個 Ask",
   "transcript.steer": "中途引導",
   "transcript.working": "工作中",
   "transcript.workingDuration": "工作中 {duration}",

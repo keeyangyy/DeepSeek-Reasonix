@@ -8,6 +8,7 @@
 
 import {
   buildTranscriptRows,
+  buildTranscriptRowBlocks,
   buildTurnModels,
   defaultFoldOpen,
   estimateTranscriptRowSize,
@@ -98,12 +99,14 @@ const fixture: Item[] = [
     turnForUser: () => undefined,
   };
   const before = buildTranscriptRows(buildTurnModels([currentUser, currentAnswer]), options);
-  const after = buildTranscriptRows(buildTurnModels([
+  const originalBlocks = buildTranscriptRowBlocks(buildTurnModels([currentUser, currentAnswer]), options);
+  const firstPageItems: Item[] = [
     { kind: "user", id: "duplicate-user", text: "older", createdAt: 100, historyTurn: 1 },
     { kind: "assistant", id: "duplicate-answer", text: "older answer", reasoning: "", streaming: false },
     currentUser,
     currentAnswer,
-  ]), options);
+  ];
+  const after = buildTranscriptRows(buildTurnModels(firstPageItems), options);
   const beforeCurrent = before.filter((row) => row.kind === "user" || row.kind === "answer").map((row) => row.key).join(",");
   const afterCurrent = after.filter((row) =>
     (row.kind === "user" && row.item.text === "current")
@@ -115,6 +118,18 @@ const fixture: Item[] = [
     || (row.kind === "answer" && row.item.text === "older answer")
   ).map((row) => row.key);
   ok(olderKeys.every((key) => key.includes("@") && !key.includes("#")), "duplicate history rows use immutable identity hashes instead of occurrence suffixes");
+  const firstPageBlocks = buildTranscriptRowBlocks(buildTurnModels(firstPageItems), options);
+  const currentBlockKey = originalBlocks[0]?.key;
+  const olderBlockKey = firstPageBlocks.find((block) => block.rows.some((row) => row.kind === "user" && row.item.text === "older"))?.key;
+  const secondPageBlocks = buildTranscriptRowBlocks(buildTurnModels([
+    { kind: "user", id: "duplicate-user", text: "earlier", createdAt: 50, historyTurn: 0 },
+    { kind: "assistant", id: "duplicate-answer", text: "earlier answer", reasoning: "", streaming: false },
+    ...firstPageItems,
+  ]), options);
+  ok(new Set(secondPageBlocks.map((block) => block.key)).size === secondPageBlocks.length, "duplicate user ids still produce unique virtual block keys");
+  ok(new Set(secondPageBlocks.flatMap((block) => block.rows.map((row) => row.key))).size === secondPageBlocks.flatMap((block) => block.rows).length, "duplicate user ids still produce unique row keys");
+  eq(secondPageBlocks.find((block) => block.rows.some((row) => row.kind === "user" && row.item.text === "current"))?.key, currentBlockKey, "prepending another duplicate id preserves the mounted current block key");
+  eq(secondPageBlocks.find((block) => block.rows.some((row) => row.kind === "user" && row.item.text === "older"))?.key, olderBlockKey, "prepending older duplicate ids preserves prior block keys");
 }
 
 const turnOf = new Map([

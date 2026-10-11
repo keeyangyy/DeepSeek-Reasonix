@@ -41,7 +41,7 @@ import {
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, messageIdCoveredLiveItemIds, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
-import { hydrateIdentityCurrent } from "./sessionIdentity";
+import { hydrateIdentityCurrent, normalizeSessionGeneration, preserveSessionIdentity, sessionIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
 import { ephemeralItemId } from "./transcriptItemIds";
@@ -1706,13 +1706,10 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       const t = e.tool;
       if (!t) return s;
       const next = [...s.items];
-      let idx = t.id ? next.findIndex((it) => it.kind === "tool" && it.id === t.id) : -1;
-      if (idx < 0) {
-        for (let i = next.length - 1; i >= 0; i--) {
-          const it = next[i];
-          if (it.kind === "tool" && it.status === "running") { idx = i; break; }
-        }
-      }
+      // Never guess another running card for a missing or stale invocation id.
+      const candidates = next.flatMap((item, index) => item.kind === "tool" && (t.id ? item.id === t.id : Boolean(t.name) && item.status === "running" && item.name.toLowerCase() === t.name?.toLowerCase()) ? [index] : []);
+      if (candidates.length !== 1) return s;
+      const idx = candidates[0];
       if (idx >= 0) {
         const it = next[idx];
         if (it.kind === "tool") {
@@ -2210,7 +2207,7 @@ export function reducer(s: State, a: Action): State {
       });
     }
     case "meta": {
-      const meta = a.meta.sessionPath === undefined && s.meta?.sessionPath !== undefined ? { ...a.meta, sessionPath: s.meta.sessionPath } : a.meta;
+      const meta = preserveSessionIdentity(a.meta, s.meta);
       return sameMeta(s.meta, meta) ? s : { ...s, meta };
     }
     case "optimistic_meta": return sameMeta(s.meta, a.meta) ? s : { ...s, meta: a.meta, hydrateError: undefined };
@@ -2871,7 +2868,7 @@ export function useController() {
   const historyOlderSeq = useRef(new Map<string, number>());
   const cancelHydrateSeq = useRef(new Map<string, number>());
   const turnEventProjector = useRef(new TurnEventProjector()).current;
-  const sessionLoadInFlight = useRef(new Map<string, { sessionPath: string; revision?: number; digest?: string; promise: Promise<void> }>());
+  const sessionLoadInFlight = useRef(new Map<string, { sessionPath: string; revision?: number; digest?: string; sessionGeneration: number; promise: Promise<void> }>());
   const transcriptSubscriptions = useRef(new Map<string, () => void>());
   const bumpMetaRefreshSeq = useCallback((tabId: string): number => {
     const seq = (metaRefreshSeq.current.get(tabId) ?? 0) + 1;
@@ -2991,7 +2988,7 @@ export function useController() {
     const shouldTrackInFlight = !options.skipHistory;
     if (canJoinInFlight) {
       const existing = sessionLoadInFlight.current.get(tabId);
-      if (existing?.sessionPath === sessionPath && existing.revision === sessionRevision && existing.digest === sessionDigest) return existing.promise;
+      if (existing?.sessionPath === sessionPath && existing.revision === sessionRevision && existing.digest === sessionDigest && existing.sessionGeneration === normalizeSessionGeneration(sessionGeneration)) return existing.promise;
     } else {
       sessionLoadInFlight.current.delete(tabId);
     }
@@ -3245,7 +3242,7 @@ export function useController() {
       });
     })();
     if (shouldTrackInFlight) {
-      sessionLoadInFlight.current.set(tabId, { sessionPath, revision: sessionRevision, digest: sessionDigest, promise });
+      sessionLoadInFlight.current.set(tabId, { sessionPath, revision: sessionRevision, digest: sessionDigest, sessionGeneration: normalizeSessionGeneration(sessionGeneration), promise });
     }
     try {
       await promise;
@@ -3260,6 +3257,7 @@ export function useController() {
     const state = statesRef.current.get(tabId);
     if (!state) return false;
     const sessionPath = state.meta?.sessionPath?.trim() ?? "";
+    const sessionGeneration = state.meta?.sessionGeneration;
     const expectedEpoch = replay.runtimeEpoch?.trim() ?? "";
     ensureTranscriptSubscription(tabId);
     const projection = await getTranscriptStore().loadLatest(tabId, sessionPath, {
@@ -3270,7 +3268,7 @@ export function useController() {
     });
     if (!projection) return false;
     const current = statesRef.current.get(tabId);
-    if (!current || (current.meta?.sessionPath?.trim() ?? "") !== sessionPath) return false;
+    if (!current || !sessionIdentityCurrent(sessionPath, sessionGeneration, current.meta)) return false;
     if (expectedEpoch && runtimeEpochByTabRef.current.get(tabId) !== expectedEpoch) return false;
     if (replay.transcriptRevision !== undefined && projection.revisionKnown) {
       if (projection.revision < replay.transcriptRevision) return false;
@@ -3346,6 +3344,7 @@ export function useController() {
     const sessionPath = state.meta?.sessionPath ?? "";
     const sessionRevision = state.meta?.sessionRevision ?? state.historyRevision;
     const sessionDigest = state.meta?.sessionDigest ?? state.historyDigest;
+    const sessionGeneration = state.meta?.sessionGeneration;
     const pageBudget = historyPageRequestBudget(state.historyStartTurn, state.historyTotalTurns, targetTurn);
     const requestSeq = (historyOlderSeq.current.get(targetTabId) ?? 0) + 1;
     historyOlderSeq.current.set(targetTabId, requestSeq);
@@ -3359,7 +3358,7 @@ export function useController() {
       const result = await getTranscriptStore().loadOlder(targetTabId, sessionPath, pageBudget);
       if (historyOlderSeq.current.get(targetTabId) !== requestSeq) return false;
       const current = statesRef.current.get(targetTabId);
-      if (!current) return false;
+      if (!current || !hydrateIdentityCurrent(sessionPath, sessionGeneration, current.meta?.sessionPath, current.meta?.sessionGeneration)) return false;
       const currentRevision = current?.meta?.sessionRevision ?? current?.historyRevision;
       const currentDigest = current?.meta?.sessionDigest ?? current?.historyDigest;
       // Forward revision drift is a save landing mid-load; only a regression
@@ -3411,7 +3410,7 @@ export function useController() {
       return true;
     } catch (err) {
       if (historyOlderSeq.current.get(targetTabId) !== requestSeq) return false;
-      if (!statesRef.current.has(targetTabId)) return false;
+      if (!sessionIdentityCurrent(sessionPath, sessionGeneration, statesRef.current.get(targetTabId)?.meta)) return false;
       dispatchTo(targetTabId, { type: "history_older_error", error: errorMessage(err) });
       addBreadcrumb("tab.hydrate", `history older failed ${targetTabId}: ${errorMessage(err)}`);
       return false;
@@ -3525,6 +3524,7 @@ export function useController() {
         sessionPath: tab.sessionPath,
         sessionRevision: tab.sessionRevision,
         sessionDigest: tab.sessionDigest,
+        sessionGeneration: tab.sessionGeneration,
       });
       return tabs;
     }

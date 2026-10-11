@@ -1,3 +1,5 @@
+import { normalizeSessionGeneration } from "./sessionIdentity";
+
 /** Live-turn markers that a lagging history snapshot must not replace. */
 export type HydrateLiveState = {
   running?: boolean;
@@ -71,6 +73,7 @@ export function activeTabHydrationPlan(
       sessionPath: target.sessionPath,
       sessionRevision: target.sessionRevision,
       sessionDigest: target.sessionDigest,
+      sessionGeneration: target.sessionGeneration,
     },
   };
 }
@@ -87,11 +90,7 @@ export function sameSessionHydrateIdentity(
   const targetPath = (target?.sessionPath ?? "").trim();
   const currentPath = (current?.sessionPath ?? "").trim();
   if (!targetPath || !currentPath || targetPath !== currentPath) return false;
-  if (
-    target?.sessionGeneration !== undefined &&
-    current?.sessionGeneration !== undefined &&
-    target.sessionGeneration !== current.sessionGeneration
-  ) return false;
+  if (normalizeSessionGeneration(target?.sessionGeneration) !== normalizeSessionGeneration(current?.sessionGeneration)) return false;
   return true;
 }
 
