@@ -54,7 +54,7 @@ export function summarizeFileDiff(fileDiff?: ToolFileDiff): string {
 // subjectOf pulls the most informative one-liner out of a call's args — the
 // command for bash, the pattern for search, the path for file tools, the
 // description for a sub-task — so the collapsed row reads at a glance.
-export function subjectOf(name: string, args: string): string {
+export function subjectOf(name: string, args: string, capabilityId?: string): string {
   const a = parse(args);
   switch (name) {
     case "bash":
@@ -83,7 +83,7 @@ export function subjectOf(name: string, args: string): string {
     case "use_capability":
       // Stable MCP proxy: show the capability id as the collapsed subject so
       // Planner/Delivery cards read as "MCP · mcp-tool:server/tool".
-      return str(a, "capability_id") || str(a, "action");
+      return str(a, "capability_id") || capabilityId || str(a, "action");
     default:
       return str(a, "path") || str(a, "file_path");
   }
