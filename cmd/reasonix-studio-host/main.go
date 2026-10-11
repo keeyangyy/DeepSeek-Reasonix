@@ -89,11 +89,13 @@ func studioInstall(shell shellIdentity) *update.Install {
 
 // The fork publishes its own Studio releases in Studio's shape, signed with its
 // own key. studio-latest is a fixed tag the fork uploads the catalog to, so the
-// address never changes between releases; the panel lists only the newest few
-// because the running build's own row is added regardless.
+// address never changes between releases. What the panel lists is decided when
+// the catalog is written (tools/catalogfilter), so a cap here would be a
+// second, disagreeing answer to the same question.
 const (
-	forkCatalogURL  = "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/studio-latest/versions.json"
-	forkCatalogRows = 5
+	forkCatalogURL = "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/studio-latest/versions.json"
+	// forkCatalogRows is MineCatalog.MaxEntries, where 0 means no cap of its own.
+	forkCatalogRows = 0
 )
 
 // forkCatalog is this fork's own catalog: Studio's shape, this fork's key.
