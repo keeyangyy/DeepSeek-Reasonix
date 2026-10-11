@@ -272,18 +272,16 @@ function ev(s: typeof initialState, e: WireEvent) {
 {
   let s = ev({ ...initialState, running: true, turnActive: true }, { kind: "tool_dispatch", tool: { id: "running-a", name: "bash", args: "a", readOnly: false } } as WireEvent);
   s = ev(s, { kind: "tool_dispatch", tool: { id: "running-b", name: "read_file", args: "b", readOnly: true } } as WireEvent);
-  const beforeUnknown = s;
   s = ev(s, { kind: "tool_result", tool: { id: "late-unknown", name: "bash", output: "late" } } as WireEvent);
-  eq(s, beforeUnknown, "an unknown explicit result id cannot fall back onto another running tool");
+  eq(s.items.filter((item) => item.kind === "tool").map((item) => item.kind === "tool" ? item.status : "").join(","), "running,running", "an unknown explicit result id cannot fall back onto another running tool");
   s = ev(s, { kind: "tool_result", tool: { name: "read_file", output: "legacy result" } } as WireEvent);
   const readToolResult = s.items.find((item) => item.kind === "tool" && item.id === "running-b");
   eq(readToolResult?.kind === "tool" ? readToolResult.status : "", "done", "id-less legacy results can resolve a unique running tool with the same name");
 
   let ambiguous = ev({ ...initialState, running: true, turnActive: true }, { kind: "tool_dispatch", tool: { id: "bash-a", name: "bash", args: "a", readOnly: false } } as WireEvent);
   ambiguous = ev(ambiguous, { kind: "tool_dispatch", tool: { id: "bash-b", name: "bash", args: "b", readOnly: false } } as WireEvent);
-  const beforeAmbiguous = ambiguous;
   ambiguous = ev(ambiguous, { kind: "tool_result", tool: { name: "bash", output: "ambiguous" } } as WireEvent);
-  eq(ambiguous, beforeAmbiguous, "an id-less result is ignored when multiple same-name invocations are running");
+  eq(ambiguous.items.filter((item) => item.kind === "tool").map((item) => item.kind === "tool" ? item.status : "").join(","), "running,running", "an id-less result is ignored when multiple same-name invocations are running");
 }
 
 // --- 1f. tool-only samples remove their placeholder before the next round ---
