@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh" data-theme-style="default">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Reasonix transcript session replay</title>
+  </head>
+  <body>
+    <script>
+      window.__reasonixTurnEvents = async () => ({
+        events: [], floorSeq: 0, latestSeq: 0, nextAfterSeq: 0,
+        hasMore: false, resetRequired: false,
+      });
+      window.go = { main: { App: {
+        TurnEventsForTab: (...args) => window.__reasonixTurnEvents(...args),
+        AttachmentDataURL: async () => "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+      } } };
+    </script>
+    <div id="transcript-root"></div>
+    <script type="module" src="/bench/transcript-session-replay.tsx"></script>
+  </body>
+</html>

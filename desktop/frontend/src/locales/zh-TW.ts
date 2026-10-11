@@ -1038,6 +1038,8 @@ export const zhTW: Record<DictKey, string> = {
   "ask.customAnswer": "自訂回答",
   "ask.customAnswerDesc": "開啟自由輸入；內容非空後才可確認。",
   "ask.customPlaceholder": "輸入你自己的答案…",
+  "ask.supplementFor": "為「{option}」補充說明",
+  "ask.supplementPlaceholder": "選填：補充說明這個選項…",
   "ask.justChat": "跳過並繼續聊天",
   "ask.justChatDesc": "提交空回答並繼續對話。",
   "ask.skipQuestion": "跳過本題",
