@@ -1,4 +1,5 @@
 import type { Item } from "./useController";
+import { subjectOf } from "./tools";
 
 const ARCHIVED_TOOL_ARG_LIMIT = 200;
 
@@ -19,7 +20,8 @@ export function compactArchivedToolItems(items: Item[]): Item[] {
   return items.map((item, index) => {
     if (item.kind !== "tool" || item.status === "running") return item;
     const nextArgs = index === canonicalTodoIndex ? item.args : archivedToolArgs(item.args);
-    if (nextArgs === item.args && item.output === undefined && item.dataArchived === true) return item;
-    return { ...item, args: nextArgs, output: undefined, dataArchived: true };
+    const subject = item.name === "use_capability" ? subjectOf(item.name, item.args, item.capabilityId) || item.subject : undefined;
+    if (nextArgs === item.args && item.output === undefined && item.dataArchived === true && subject === item.subject) return item;
+    return { ...item, args: nextArgs, output: undefined, dataArchived: true, ...(subject ? { subject } : {}) };
   });
 }

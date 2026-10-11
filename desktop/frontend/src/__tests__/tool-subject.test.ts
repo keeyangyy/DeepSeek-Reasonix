@@ -27,6 +27,11 @@ eq(
   "mcp-tool:github/search_issues",
   "use_capability subject uses capability_id",
 );
+eq(
+  subjectOf("use_capability", JSON.stringify({ action: "call" }), "mcp-tool:db/read"),
+  "mcp-tool:db/read",
+  "use_capability subject falls back to preserved capability metadata",
+);
 eq(subjectOf("use_capability", JSON.stringify({ action: "list" })), "list", "use_capability list falls back to action");
 
 const capabilityArgs = JSON.stringify({ action: "call", capability_id: "mcp-tool:db/write" });

@@ -761,7 +761,7 @@ func TestHistoryMessagesPreserveResolvedCapabilityMetadata(t *testing.T) {
 	}
 	call := got[0].ToolCalls[0]
 	if call.ResolvedName != "mcp__db__write" || call.CapabilityID != "mcp-tool:db/write" ||
-		call.ResolvedReadOnly == nil || *call.ResolvedReadOnly {
+		call.ResolvedReadOnly == nil || *call.ResolvedReadOnly || !call.ArgumentsArchived || call.Arguments != "" || call.Subject != call.CapabilityID {
 		t.Fatalf("resolved capability metadata = %+v", call)
 	}
 }
