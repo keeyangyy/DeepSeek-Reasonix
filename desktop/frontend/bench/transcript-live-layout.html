@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh" data-theme-style="default">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Reasonix transcript live layout probe</title>
+  </head>
+  <body>
+    <div id="transcript-root"></div>
+    <div class="sidebar--workbench" style="position:fixed;left:20px;top:20px;width:340px;z-index:99999">
+      <div class="project-tree__topic project-tree__topic--project project-tree__topic--has-actions project-tree__topic--menu-open" style="width:340px;height:34px;box-sizing:border-box">
+        <button type="button" class="project-tree__topic-main" style="padding-left:14px">
+          <span class="project-tree__topic-copy">
+            <span class="project-tree__topic-heading">
+              <span class="project-tree__topic-label">检查一下，我的长会话名称应该被安全截断并保留操作按钮</span>
+            </span>
+          </span>
+        </button>
+        <span class="project-tree__topic-actions" aria-label="Topic actions">
+          <span class="project-tree__topic-action-slot"><button class="project-tree__topic-action" aria-label="Pin">•</button></span>
+          <span class="project-tree__topic-action-slot"><button class="project-tree__topic-action" aria-label="Archive">•</button></span>
+          <span class="project-tree__topic-action-slot"><button class="project-tree__topic-action" aria-label="Delete">•</button></span>
+        </span>
+      </div>
+    </div>
+    <script type="module" src="/bench/transcript-live-layout.tsx"></script>
+  </body>
+</html>

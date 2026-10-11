@@ -3248,6 +3248,7 @@ export const zh: Record<DictKey, string> = {
   "subagent.strip.more": "等 {n} 个",
   "transcript.thoughtCount": "{n} 段思考",
   "transcript.subagentCount": "{n} 个子代理",
+  "transcript.askCount": "{n} 个 Ask",
   "transcript.steer": "中途引导",
   "transcript.working": "工作中",
   "transcript.workingDuration": "工作中 {duration}",

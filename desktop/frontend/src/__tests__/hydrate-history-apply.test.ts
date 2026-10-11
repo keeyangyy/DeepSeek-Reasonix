@@ -100,6 +100,13 @@ ok(
   "different generations reject placeholders even when paths match",
 );
 ok(
+  !sameSessionHydrateIdentity(
+    { sessionPath: "a.jsonl", sessionGeneration: 1 },
+    { sessionPath: "a.jsonl" },
+  ),
+  "an omitted generation is zero, not a wildcard for a later generation",
+);
+ok(
   !sameSessionHydrateIdentity({ sessionPath: "" }, { sessionPath: "" }),
   "empty identities cannot prove the same session",
 );
@@ -110,6 +117,7 @@ const sameSessionPlan = activeTabHydrationPlan(
 );
 ok(sameSessionPlan.surfacePolicy === "preserve-current", "backend sync preserves a proven same-session surface");
 ok(sameSessionPlan.loadOptions.preserveCachedHistory, "same-session backend sync may reuse its resident history");
+ok(sameSessionPlan.loadOptions.sessionGeneration === 3, "same-session hydration carries the generation fence too");
 const reboundPlan = activeTabHydrationPlan(
   { sessionPath: "a.jsonl", sessionGeneration: 4, sessionRevision: 9, sessionDigest: "rev-9" },
   { sessionPath: "a.jsonl", sessionGeneration: 3 },
@@ -117,6 +125,13 @@ const reboundPlan = activeTabHydrationPlan(
 );
 ok(reboundPlan.surfacePolicy === "replace-surface", "backend sync replaces a generation-rebound surface");
 ok(reboundPlan.loadOptions.sessionGeneration === 4, "replace-surface hydration carries the target generation fence");
+{
+  const refreshed = reducer({
+    ...initialState,
+    meta: { sessionPath: "a.jsonl", sessionGeneration: 4 } as never,
+  }, { type: "meta", meta: { label: "metadata-only refresh" } as never });
+  ok(refreshed.meta?.sessionGeneration === 4, "metadata-only refresh retains the known generation");
+}
 ok(
   canAdoptUnboundLiveSurface(
     { sessionPath: "a.jsonl", sessionGeneration: 3 },
