@@ -53,12 +53,30 @@ export function transcriptRenderMode(
   safeMode: boolean,
   search = typeof window === "undefined" ? "" : window.location.search,
 ): TranscriptRenderMode {
+  return resolveTranscriptRenderMode(completedTurns, safeMode, transcriptRenderModeOverride(search));
+}
+
+export function resolveTranscriptRenderMode(
+  completedTurns: number,
+  safeMode: boolean,
+  requested?: TranscriptRenderMode,
+  autoWindowed = false,
+): TranscriptRenderMode {
   if (safeMode) return "full";
-  if (diagnosticsOverrideAllowed()) {
-    const requested = new URLSearchParams(search).get("transcriptRenderMode");
-    if (requested === "full" || requested === "windowed") return requested;
-  }
-  return defaultTranscriptRenderMode(completedTurns);
+  if (requested) return requested;
+  return autoWindowed ? "windowed" : defaultTranscriptRenderMode(completedTurns);
+}
+
+export function shouldAutoWindowTranscript(safeMode: boolean, requested: TranscriptRenderMode | undefined, volumeExceeded: boolean): boolean {
+  return !safeMode && !requested && volumeExceeded;
+}
+
+export function transcriptRenderModeOverride(
+  search = typeof window === "undefined" ? "" : window.location.search,
+): TranscriptRenderMode | undefined {
+  if (!diagnosticsOverrideAllowed()) return undefined;
+  const requested = new URLSearchParams(search).get("transcriptRenderMode");
+  return requested === "full" || requested === "windowed" ? requested : undefined;
 }
 
 export function splitWindowedTimeline(projection: TimelineProjection): {

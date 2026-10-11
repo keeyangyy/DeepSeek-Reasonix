@@ -27,11 +27,13 @@ import {
   foldSegmentStates,
   NO_LIVE,
   reconcileFoldEntries,
+  exceedsTranscriptRenderVolumeBudget,
+  transcriptRenderVolume,
   type FoldMap,
   type ToolItem,
   type TranscriptLiveFlags,
 } from "../lib/transcriptRows";
-import { projectTranscriptTimeline, transcriptRenderMode } from "../lib/transcriptTimeline";
+import { projectTranscriptTimeline, resolveTranscriptRenderMode, shouldAutoWindowTranscript, transcriptRenderModeOverride } from "../lib/transcriptTimeline";
 import {
   readTranscriptFoldOverrides,
   replaceTranscriptFoldOverrides,
@@ -146,6 +148,7 @@ export function Transcript(props: TranscriptProps) {
     reasoningComplete: live.reasoningComplete,
   } : NO_LIVE, [live?.id, live?.reasoning, live?.reasoningComplete, live?.text]);
   const turnModels = useMemo(() => buildTurnModels(items, liveFlags, running, false), [items, liveFlags, running]);
+  const renderVolume = useMemo(() => transcriptRenderVolume(turnModels, liveFlags), [liveFlags, turnModels]);
   // Capture stable commands, never the per-render hook result: a memoized
   // callback holding that result can chain older render/selection contexts.
   const { kernel: transcriptKernel, setScroller: setKernelScroller, snapshot,
@@ -208,7 +211,19 @@ export function Transcript(props: TranscriptProps) {
     subcallsByParent,
   }), [checkpointsByTurn, creationMode, experience, foldPolicy, folds, subcallsByParent, turnForUser, turnModels]);
   const projection = useMemo(() => projectTranscriptTimeline(blocks, hasOlderHistory), [blocks, hasOlderHistory]);
-  const renderMode = transcriptRenderMode(projection.completedBlocks.length, safeMode);
+  const [autoWindowedSurface, setAutoWindowedSurface] = useState<{ key: string; enabled: boolean }>(() => ({ key: surfaceKey, enabled: false }));
+  const autoWindowed = autoWindowedSurface.key === surfaceKey && autoWindowedSurface.enabled;
+  const renderModeOverride = transcriptRenderModeOverride();
+  const defaultRenderMode = resolveTranscriptRenderMode(projection.completedBlocks.length, safeMode, renderModeOverride);
+  const renderMode = resolveTranscriptRenderMode(projection.completedBlocks.length, safeMode, renderModeOverride, autoWindowed);
+  const autoVolumeExceeded = shouldAutoWindowTranscript(safeMode, renderModeOverride,
+    defaultRenderMode === "full" && exceedsTranscriptRenderVolumeBudget(renderVolume));
+  useLayoutEffect(() => {
+    if (autoWindowedSurface.key !== surfaceKey) setAutoWindowedSurface({ key: surfaceKey, enabled: false });
+    if (!autoVolumeExceeded || autoWindowed) return;
+    beginStructural("display-change");
+    setAutoWindowedSurface({ key: surfaceKey, enabled: true });
+  }, [autoVolumeExceeded, autoWindowed, autoWindowedSurface.key, beginStructural, surfaceKey]);
   const allRows = useMemo(() => blocks.flatMap((block) => block.rows), [blocks]);
   const empty = items.length === 0;
   const rowIndexByKey = useMemo(() => new Map(allRows.map((row, index) => [String(row.key), index])), [allRows]);

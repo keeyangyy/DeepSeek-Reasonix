@@ -372,6 +372,7 @@ export function replaceRemoveIds(
     }
   }
   for (const id of pageCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
+  for (const id of messageIdCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
   return [...remove];
 }
 
