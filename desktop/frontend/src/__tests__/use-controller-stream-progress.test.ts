@@ -276,7 +276,8 @@ function ev(s: typeof initialState, e: WireEvent) {
   s = ev(s, { kind: "tool_result", tool: { id: "late-unknown", name: "bash", output: "late" } } as WireEvent);
   eq(s, beforeUnknown, "an unknown explicit result id cannot fall back onto another running tool");
   s = ev(s, { kind: "tool_result", tool: { name: "read_file", output: "legacy result" } } as WireEvent);
-  eq(s.items.find((item) => item.kind === "tool" && item.id === "running-b")?.kind === "tool" ? s.items.find((item) => item.kind === "tool" && item.id === "running-b")?.status : "", "done", "id-less legacy results can resolve a unique running tool with the same name");
+  const readToolResult = s.items.find((item) => item.kind === "tool" && item.id === "running-b");
+  eq(readToolResult?.kind === "tool" ? readToolResult.status : "", "done", "id-less legacy results can resolve a unique running tool with the same name");
 
   let ambiguous = ev({ ...initialState, running: true, turnActive: true }, { kind: "tool_dispatch", tool: { id: "bash-a", name: "bash", args: "a", readOnly: false } } as WireEvent);
   ambiguous = ev(ambiguous, { kind: "tool_dispatch", tool: { id: "bash-b", name: "bash", args: "b", readOnly: false } } as WireEvent);
