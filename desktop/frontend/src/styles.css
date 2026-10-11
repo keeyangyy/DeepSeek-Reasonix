@@ -9987,7 +9987,8 @@ body > .mermaid-diagram--fullscreen {
   display: grid;
   gap: 6px;
 }
-.ask-shelf__custom {
+.ask-shelf__custom,
+.ask-shelf__supplement {
   min-width: 0;
   width: 100%;
   background: var(--bg);
@@ -9999,11 +10000,13 @@ body > .mermaid-diagram--fullscreen {
   padding: 6px 8px;
   box-sizing: border-box;
 }
-.ask-shelf__custom:focus {
+.ask-shelf__custom:focus,
+.ask-shelf__supplement:focus {
   border-color: var(--accent);
   outline: none;
 }
-.ask-shelf__custom::placeholder {
+.ask-shelf__custom::placeholder,
+.ask-shelf__supplement::placeholder {
   color: var(--fg-faint);
 }
 
@@ -10138,6 +10141,14 @@ body > .mermaid-diagram--fullscreen {
 .prompt-shelf--ask .prompt-shelf__meta { font-size: 15px; }
 .prompt-shelf--ask .prompt-shelf__actions { gap: 6px; padding: 0 0 8px; }
 .prompt-shelf--ask .prompt-action { min-height: 46px; border-radius: 12px; padding: 9px 14px; background: var(--bg-soft); }
+.prompt-shelf--ask .ask-shelf__option-group { display: grid; gap: 6px; }
+.prompt-shelf--ask .ask-shelf__supplement {
+  min-height: 34px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border-color: var(--border-soft);
+  font-size: 13px;
+}
 .prompt-shelf--ask .prompt-action:hover,
 .prompt-shelf--ask .prompt-action--active,
 .prompt-shelf--ask .prompt-action--selected { background: color-mix(in srgb, var(--accent) 15%, var(--bg-soft)); }

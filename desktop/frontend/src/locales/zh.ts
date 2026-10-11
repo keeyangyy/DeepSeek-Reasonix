@@ -1278,6 +1278,8 @@ export const zh: Record<DictKey, string> = {
   "ask.customAnswer": "自定义回答",
   "ask.customAnswerDesc": "打开自由输入；内容非空后才可确认。",
   "ask.customPlaceholder": "输入你自己的答案…",
+  "ask.supplementFor": "为“{option}”补充说明",
+  "ask.supplementPlaceholder": "可选：补充说明这个选项…",
   "ask.justChat": "跳过并继续聊天",
   "ask.justChatDesc": "提交空回答并继续对话。",
   "ask.skipQuestion": "跳过本题",

@@ -1277,6 +1277,8 @@ export const en = {
   "ask.customAnswer": "Other answer",
   "ask.customAnswerDesc": "Open a free-text answer; confirm when it is non-empty.",
   "ask.customPlaceholder": "Type your own answer…",
+  "ask.supplementFor": "Additional note for {option}",
+  "ask.supplementPlaceholder": "Add an optional note for this choice…",
   "ask.justChat": "Skip and keep chatting",
   "ask.justChatDesc": "Submit empty answers and continue the conversation.",
   "ask.skipQuestion": "Skip this question",

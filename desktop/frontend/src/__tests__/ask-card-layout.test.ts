@@ -29,6 +29,12 @@ function eq(actual: unknown, expected: unknown, label: string) {
 function flushTimers(delay = 0): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
+async function clickConfirm() {
+  await act(async () => {
+    document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")?.click();
+    await flushTimers();
+  });
+}
 function installDom() {
   const dom = new JSDOM("<!doctype html><html><head></head><body><div id=\"root\"></div></body></html>", {
     pretendToBeVisual: true,
@@ -247,11 +253,8 @@ console.log("\nask card layout");
     await flushTimers(200);
   });
   eq(document.querySelector(".prompt-action__description-toggle"), null, "short selected descriptions do not show a redundant disclosure");
-  eq(answers.length, 0, "single-select click advances without submitting the final answer");
-  await act(async () => {
-    (document.querySelector(".decision-confirm-bar__confirm") as HTMLButtonElement).click();
-    await flushTimers();
-  });
+  eq(answers.length, 0, "single-select click stages the choice without submitting the final answer");
+  await clickConfirm();
   eq(answers.length, 1, "confirm submits the selected single-select answer");
   eq(answers[0]?.[0]?.selected?.[0], "Minimal repair", "submitted answer matches the selected option");
   await act(async () => {
@@ -532,10 +535,7 @@ console.log("\nask card layout");
     await flushTimers();
   });
   eq(document.querySelector<HTMLInputElement>(".ask-shelf__custom")?.value, "Keep this draft", "reopening custom restores the draft");
-  await act(async () => {
-    document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")?.click();
-    await flushTimers();
-  });
+  await clickConfirm();
   eq(answers[0]?.[0]?.selected?.[0], "Keep this draft", "custom mode submits the restored draft");
   await act(async () => { root.unmount(); });
   dom.window.close();
@@ -635,7 +635,9 @@ console.log("\nask card layout");
       .find((button) => button.textContent?.includes("First A"))?.click();
     await flushTimers();
   });
-  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "multi-question Ask advances to question 2");
+  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("1/2"), true, "single choice stays on question 1 until confirmed");
+  await clickConfirm();
+  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "Confirm advances to question 2");
   await act(async () => {
     document.querySelector<HTMLButtonElement>(".ask-shelf__pager-button")?.click();
     await flushTimers();
@@ -646,13 +648,15 @@ console.log("\nask card layout");
       .find((button) => button.textContent?.includes("First B"))?.click();
     await flushTimers();
   });
+  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("1/2"), true, "replacement choice remains staged until confirmed");
+  await clickConfirm();
   eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "previous question accepts a replacement choice");
   await act(async () => {
     [...document.querySelectorAll<HTMLButtonElement>(".prompt-action")]
       .find((button) => button.textContent?.includes("Second B"))?.click();
-    document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")?.click();
     await flushTimers();
   });
+  await clickConfirm();
   eq(attempts, 1, "failed final submit is attempted exactly once");
   eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "failed final submit stays on question 2");
   eq(document.querySelector(".ask-shelf__crumbs")?.textContent?.includes("First B"), true, "failed final submit preserves the revised first answer");
@@ -663,10 +667,7 @@ console.log("\nask card layout");
     "failed final submit preserves the second answer",
   );
   eq(document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")?.disabled, false, "failed final submit re-enables retry");
-  await act(async () => {
-    document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")?.click();
-    await flushTimers();
-  });
+  await clickConfirm();
   eq(attempts, 2, "retry submits once after the failure");
   eq(submitted[1]?.map((answer) => answer.selected?.[0]).join("|"), "First B|Second B", "retry submits the preserved answer batch");
   await act(async () => { root.unmount(); });
