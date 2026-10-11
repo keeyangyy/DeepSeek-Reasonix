@@ -229,7 +229,7 @@ export function splitStreamingTailFence(text: string): StreamingTailFence | null
 }
 
 export function useRenderedMarkdownText(text: string, streaming: boolean, holdIdleFinalization = false): string {
-  const [renderedText, setRenderedText] = useState(text);
+  const [renderedText, setRenderedText] = useState(() => streaming ? streamingCommitTarget(text) : text);
   const latestTextRef = useRef(text);
   const frameRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
@@ -244,16 +244,21 @@ export function useRenderedMarkdownText(text: string, streaming: boolean, holdId
 
   useLayoutEffect(() => {
     const endedStreaming = wasStreamingRef.current && !streaming;
+    const startedStreaming = !wasStreamingRef.current && streaming;
     wasStreamingRef.current = streaming;
     if (streaming) {
       cancelFinalizationRef.current?.();
       cancelFinalizationRef.current = null;
       finalizingTextRef.current = null;
+      if (startedStreaming) {
+        const stablePrefix = streamingCommitTarget(text);
+        if (renderedText !== stablePrefix) setRenderedText(stablePrefix);
+      }
       // A bounded live preview occasionally advances its window and drops an
       // old prefix. Discard the stale parsed tree before paint; the complete
       // replacement stays visible through StreamingMarkdownTail and is parsed
       // later under the normal adaptive budget.
-      if (renderedText !== "" && !text.startsWith(renderedText)) {
+      if (!startedStreaming && renderedText !== "" && !text.startsWith(renderedText)) {
         setRenderedText("");
       }
       return;
