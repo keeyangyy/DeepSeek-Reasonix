@@ -324,6 +324,8 @@ const SAID: Record<string, string> = {
   "mcp.unavailable": "该服务器未能启动，开关已恢复原状",
   "mcp.switch_not_undone": "该服务器未能启动，且开关未能恢复——重启后将保持刚才设置的状态",
   "mcp.approval_owed": "这个服务要启动的内容在你启用后变了，请先查看命令并重新启用",
+  "mcp.nothing_held": "这个服务没有被暂挡的工具定义",
+  "mcp.digest_mismatch": "你看到的被挡定义已经变了，没有接受；请重新查看",
   "activation.unavailable": "开关未能保存：其存储文件无法读取或写入",
 
   // ── 待送达：条目、队列、这份存档各自会拒 ─────────────────────────
@@ -357,6 +359,8 @@ const SAID: Record<string, string> = {
   "display_currency.invalid": "不支持这个币种，只能选自动、CNY 或 USD：{detail}",
   "display_currency.save_failed": "费用显示币种未能保存：{detail}",
   "progress_watch.save_failed": "无进展设置未能保存：{detail}",
+  "auto_archive.save_failed": "自动归档设置未能保存：{detail}",
+  "auto_archive.out_of_range": "天数超出允许范围，未做任何修改：{detail}",
   "workspace.untrustable": "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹",
   "workspace.trust_save_failed": "未能记下对此文件夹的信任决定：{detail}",
   "progress_watch.out_of_range": "该数值超出允许范围，未做任何修改：{detail}",

@@ -18,12 +18,14 @@ import { EN_COMPOSER } from "./en_composer";
 import { EN_BACKUP } from "./en_backup";
 import { EN_FEEDBACK } from "./en_feedback";
 import { EN_COMMUNITY } from "./en_community";
+import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,
   ...EN_COMMUNITY,
+  ...EN_SPONSOR,
   ...EN_METRICS,
   ...EN_STORAGE,
   ...EN_USAGE,
@@ -445,6 +447,17 @@ export const EN: Record<string, string> = {
   "背景模糊、动态天空与颗粒质感全部开启": "Background blur, the animated sky and the grain layer are all on",
   "关闭背景模糊、动态天空与颗粒质感，集成显卡或老旧电脑上更省电": "Turns off background blur, the animated sky and the grain layer; lighter on integrated graphics and older machines",
   "调整文字的笔画粗细。中文笔画密集，在小字号下加粗有助于提升清晰度。": "Adjusts stroke weight. Dense Chinese glyphs lose definition first at small sizes, and more weight recovers it.",
+  "图形渲染": "Graphics",
+  "随系统": "System default",
+  "仅软件渲染": "Software only",
+  "软件渲染": "Software rendering",
+  "当前启动使用：{mode}": "This launch uses: {mode}",
+  "图形合成状态：{value}": "Graphics compositing status: {value}",
+  "尚未报告图形状态": "No graphics status reported yet",
+  "本次启动已用启动参数关闭硬件加速": "hardware acceleration was switched off for this launch by a launch option",
+  "已按你的设置关闭硬件加速": "hardware acceleration is switched off by your setting",
+  "窗口一直占用显卡、或界面花屏时，先试「视觉效果：节能」，不行再改为「仅软件渲染」：改用 CPU 绘制，显卡不再参与。设置保存后，需退出并重新打开 Studio 才会生效。": "If the window keeps your GPU busy or draws garbage, try Visual effects: Reduced first; if that is not enough, choose Software only: the CPU draws the window and the GPU stays out of it. The choice is saved now and applies after you quit and reopen Studio.",
+  "已保存，退出并重新打开 Studio 后生效": "Saved; quit and reopen Studio for it to apply",
   "跟随语言": "Match the language",
   "中文界面使用中等字重，西文使用常规字重": "Medium for Chinese, regular for Latin",
   "常规": "Regular",
@@ -537,7 +550,7 @@ export const EN: Record<string, string> = {
   "在系统文件管理器中显示": "Show in file manager",
   "已在 {app} 中打开": "Opened in {app}",
   "通知": "Notifications",
-  "只在你没盯着窗口的时候有用：一轮跑完、停下来等批准、或者模型反过来问你，都可以让系统提醒一次。": "Only useful while you are not watching: a turn finishing, a stop for approval, or the model asking you something can each raise one system alert.",
+  "只在你没盯着窗口的时候有用：一轮跑完、停下来等批准、模型反过来问你、反馈有了回复，都可以让系统提醒一次。": "Only useful while you are not watching: a turn finishing, a stop for approval, the model asking you something, or a reply to your feedback can each raise one system alert.",
   "发送系统通知": "Send system notifications",
   "窗口在后台时由系统弹出提醒。立即生效，正在跑的会话下一次事件就按新设置来": "The system raises the alert while this window is in the background. Immediate: a running session follows the new setting from its next event.",
   "这一轮结束时": "When the turn ends",
@@ -546,6 +559,8 @@ export const EN: Record<string, string> = {
   "模型要动的东西超出了已经给出的授权，正停在那里等你": "The model wants to touch something outside what it was already granted, and is stopped there waiting for you",
   "模型提问时": "When the model asks you something",
   "模型停下来问你一个问题，没有答案它就不会往下走": "The model stopped to ask a question and will not go on without an answer",
+  "反馈有新回复时": "When feedback gets a reply",
+  "你提交的反馈收到回复、或需要你补充信息时提醒一次，不带回复内容": "One alert when a report you sent gets a reply or needs more from you, without its text",
   "引用回复": "quoting a reply",
   "引用第 {n} 轮回复": "quoting turn {n}",
   "本轮已发送 / 正在接收（估算）的 token": "tokens sent this turn / arriving now (estimated)",
@@ -1072,6 +1087,8 @@ export const EN: Record<string, string> = {
   "另一个会话正在写这个工作区，等它写完会自动继续":
     "Another session is writing to this workspace; this one continues on its own when it is safe",
   "工作区空出来了，这个会话已经继续": "The workspace is free again; this session has continued",
+  "一个 MCP 服务有工具的定义是新增的或与你批准过的不同，已暂不提供给模型；详情里是这些工具，核对服务后再接受":
+    "An MCP server has tools whose definitions are new or differ from what you approved; they are held out of the model's tools until you accept them (details list them)",
   "还没轮到这个会话写，这次等待就结束了": "The wait ended before this session's turn to write came",
 
   // ── 宿主通知卡片自己的头部（NoticeCard）───────────────────────

@@ -59,6 +59,7 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.open-project", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "appearance.theme", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.nav-rail", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.search", kind: "view", target: "none", proof: "interaction" },
   { id: "session.filter", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.settings", kind: "navigation", target: "none", proof: "interaction" },
@@ -183,6 +184,8 @@ export const ACTIONS: UIAction[] = [
   { id: "community.douyin-qr", kind: "view", target: "none", proof: "interaction" },
   { id: "community.author", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "community.more", kind: "view", target: "none", proof: "interaction" },
+  { id: "sponsor.paypal", kind: "shell-native", target: "none", proof: "interaction" },
+  { id: "sponsor.qr", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.open", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.tab", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.category", kind: "view", target: "none", proof: "interaction" },
@@ -413,6 +416,7 @@ export const ACTIONS: UIAction[] = [
   { id: "notify.turn-done", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.approval", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "notify.ask", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "notify.feedback-reply", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.editor", kind: "repeatable", target: "none", proof: "authority-effect" },
   { id: "wallpaper.remove", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "wallpaper.change", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
@@ -507,6 +511,9 @@ export const ACTIONS: UIAction[] = [
   { id: "remember-approval.global", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // Read by the running turn at its next round, so no rebuild stands between the
   // click and the canonical change.
+  { id: "auto-archive.notice-dismiss", kind: "view", target: "none", proof: "interaction" },
+  { id: "auto-archive.enabled", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "auto-archive.days", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // The kernel announces the change on the stream, so no rebuild stands between
   // the click and the canonical change.
   { id: "currency.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

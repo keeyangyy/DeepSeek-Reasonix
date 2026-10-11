@@ -159,11 +159,11 @@ func (s *Server) initTitleProvider() {
 	if err != nil {
 		return
 	}
-	ref, _, ok := cfg.ResolveStartupChatModel()
+	start, ok := cfg.ResolveStartupChatModel()
 	if !ok {
 		return
 	}
-	entry, ok := cfg.ResolveModel(ref)
+	entry, ok := cfg.ResolveModel(start.Ref)
 	if !ok || !entry.Configured() {
 		return
 	}
@@ -523,20 +523,12 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			keepUsedWorkspace(ctrl.WorkspaceRoot())
 		}
 	}
-	submitOrShell(ctrl, r, body.Input, body.Format, body.RefuseUnknownSlash, body.LocalShell)
-	// After synchronous admission, a successful start sets Running. A silent
-	// drop (rotating/closed) leaves Running false — return 409 instead of 202.
-	// Finishing-window park also leaves Running false briefly; prefer 202 only
-	// when Running or a pending prompt is observed, else durable-queue guidance.
-
-	// A management verb starts no turn, so Running cannot judge it: /compact
-	// answered 409 while doing exactly what was asked.
-	if !control.IsNonTurnInput(body.Input) && !ctrl.Running() && !ctrl.RuntimeStatus().PendingPrompt {
-		s.bindMu.Unlock()
+	refused := submitOrShell(ctrl, r, body.Input, body.Format, body.RefuseUnknownSlash, body.LocalShell)
+	s.bindMu.Unlock()
+	if refused {
 		sessionBusy(w)
 		return
 	}
-	s.bindMu.Unlock()
 	w.WriteHeader(http.StatusAccepted)
 }
 

@@ -193,6 +193,8 @@ export const SETTINGS: SettingEntry[] = [
   { section: "session", anchor: "plan-mode", title: "计划模式", scope: "session", apply: "immediate", keywords: ["只读", "先规划"] },
   // Written to the user file only, and read by the running turn at its next round.
   { section: "session", anchor: "progress-watch", title: "长时间无进展", scope: "machine", apply: "immediate", keywords: ["暂停", "无进展", "空转", "卡住", "循环", "轮次", "token"] },
+  // Written to the user file only; the kernel's background sweep reads it on each pass.
+  { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
   { section: "model", anchor: "model", title: "按用途选择模型", scope: "machine", apply: "runtime-rebuild", keywords: ["主模型", "默认模型", "模型", "切换", "端点", "按任务指定模型", "角色分工", "子代理", "规划", "看图", "复核", "决策", "system one", "typesafe", "laya"] },
@@ -246,6 +248,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "account", anchor: "backup", title: "云备份", scope: "account", apply: "immediate", keywords: ["备份", "恢复", "换机", "同步", "导出"] },
   { section: "versions", anchor: "versions", title: "版本", scope: "machine", apply: "immediate", keywords: ["更新", "升级"] },
   { section: "versions", anchor: "community", title: "社区与贡献者", scope: "machine", apply: "none", keywords: ["社区", "交流群", "QQ", "加群", "二维码", "discord", "贡献者", "contributors", "community"] },
+  { section: "versions", anchor: "sponsor", title: "赞助", scope: "machine", apply: "none", keywords: ["捐助", "支付宝", "微信支付", "收款码", "paypal", "donate", "sponsor", "support", "alipay", "wechat"] },
   { section: "memory", anchor: "memory", title: "记忆", scope: "chosen", apply: "immediate", keywords: ["记住", "忘记", "事实"] },
   { section: "usage", anchor: "currency", title: "费用显示币种", scope: "machine", apply: "immediate", keywords: ["币种", "货币", "人民币", "美元", "currency", "CNY", "USD", "汇率"] },
   { section: "usage", anchor: "usage", title: "用量与成本", scope: "machine", apply: "none", keywords: ["token", "花费", "缓存命中"] },
@@ -253,6 +256,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "advanced", anchor: "elsewhere", title: "本版本尚未提供", scope: "machine", apply: "none", keywords: ["配置文件"] },
 
   { section: "appearance", anchor: "language", title: "语言", scope: "machine", apply: "restart", keywords: ["中文", "english", "界面语言"] },
+  { section: "appearance", anchor: "graphics", title: "图形渲染", scope: "machine", apply: "restart", keywords: ["硬件加速", "显卡", "gpu", "软件渲染", "占用", "卡顿"] },
   { section: "appearance", anchor: "navrail", title: "图标栏", scope: "machine", apply: "immediate", keywords: ["侧边栏", "导航", "图标", "sidebar", "nav"] },
   { section: "appearance", anchor: "folding", title: "会话折叠", scope: "machine", apply: "immediate", keywords: ["展开", "收起", "思考", "执行过程", "步骤", "输出", "简报", "fold"] },
   { section: "appearance", anchor: "window", title: "窗口", scope: "machine", apply: "immediate", keywords: ["托盘", "关闭行为", "休眠", "睡眠"] },

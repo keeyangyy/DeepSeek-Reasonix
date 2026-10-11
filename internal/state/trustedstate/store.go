@@ -56,13 +56,15 @@ const (
 )
 
 // Record is one link of a stream's chain. Payload names the object the record
-// seals; Integrity is the level the record was written under.
+// seals; Refs are further objects the payload points at, sealed with it so
+// Verify can check them; Integrity is the level the record was written under.
 type Record struct {
 	Stream     string         `json:"stream"`
 	Generation uint64         `json:"generation"`
 	Parent     Digest         `json:"parent,omitempty"`
 	Kind       string         `json:"kind"`
 	Payload    Digest         `json:"payload"`
+	Refs       []Digest       `json:"refs,omitempty"`
 	Integrity  IntegrityLevel `json:"integrity"`
 	At         int64          `json:"at"`
 }
@@ -111,6 +113,18 @@ func (s *Store) streamDir(stream string) (string, error) {
 // The current head is checked against what this process observed first, so a
 // rewritten history is refused rather than extended.
 func (s *Store) Append(ctx context.Context, stream, kind string, payload []byte) (Record, Digest, error) {
+	return s.AppendWithRefs(ctx, stream, kind, payload, nil)
+}
+
+// AppendWithRefs is Append for a payload that points at other objects. Each ref
+// must already be stored and intact; the record carries them, so a later Verify
+// notices one that went missing or changed.
+func (s *Store) AppendWithRefs(ctx context.Context, stream, kind string, payload []byte, refs []Digest) (Record, Digest, error) {
+	for _, ref := range refs {
+		if _, err := s.Object(ref); err != nil {
+			return Record{}, "", err
+		}
+	}
 	dir, err := s.streamDir(stream)
 	if err != nil {
 		return Record{}, "", err
@@ -139,6 +153,7 @@ func (s *Store) Append(ctx context.Context, stream, kind string, payload []byte)
 		Parent:     head.Record,
 		Kind:       kind,
 		Payload:    payloadDigest,
+		Refs:       refs,
 		Integrity:  level,
 		At:         s.now().UnixMilli(),
 	}
@@ -276,8 +291,10 @@ func (s *Store) Verify(stream string) (Head, error) {
 		if rec.Generation != gen || rec.Stream != stream {
 			return Head{}, fmt.Errorf("%w: stream %s record %s is out of sequence", ErrTampered, stream, at)
 		}
-		if _, err := s.Object(rec.Payload); err != nil {
-			return Head{}, err
+		for _, d := range append([]Digest{rec.Payload}, rec.Refs...) {
+			if _, err := s.Object(d); err != nil {
+				return Head{}, err
+			}
 		}
 		at = rec.Parent
 	}

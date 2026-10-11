@@ -165,48 +165,44 @@ type Messages struct {
 	RecoveryPlanAfterFmt            string // compact proposed-plan line, one %s
 	RecoveryTaskGrantChoices        string // Auto Guard list with a current-task semantic grant
 	SandboxEscapeApprovalChoices    string // approval choice list for OS sandbox escape prompts
-	NotifyTitle                     string // desktop notification title
-	NotifyTurnDone                  string // desktop notification: the turn finished
-	NotifyTurnFailed                string // desktop notification: the turn failed
-	NotifyApproval                  string // desktop notification: something is waiting to be approved
-	NotifyAsk                       string // desktop notification: the model asked a question
-	ApprovalNeededFmt               string // notification text for a pending approval, tool only
-	ApprovalNeededWithSubjectFmt    string // notification text for a pending approval with subject
-	AnswerNeededFmt                 string // notification text for a pending ask question
-	AnswerNeededFromFmt             string // notification text for a pending MCP elicitation, with the server
-	ToolApprovalSourceFmt           string // "Source: %s" / "来源: %s"
-	ToolApprovalBuiltIn             string // built-in tool source label
-	ToolApprovalImageUse            string // image-understanding detail for understand_image-style tools
-	ApprovalToolLabelBash           string // user-facing label for bash approvals
-	ApprovalToolLabelEditFile       string // user-facing label for edit_file approvals
-	ApprovalToolLabelWriteFile      string // user-facing label for write_file approvals
-	ApprovalToolLabelMultiEdit      string // user-facing label for multi_edit approvals
-	ApprovalToolLabelMoveFile       string // user-facing label for move_file approvals
-	ApprovalToolLabelWebFetch       string // user-facing label for web_fetch approvals
-	ApprovalToolLabelRunSkill       string // user-facing label for run_skill approvals
-	ApprovalToolLabelRemember       string // user-facing label for remember approvals
-	ApprovalToolLabelForget         string // user-facing label for forget approvals
-	ApprovalToolLabelSandboxEscape  string // user-facing label for OS sandbox escape approvals
-	MemoryApprovalSaveUpdate        string // subject prefix for remember approval
-	MemoryApprovalBodyLabel         string // label before the body excerpt in remember approval
-	MemoryApprovalArchiveFmt        string // subject for forget approval, %q = memory name
-	SandboxEscapeSubjectFallback    string // fallback subject for a one-shot unconfined sandbox escape approval
-	SandboxEscapeSubjectPrefix      string // subject prefix before the shell command for one-shot unconfined escape approval
-	SandboxEscapeWrapReason         string // reason when no OS sandbox can wrap the command
-	SandboxEscapeRuntimeReason      string // fallback reason when an OS sandbox cannot start the command
-	SandboxEscapeDeclined           string // model-facing denial when the user declines a one-shot unconfined retry
-	EgressApprovalReasonFmt         string // reason for a host outside allowed_domains, %s = host
-	ApprovalToolLabelConfigWrite    string // user-facing label for Reasonix-managed config write approvals
-	ConfigWriteSubjectPrefix        string // subject prefix before the config file path for managed config write approval
-	ConfigWriteReason               string // reason shown for managed config write approval
-	ConfigWriteDeclined             string // model-facing denial when the user declines a managed config write
-	ConfigWriteApprovalChoices      string // approval choice list for managed config write prompts
-	PermissionSavedFmt              string // permission rule saved notice: path, rule
-	PermissionAlreadyAllowedFmt     string // permission rule already covered notice: path, rule
-	PermissionSaveFailedFmt         string // permission rule save failure notice: rule, error
-	DiffFoldedFmt                   string // "… +%d more lines" footer when a writer diff is folded
-	DiffFoldEnabledFmt              string // notice when /diff-fold enables folding, %d = line limit
-	DiffFoldDisabled                string // notice when /diff-fold disables folding (shows all lines)
+	NotifyMessages
+	ApprovalNeededFmt              string // notification text for a pending approval, tool only
+	ApprovalNeededWithSubjectFmt   string // notification text for a pending approval with subject
+	AnswerNeededFmt                string // notification text for a pending ask question
+	AnswerNeededFromFmt            string // notification text for a pending MCP elicitation, with the server
+	ToolApprovalSourceFmt          string // "Source: %s" / "来源: %s"
+	ToolApprovalBuiltIn            string // built-in tool source label
+	ToolApprovalImageUse           string // image-understanding detail for understand_image-style tools
+	ApprovalToolLabelBash          string // user-facing label for bash approvals
+	ApprovalToolLabelEditFile      string // user-facing label for edit_file approvals
+	ApprovalToolLabelWriteFile     string // user-facing label for write_file approvals
+	ApprovalToolLabelMultiEdit     string // user-facing label for multi_edit approvals
+	ApprovalToolLabelMoveFile      string // user-facing label for move_file approvals
+	ApprovalToolLabelWebFetch      string // user-facing label for web_fetch approvals
+	ApprovalToolLabelRunSkill      string // user-facing label for run_skill approvals
+	ApprovalToolLabelRemember      string // user-facing label for remember approvals
+	ApprovalToolLabelForget        string // user-facing label for forget approvals
+	ApprovalToolLabelSandboxEscape string // user-facing label for OS sandbox escape approvals
+	MemoryApprovalSaveUpdate       string // subject prefix for remember approval
+	MemoryApprovalBodyLabel        string // label before the body excerpt in remember approval
+	MemoryApprovalArchiveFmt       string // subject for forget approval, %q = memory name
+	SandboxEscapeSubjectFallback   string // fallback subject for a one-shot unconfined sandbox escape approval
+	SandboxEscapeSubjectPrefix     string // subject prefix before the shell command for one-shot unconfined escape approval
+	SandboxEscapeWrapReason        string // reason when no OS sandbox can wrap the command
+	SandboxEscapeRuntimeReason     string // fallback reason when an OS sandbox cannot start the command
+	SandboxEscapeDeclined          string // model-facing denial when the user declines a one-shot unconfined retry
+	EgressApprovalReasonFmt        string // reason for a host outside allowed_domains, %s = host
+	ApprovalToolLabelConfigWrite   string // user-facing label for Reasonix-managed config write approvals
+	ConfigWriteSubjectPrefix       string // subject prefix before the config file path for managed config write approval
+	ConfigWriteReason              string // reason shown for managed config write approval
+	ConfigWriteDeclined            string // model-facing denial when the user declines a managed config write
+	ConfigWriteApprovalChoices     string // approval choice list for managed config write prompts
+	PermissionSavedFmt             string // permission rule saved notice: path, rule
+	PermissionAlreadyAllowedFmt    string // permission rule already covered notice: path, rule
+	PermissionSaveFailedFmt        string // permission rule save failure notice: rule, error
+	DiffFoldedFmt                  string // "… +%d more lines" footer when a writer diff is folded
+	DiffFoldEnabledFmt             string // notice when /diff-fold enables folding, %d = line limit
+	DiffFoldDisabled               string // notice when /diff-fold disables folding (shows all lines)
 
 	// `ask` tool question card.
 	AskURLSourceFmt      string

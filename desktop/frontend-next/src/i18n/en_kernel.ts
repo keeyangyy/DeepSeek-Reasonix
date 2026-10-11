@@ -46,6 +46,8 @@ export const EN_KERNEL: Record<string, string> = {
     "That server would not start, and the switch could not be put back - after a restart it will hold what you just set",
   "这个服务要启动的内容在你启用后变了，请先查看命令并重新启用":
     "What this server launches changed since you enabled it; review the command and enable it again",
+  "这个服务没有被暂挡的工具定义": "This server has no held tool definitions",
+  "你看到的被挡定义已经变了，没有接受；请重新查看": "The held definitions changed since you saw them, so nothing was accepted; review them again",
   "开关未能保存：其存储文件无法读取或写入": "The switch was not stored: its file could not be read or written",
   // 待送达：条目、队列、这份存档各自会拒
   "该条已不在待送达队列中": "That entry is no longer in the pending queue",
@@ -382,6 +384,8 @@ export const EN_KERNEL: Record<string, string> = {
   "不支持这个币种，只能选自动、CNY 或 USD：{detail}": "That currency is not supported; choose Auto, CNY or USD: {detail}",
   "费用显示币种未能保存：{detail}": "The display currency was not saved: {detail}",
   "无进展设置未能保存：{detail}": "The progress settings were not saved: {detail}",
+  "自动归档设置未能保存：{detail}": "The auto-archive settings were not saved: {detail}",
+  "天数超出允许范围，未做任何修改：{detail}": "The number of days is out of range; nothing was changed: {detail}",
   "主目录或磁盘根目录不能整体信任，请打开具体的项目文件夹": "A home directory or drive root cannot be trusted as a whole - open a specific project folder",
   "未能记下对此文件夹的信任决定：{detail}": "The trust decision for this folder was not saved: {detail}",
   "该数值超出允许范围，未做任何修改：{detail}": "That value is out of range; nothing was changed: {detail}",

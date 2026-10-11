@@ -1,12 +1,13 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
 import { HttpError } from "../port/port";
 import type { AccountState, AgentPort, Appearance as Look, CapabilityScope, McpEntry, ModelEntry, PluginPackage, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
+import { useSettingsSearch } from "./useSettingsSearch";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SECTION_NAME, SETTINGS, settingMatches } from "./prefsnav";
+import { ICON, NAV, SECTION_NAME } from "./prefsnav";
 import { Group, SCOPE_SAID } from "./Group";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -31,6 +32,7 @@ import { Sandbox } from "./Sandbox";
 import { BrowserTools } from "./BrowserTools";
 import { WriteLeaseGroup } from "./WriteLease";
 import { ProgressWatch } from "./ProgressWatch";
+import { AutoArchive } from "./AutoArchive";
 import { Account } from "./Account";
 import { Backup } from "./Backup";
 import { Providers } from "./Providers";
@@ -310,12 +312,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
 
   // 搜索命中的是这张表里的条目，包括当前没有挂载的那些分区；能不能显示由 shown
   // 决定，和它有没有被渲染过无关。
-  const found = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return null;
-    return SETTINGS.filter((e) => shown(e.section) && settingMatches(e, q));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, remoteBook]);
+  const found = useSettingsSearch(query, shown, remoteBook);
   // 落点：跳过去之后短暂标一下「就是这里」。这是导航反馈，不是状态变化。
   const go = (section: Section, anchor: string) => {
     setAt(section);
@@ -422,9 +419,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
           </div>
         )}
       </div>
-
       <ConfigTrouble port={port} onRepaired={onChanged} />
-
       <div className="prefs-body">
         <nav className="prefs-nav" role="tablist" aria-label={t("设置分类")} onKeyDown={arrowTabs}>
           {NAV.map(([group, items]) => {
@@ -501,6 +496,7 @@ export function Settings({ hub, onError, port, networkPort, networkHost, status,
                 </div>
               </Group>
               <ProgressWatch port={port} />
+              <AutoArchive port={port} />
               <Group id="session-dir" title={t("会话写入位置")}>
                 <div className="kv">
                   <span className="k">{t("工作目录")}</span>

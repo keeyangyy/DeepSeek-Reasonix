@@ -1751,6 +1751,57 @@ test("the window ground follows the stored theme and, for auto, the system", () 
   assert.equal(groundFor(undefined, true), GROUND.dark);
 });
 
+const { accelerationOff, shouldDisableGpu, graphicsReport, graphicsHandler, PREF_KEY: GPU_PREF } = require("../src/graphics.js");
+
+test("hardware acceleration is off only when the saved preference says exactly that", () => {
+  assert.equal(GPU_PREF, "rx-hw-accel");
+  assert.equal(accelerationOff({}), false);
+  assert.equal(accelerationOff(undefined), false);
+  assert.equal(accelerationOff({ "rx-hw-accel": "on" }), false);
+  assert.equal(accelerationOff({ "rx-hw-accel": "" }), false);
+  assert.equal(accelerationOff({ "rx-hw-accel": "off" }), true);
+});
+
+test("the graphics report says what this launch applied and passes Electron's status through untouched", () => {
+  const app = (compositing) => ({ getGPUFeatureStatus: () => ({ gpu_compositing: compositing }) });
+  const auto = { launchedOff: false, savedOff: false };
+  for (const value of ["enabled", "enabled_force", "enabled_on", "disabled_software", "unavailable_off", ""]) {
+    assert.deepEqual(graphicsReport(app(value), auto), { ...auto, compositing: value });
+  }
+  assert.deepEqual(graphicsReport(app("disabled_software"), { launchedOff: true, savedOff: true }), { launchedOff: true, savedOff: true, compositing: "disabled_software" });
+  assert.deepEqual(graphicsReport(app("enabled"), { launchedOff: true, savedOff: false }), { launchedOff: true, savedOff: false, compositing: "enabled" });
+  assert.deepEqual(graphicsReport({ getGPUFeatureStatus: () => { throw new Error("not ready"); } }, auto), { ...auto, compositing: "" });
+  assert.deepEqual(graphicsReport({ getGPUFeatureStatus: () => ({}) }, auto), { ...auto, compositing: "" });
+});
+
+test("the GPU is disabled by the saved preference, the environment or the flag, and only then", () => {
+  const off = (over) => shouldDisableGpu({ prefs: {}, env: {}, argv: [], ...over });
+  assert.equal(off({}), false);
+  assert.equal(off({ prefs: { "rx-hw-accel": "off" } }), true);
+  assert.equal(off({ prefs: { "rx-hw-accel": "on" } }), false);
+  assert.equal(off({ prefs: undefined }), false);
+  assert.equal(off({ env: { REASONIX_DISABLE_GPU: "1" } }), true);
+  assert.equal(off({ env: { REASONIX_DISABLE_GPU: "0" } }), false);
+  assert.equal(off({ argv: ["studio", "--disable-gpu"] }), true);
+  assert.equal(off({ argv: ["--disable-gpu-sandbox"] }), false);
+});
+
+test("a prefs file that is missing or corrupt keeps hardware acceleration", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gpu-"));
+  const file = path.join(dir, "window-prefs.json");
+  assert.equal(shouldDisableGpu({ prefs: loadPrefs(file), env: {}, argv: [] }), false);
+  fs.writeFileSync(file, "{ not json");
+  assert.equal(shouldDisableGpu({ prefs: loadPrefs(file), env: {}, argv: [] }), false);
+});
+
+test("the graphics report is refused to any sender that is not the Studio window", () => {
+  const app = { getGPUFeatureStatus: () => ({ gpu_compositing: "enabled" }) };
+  const win = { id: "studio" };
+  const handle = graphicsHandler(app, (event) => (event.sender === "studio" ? win : null), { launchedOff: true, savedOff: false });
+  assert.deepEqual(handle({ sender: "studio" }), { launchedOff: true, savedOff: false, compositing: "enabled" });
+  assert.equal(handle({ sender: "agent-browser-page" }), null);
+});
+
 test("a kernel that dies after its handshake leaves its exit and last words in shell.log and a marker for the next launch", () => {
   const { openLogs } = require("../src/shelllog.js");
   const { crashDir, recordHostExit, pendingHostExit, clearHostExit } = require("../src/hostexit.js");
@@ -1800,4 +1851,47 @@ test("the notice names where the logs are in both languages and shows how it end
   assert.match(zh.message, /内核/);
   assert.match(en.detail, /code 2/);
   assert.match(zh.detail, /2/);
+});
+
+test("packaging: an rpm fpm spelled x86_64 leaves the build as the release arch", async () => {
+  const arch = require("../packaging/arch.js");
+  const hook = require("../packaging/canonical-artifact-names.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rpm-name-"));
+  const deb = path.join(dir, "ReasonixStudio-linux-amd64.deb");
+  const rpm = path.join(dir, "ReasonixStudio-linux-x86_64.rpm");
+  fs.writeFileSync(deb, "d");
+  fs.writeFileSync(rpm, "r");
+  arch.record(deb, "x64");
+  arch.record(rpm, "x64");
+  const out = await hook({ artifactPaths: [deb, rpm] });
+  assert.deepEqual(out.map((f) => path.basename(f)), ["ReasonixStudio-linux-amd64.deb", "ReasonixStudio-linux-amd64.rpm"]);
+  assert.ok(fs.existsSync(path.join(dir, "ReasonixStudio-linux-amd64.rpm")));
+  assert.ok(!fs.existsSync(rpm));
+});
+
+test("packaging: a name still carrying an fpm spelling is refused", async () => {
+  const arch = require("../packaging/arch.js");
+  const hook = require("../packaging/canonical-artifact-names.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rpm-name-"));
+  const stray = path.join(dir, "ReasonixStudio-linux-aarch64.rpm");
+  fs.writeFileSync(stray, "r");
+  arch.record(stray, "x64");
+  await assert.rejects(hook({ artifactPaths: [stray] }), /aarch64/);
+});
+
+test("packaging: a Windows installer named for x64 is renamed to amd64", async () => {
+  const arch = require("../packaging/arch.js");
+  const hook = require("../packaging/canonical-artifact-names.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "win-name-"));
+  const installer = path.join(dir, "ReasonixStudio-windows-x64-installer.exe");
+  const zip = path.join(dir, "ReasonixStudio-windows-x64.zip");
+  for (const f of [installer, zip]) {
+    fs.writeFileSync(f, "x");
+    arch.record(f, "x64");
+  }
+  const out = await hook({ artifactPaths: [installer, zip] });
+  assert.deepEqual(
+    out.map((f) => path.basename(f)),
+    ["ReasonixStudio-windows-amd64-installer.exe", "ReasonixStudio-windows-amd64.zip"],
+  );
 });

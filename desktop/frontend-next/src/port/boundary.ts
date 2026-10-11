@@ -105,8 +105,12 @@ export interface RememberApprovalSettings {
   path: string;
 }
 
-// When a run reads as no longer moving. Only the user file holds it: a
-// project file cannot pause the user's runs.
+export interface AutoArchiveSettings {
+  enabled: boolean;
+  days: number;
+  defaultDays: number;
+  path: string;
+}
 export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
 
 // Which currency costs are shown in; the user file holds it.
@@ -115,6 +119,8 @@ export interface DisplayCurrencySettings {
   path: string;
 }
 
+// When a run reads as no longer moving. Only the user file holds it: a
+// project file cannot pause the user's runs.
 export interface ProgressWatchSettings {
   pause: boolean;
   rounds: number;

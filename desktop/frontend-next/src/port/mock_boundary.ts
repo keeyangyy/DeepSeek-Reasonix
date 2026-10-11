@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, RememberApprovalSettings, SandboxSettings, WriteLeaseSettings } from "./port";
-import type { DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
+import type { AutoArchiveSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings } from "./boundary";
 import { MockShell } from "./mock_shell";
 
 // The boundary half of the fixture: what the agent is refused outright, and how
@@ -136,7 +136,17 @@ export class MockBoundary extends MockShell {
     return { ...this.remember };
   }
 
+  private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
 
+  async autoArchive(): Promise<AutoArchiveSettings> {
+    return { ...this.archive };
+  }
+
+  async saveAutoArchive(s: Pick<AutoArchiveSettings, "enabled" | "days">): Promise<AutoArchiveSettings> {
+    if (s.days < 1 || s.days > 3650) throw new Error("auto archive setting out of range");
+    this.archive = { ...this.archive, ...s };
+    return { ...this.archive };
+  }
   private currency: DisplayCurrencySettings = { mode: "auto", path: "/Users/you/.reasonix/config.toml" };
 
   async displayCurrency(): Promise<DisplayCurrencySettings> {
