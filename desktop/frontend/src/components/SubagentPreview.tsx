@@ -35,7 +35,8 @@ export function SubagentPreview({
           </button>
           {reasoningOpen ? (
             <div className="tool__subagent-preview-text tool__subagent-preview-text--markdown">
-              <Markdown text={progress.reasoning} streaming={progress.phase === "reasoning"} />
+              {/* This preview is capped, so keep its complete Markdown blocks parsed while it grows. */}
+              <Markdown text={progress.reasoning} />
             </div>
           ) : (
             <ReasoningSummary

@@ -225,6 +225,20 @@ assert.equal(
   "new-session live events continue after the rehydrated prefix",
 );
 
+let zeroToOneReplayAfter: number | undefined;
+const zeroToOneEvents: number[] = [];
+const zeroToOneProjector = new TurnEventProjector();
+zeroToOneProjector.bind((event) => zeroToOneEvents.push(event.seq ?? 0));
+binding.TurnEventsForTab = async (_tabId, afterSeq) => {
+  zeroToOneReplayAfter = afterSeq;
+  return sessionReplay;
+};
+zeroToOneProjector.observeRuntime("zero-to-one-tab", "epoch-stable", 80, 80, false);
+zeroToOneProjector.observeRuntime("zero-to-one-tab", "epoch-stable", 8, 0, true, "turn-new-session", 1);
+for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+assert.equal(zeroToOneReplayAfter, 0, "an omitted generation-zero snapshot resets before generation one replays");
+assert.deepEqual(zeroToOneEvents, [1, 2, 3, 4, 5, 6, 7, 8], "generation zero to one replays its lower sequence range");
+
 let resolveOldSessionReplay!: (view: TurnEventReplayView) => void;
 let sessionReplayRequests = 0;
 binding.TurnEventsForTab = async () => {

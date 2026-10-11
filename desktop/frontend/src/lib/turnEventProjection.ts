@@ -93,13 +93,15 @@ export class TurnEventProjector {
   }
 
   observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean, turnId?: string, sessionGeneration?: number) {
+    const currentSessionGeneration = sessionGeneration ?? 0;
     const previousSessionGeneration = this.sessionGenerationByTab.get(tabId);
     // The runtime epoch can outlive a session rebind, while each session's
-    // durable event ledger has its own sequence space.
-    const sessionChanged = sessionGeneration !== undefined && previousSessionGeneration !== undefined && sessionGeneration !== previousSessionGeneration;
+    // durable event ledger has its own sequence space. Go omits generation 0
+    // from TabMeta, so treat a missing first snapshot as generation 0.
+    const sessionChanged = previousSessionGeneration !== undefined && currentSessionGeneration !== previousSessionGeneration;
     const epochChanged = Boolean(runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId));
     if (sessionChanged || epochChanged) this.resetProjection(tabId, epochChanged);
-    if (sessionGeneration !== undefined) this.sessionGenerationByTab.set(tabId, sessionGeneration);
+    this.sessionGenerationByTab.set(tabId, currentSessionGeneration);
     if (runtimeEpoch) this.epochByTab.set(tabId, runtimeEpoch);
     if (latest > (this.latestByTab.get(tabId) ?? 0)) this.latestByTab.set(tabId, latest);
     let projected = this.sequenceByTab.get(tabId);
