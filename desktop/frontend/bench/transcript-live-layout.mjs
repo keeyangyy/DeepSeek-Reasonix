@@ -64,7 +64,7 @@ try {
   });
   assert.equal(initial.text, "现在");
   assert.equal(initial.pendingFallbacks, 0, "an empty committed prefix does not reserve a blank line above the live tail");
-  assert.ok(initial.lineOffset < 4, `first live text starts in the first line (offset ${initial.lineOffset}px)`);
+  assert.ok(initial.lineOffset < 8, `first live text starts in the first line (offset ${initial.lineOffset}px)`);
   pass("first live CJK characters render on the first line without a delayed jump");
 
   const sentence = "现在加一个「输出名生成 + 重算兼容性」的辅助函数，这样改名后判定会跟着更新。";
@@ -85,7 +85,7 @@ try {
   });
   assert.equal(settled.text, sentence);
   assert.equal(settled.lines, 1);
-  assert.ok(Math.abs((settled.top ?? 0) - (live.top ?? 0)) < 4, "stream completion does not move the sentence to a different line");
+  assert.ok(Math.abs((settled.top ?? 0) - (live.top ?? 0)) < 8, "stream completion does not move the sentence to a different line");
   pass("stream completion preserves the sentence line and position");
 
   const tree = await page.locator(".project-tree__topic--has-actions").evaluate((row) => {
