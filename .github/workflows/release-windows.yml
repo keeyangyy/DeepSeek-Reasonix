@@ -305,7 +305,8 @@ jobs:
           # serves its manifests from its own releases instead.
           # Written to a temp file first: the existing index is read from this same
           # path, and a plain redirect would truncate it before the script ran.
-          bash scripts/update-versions-index.sh "$existing" "$VERSION" "$RELEASE_TAG" studio "$now" 3 \
+          # Five versions: enough to roll a couple of releases back.
+          bash scripts/update-versions-index.sh "$existing" "$VERSION" "$RELEASE_TAG" studio "$now" 5 \
             | sed "s#https://dl.reasonix.io/#https://github.com/${GITHUB_REPOSITORY}/releases/download/#g" \
             > catalog/versions.json.new
           mv catalog/versions.json.new catalog/versions.json
