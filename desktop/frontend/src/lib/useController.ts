@@ -3431,7 +3431,7 @@ export function useController() {
     const foregroundRunning = foregroundRunningFromRuntimeMeta(tab);
     const runtimeEpoch = tab.runtime?.epoch;
     const latestEventSeq = tab.turnEventSeq ?? 0;
-    turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId), tab.turnId ?? undefined);
+    turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId), tab.turnId ?? undefined, tab.sessionGeneration);
     // Will the reducer reject this as a snapshot that predates the live prompt?
     // Computed on pre-dispatch state so we can schedule an authoritative
     // refetch when a stale idle snapshot is ignored.
