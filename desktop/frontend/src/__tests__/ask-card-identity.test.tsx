@@ -23,7 +23,11 @@ async function render(next: WireAsk | null, scope = "tab-a") {
   await act(async () => root.render(<LocaleProvider>{next && <AskCard ask={next} draftScope={scope}
     onAnswer={(_id, value) => { answers.push(value); }} onStop={() => {}} />}</LocaleProvider>));
 }
-function input() { return document.querySelector<HTMLInputElement>(".ask-shelf__custom")!; }
+function input() { return document.querySelector<HTMLInputElement>(".ask-shelf__entry-group input")!; }
+function other() {
+  return [...document.querySelectorAll<HTMLButtonElement>(".prompt-action")]
+    .find((item) => item.textContent?.includes("Other"))!;
+}
 async function type(text: string) {
   await act(async () => input().focus()); // Keyboard focus does not click the custom row.
   await act(async () => {
@@ -33,10 +37,11 @@ async function type(text: string) {
 }
 
 await render(ask);
+await act(async () => other().click()); // Empty Other selects free-text mode and prompts for an answer.
 await type("Keyboard answer");
 await act(async () => input().dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
 assert.deepEqual(answers, [[{ questionId: "q1", selected: ["Keyboard answer"] }]]);
-console.log("  PASS  keyboard focus and Enter submit the custom answer exactly once");
+console.log("  PASS  shared input and Enter submit the Other answer exactly once");
 
 await render(null);
 await render(ask);
