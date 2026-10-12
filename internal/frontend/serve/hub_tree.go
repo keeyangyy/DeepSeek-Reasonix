@@ -60,7 +60,10 @@ type treeSession struct {
 	Turns     int    `json:"turns,omitempty"`
 	RuntimeID string `json:"runtimeId,omitempty"`
 	Archived  bool   `json:"archived,omitempty"`
-	Pinned    bool   `json:"pinned,omitempty"`
+	// Legacy marks a conversation kept by Reasonix 1.x: this build reads that
+	// log and never writes it, so the row says so rather than looking native.
+	Legacy bool `json:"legacy,omitempty"`
+	Pinned bool `json:"pinned,omitempty"`
 	// AutoArchivedAt is unix milliseconds of an automatic archive, else absent.
 	AutoArchivedAt int64 `json:"autoArchivedAt,omitempty"`
 	// Unread is a turn that finished since the person last looked. The kernel

@@ -25,6 +25,7 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		return sessionPage{Sessions: []treeSession{}}
 	}
 	titles := h.titleCacheFor(dir)
+	legacy := h.legacyCacheFor(dir)
 	byID := make(map[string]sessionstore.SessionInfo, len(listed))
 	for _, si := range listed {
 		byID[sessionstore.BranchID(si.Path)] = si
@@ -82,10 +83,12 @@ func (h *Hub) workspacePage(root, name string, open map[string]string, window tr
 		}
 		out = append(out, treeSession{
 			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread,
+			Legacy: legacy.legacyOf(si.Path),
 		})
 		decorateArchiveState(&out[len(out)-1], si.Path)
 	}
 	attachVersions(dir, out, h.openSessionsIn(root))
+	legacy.flush()
 	unlisted := h.unlistedOpenSessions(root, out)
 	// Never nil: the frontend iterates rows, and a null blanks the window.
 	rows := append(append([]treeSession{}, unlisted...), out...)

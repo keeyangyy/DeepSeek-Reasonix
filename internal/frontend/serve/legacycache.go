@@ -54,3 +54,20 @@ func sessionEventLogStamp(sessionPath string) (int64, int64) {
 	}
 	return info.Size(), info.ModTime().UnixNano()
 }
+
+// legacyCacheFor keeps one reader per project directory, for the same reason
+// titleCacheFor does: entries are keyed by file name, which is unique within a
+// project and not across them.
+func (h *Hub) legacyCacheFor(dir string) *legacyCache {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.legacy == nil {
+		h.legacy = map[string]*legacyCache{}
+	}
+	if c := h.legacy[dir]; c != nil {
+		return c
+	}
+	c := newLegacyCache(dir)
+	h.legacy[dir] = c
+	return c
+}
