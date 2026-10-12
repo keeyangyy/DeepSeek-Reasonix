@@ -49,3 +49,11 @@ export function ensureActiveAssistant(s: State): State {
   const id = active.currentAssistant!;
   return active.live?.id === id ? active : { ...active, live: { id, text: "", reasoning: "", reasoningComplete: false } };
 }
+
+export function assistantRowForRebase(items: readonly Item[], activeId?: string): AssistantItem | undefined {
+  const target = activeId ?? "";
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    if (item.kind === "assistant" && item.messageID && (target ? item.id === target : item.wasStreamed)) return item;
+  }
+}
