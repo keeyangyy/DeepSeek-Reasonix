@@ -26,7 +26,7 @@ import { foregroundRunningFromRuntimeMeta, type RuntimeMetaSnapshot } from "./ru
 import { aliasActivationRequest, noteActivationRequested, noteActivationSettled, noteActivationStarted } from "./sessionDiagnostics";
 import { noteDedupDrop, noteOrderAnomaly, noteSwitchPhase, noteSwitchStart } from "./sessionSwitchDiagnostics";
 import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, filterStaleStreamDeltas, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
-import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems, stampAssistantMessageID } from "./assistantItems";
+import { assistantHasContent, assistantRowForRebase, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems, stampAssistantMessageID } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
 import { frontendDiagnosticsActive, recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import { uiPerfTracker } from "./uiPerf";
@@ -1124,7 +1124,7 @@ function applyStreamBatch(s: State, segments: StreamSegment[]): State {
 
 function rebaseLiveAssistantToPage(pageItems: Item[], state: State) { // Rebase only the active assistant segment.
   if (state.ask) return;
-  const current = state.items.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.id === (state.currentAssistant ?? state.live?.id) && Boolean(item.messageID));
+  const current = assistantRowForRebase(state.items, state.currentAssistant ?? state.live?.id);
   const page = current && pageItems.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.messageID === current.messageID);
   if (!current || !page || pageAssistantPointer(page.id, pageItems) !== page.id) return;
   const live = state.currentAssistant === current.id && state.live?.id === current.id ? state.live : undefined;
