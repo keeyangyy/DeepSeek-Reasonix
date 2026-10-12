@@ -7,7 +7,7 @@
     "commented-code": 0,
     "complexity": 712,
     "css-important": 210,
-    "css-size": 9862,
+    "css-size": 9863,
     "doc-language": 0,
     "doc-owner": 27,
     "doc-prose": 2141,
@@ -78,7 +78,7 @@
     },
     "desktop/frontend-next/src/styles/app.css": {
       "css-important": 28,
-      "css-size": 5626
+      "css-size": 5627
     },
     "desktop/frontend-next/src/styles/studio.css": {
       "css-important": 182,
@@ -1262,7 +1262,7 @@
     },
     "internal/session/control/controller.go": {
       "essay": 29,
-      "file-size": 461,
+      "file-size": 464,
       "frontend-parity": 5
     },
     "internal/session/control/controller_test.go": {
