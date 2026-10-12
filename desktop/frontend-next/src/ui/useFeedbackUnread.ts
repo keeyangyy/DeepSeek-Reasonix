@@ -54,7 +54,7 @@ export function useFeedbackUnread(
     const wantsNotice = () =>
       Promise.resolve()
         .then(() => portRef.current?.notifyPrefs())
-        .then((p) => !!p && p.enabled && p.feedbackReply, () => false);
+        .then((p) => !!p && (p.enabled || p.sound) && p.feedbackReply, () => false);
     const arm = () => {
       timer = window.setTimeout(refresh, Math.min(POLL_MS * 2 ** failures, POLL_CEILING_MS));
     };

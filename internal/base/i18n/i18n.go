@@ -22,7 +22,6 @@ type Messages struct {
 	// welcome / status screen
 	WelcomeTitleFmt string // first-run box title — %s = product name (styled)
 	NoConfigYet     string // first-run cue under the welcome box
-
 	// `reasonix init` — points to the in-session /init skill + setup
 	InitHint string
 
@@ -92,6 +91,8 @@ type Messages struct {
 	NoticeJobFinishedFmt    string // a background job ended — %s its label, else its id
 	NoticeJobKilledFmt      string // a background job was killed — %s its label, else its id
 	NoticeJobFailedFmt      string // a background job failed — %s its label, else its id
+	NoticeJobExitFmt        string // how its process ended — %d the exit code
+	NoticeJobSignalFmt      string // how its process ended — %d the signal number
 	NoticeInboxRecoveredFmt string // a reopened inbox came up paused with unfinished instructions — %d count
 	TUIQuestion             string // an answered question that carried no prompt
 	TUISubagentCallsFmt     string // calls a sub-agent made under its task — %d count
@@ -104,7 +105,8 @@ type Messages struct {
 	// chat TUI status line / approval banner.
 	ChatThinking                    string // live reasoning marker label, e.g. "thinking…"
 	ChatThoughtForFmt               string // collapsed reasoning summary, "%d" = elapsed s
-	ChatStatusThinkingFmt           string // "%s thinking… (%ds · %s cancels)" — %s = spinner, %d = elapsed s, %s = interrupt key
+	ChatWorkedForFmt                string // end-of-turn line, "%s" = the turn's run time
+	ChatStatusThinkingFmt           string // "%s thinking… (%s · %s cancels)" — %s = spinner, %s = elapsed, %s = interrupt key
 	TurnPhaseWorking                string // host turn_phase label: working
 	TurnPhaseChecking               string // host turn_phase label: checking
 	TurnPhaseVerifying              string // host turn_phase label: verifying
@@ -125,8 +127,8 @@ type Messages struct {
 	ChatSubagentProgressDoneFmt     string // terminal summary — %s = phase label, %d = duration s ("%s · %ds")
 	ChatSubagentPreviewLabel        string // verbose preview marker ("▎")
 	ChatStatusRetryingFmt           string // "%s retrying (%d/%d)…" — %s = spinner, %d/%d = attempt/max
-	ChatStatusCancellingFmt         string // "%s stopping… (%ds · Ctrl+C exits)" — %s = spinner, %d = elapsed s
-	ChatStatusCancellingViFmt       string // "%s stopping… (%ds)" — vi mode: Ctrl+C re-cancels instead of exiting, so the hint drops the exit key
+	ChatStatusCancellingFmt         string // "%s stopping… (%s · Ctrl+C exits)" — %s = spinner, %s = elapsed
+	ChatStatusCancellingViFmt       string // "%s stopping… (%s)" — vi mode: Ctrl+C re-cancels instead of exiting, so the hint drops the exit key
 	ChatStatusIdle                  string // shortcuts hint when idle
 	ChatStatusYoloIdle              string // shortcuts hint when idle in YOLO/bypass mode
 	ChatStatusCycleHint             string // plan-toggle shortcut hint shown when no modal prompt owns the status row
@@ -287,6 +289,7 @@ type Messages struct {
 	McpPanelPending              string // /mcp panel row: repository server awaiting the user's approval
 	McpPanelChanged              string // /mcp panel row: what an enabled repository server launches changed
 	McpPanelLaunchFmt            string // /mcp panel: what the selected pending server would start
+	LaunchHiddenRemoved          string // leads a launch line that had invisible characters deleted
 	McpToolDestructive           string // /mcp detail: tool tag
 	McpToolReadOnly              string // /mcp detail: tool tag
 	McpPanelConfirmFmt           string // /mcp: enabling a repository-declared server; server name and launch line
@@ -446,6 +449,7 @@ type Messages struct {
 	GoalEmpty                    string
 	GoalCurrentFmt               string
 	GoalSetFmt                   string
+	GoalResumedFmt               string // %s = goal
 	GoalCleared                  string
 	GoalNotRunning               string
 	GoalNotPaused                string
@@ -701,7 +705,6 @@ type Messages struct {
 	ProviderModelsFmt    string // description row under a provider in the /provider panel
 	ProviderNoModelsFmt  string // provider has no models
 
-	// `reasonix upgrade` / `reasonix update` — self-update
 	UpgradeChecking            string // "Checking for updates…"
 	UpgradeChannelDeprecated   string // legacy channel selection is ignored
 	UpgradeDevBuild            string // dev builds cannot self-update
@@ -721,6 +724,7 @@ type Messages struct {
 	UpgradeApplying            string // "Replacing binary…"
 	UpgradeApplyFailed         string // "failed to apply update: %v"
 	UpgradeSuccessFmt          string // "Updated %s → %s"
+	UpgradeManagedFmt          string // package-manager-owned install: %s is the command to run
 
 	// `reasonix report` — local CLI crash review and explicit upload
 	ReportNoPending           string

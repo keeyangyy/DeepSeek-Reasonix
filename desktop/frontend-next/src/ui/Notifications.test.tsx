@@ -7,7 +7,7 @@ import type { AgentPort, NotifyPrefs } from "../port/port";
 
 afterEach(cleanup);
 
-const OWED: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true };
+const OWED: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, sound: false };
 
 function fakePort(answer: NotifyPrefs | null) {
   let held = answer;
@@ -54,5 +54,15 @@ describe("the notifications block", () => {
     await waitFor(() => expect(view.container.querySelector('[data-action="notify.feedback-reply"]')).not.toBeNull());
     (view.container.querySelector('[data-action="notify.feedback-reply"]') as HTMLElement).click();
     await waitFor(() => expect(set).toHaveBeenCalledWith({ ...OWED, enabled: true, feedbackReply: false }));
+  });
+
+  it("offers the chime as a switch of its own, off by default, that wakes the branches without the toast", async () => {
+    const { view, set } = await box(OWED);
+    await waitFor(() => expect(view.container.querySelector('[data-action="notify.sound"]')).not.toBeNull());
+    expect(view.container.querySelector('[data-action="notify.sound"]')?.getAttribute("aria-checked")).toBe("false");
+    (view.container.querySelector('[data-action="notify.sound"]') as HTMLElement).click();
+    await waitFor(() => expect(set).toHaveBeenCalledWith({ ...OWED, sound: true }));
+    await waitFor(() => expect(view.container.querySelector(".lrow.subrow")?.hasAttribute("data-off")).toBe(false));
+    expect(view.container.querySelector('[data-action="notify.enabled"]')?.getAttribute("aria-checked")).toBe("false");
   });
 });

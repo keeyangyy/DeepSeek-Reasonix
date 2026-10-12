@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/frontmatter"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/skill"
@@ -177,7 +176,7 @@ func (t *Tool) verifySkill(scope, name string, act *action) error {
 	}
 	installedPath := config.CanonicalSkillPath(act.CanonicalPath)
 	if config.CanonicalSkillPath(sk.Path) != installedPath {
-		act.Warnings = append(act.Warnings, fmt.Sprintf("skill %q installed at %s is shadowed in this workspace by %s", name, act.CanonicalPath, sk.Path))
+		act.Warnings = append(act.Warnings, shadowedSkillWarning(name, act.CanonicalPath, sk.Path))
 	} else {
 		act.Discoverable = true
 		for _, listed := range store.List() {
@@ -212,7 +211,7 @@ func (t *Tool) skillConflictTargets(name, scope string) ([]string, error) {
 // readSkillFile reads and validates a single skill file. The fallback name
 // is used when the frontmatter does not declare one.
 func readSkillFile(path, fallbackName string, strict bool) (skillCandidate, error) {
-	b, err := fileencoding.ReadFileUTF8(path)
+	b, err := readBoundedUTF8(path)
 	if err != nil {
 		return skillCandidate{}, err
 	}

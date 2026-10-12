@@ -67,7 +67,7 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 	if err != nil {
 		if errors.Is(err, ErrTurnRunning) {
 			if onStart == nil {
-				c.notice("input was not accepted: the workspace branch is being switched — please resend")
+				c.noticeInputRefused("input was not accepted: the workspace branch is being switched — please resend")
 			}
 			return turnDroppedWorkspace
 		}
@@ -91,7 +91,7 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 	}
 	if c.gate.rotating {
 		c.mu.Unlock()
-		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "input was not accepted: the session is being switched — please resend"})
+		c.noticeInputRefused("input was not accepted: the session is being switched — please resend")
 		return turnDroppedRotating
 	}
 	if c.gate.running {
@@ -121,4 +121,8 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 	}
 	c.spawnGuardedTurn(ctx, cancel, body)
 	return turnStarted
+}
+
+func (c *Controller) noticeInputRefused(text string) {
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeInputRefused, Text: text})
 }

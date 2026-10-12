@@ -7,6 +7,7 @@ package event
 // wording edits in Go no longer silently break localization. Values are
 // wire-stable: never rename or reuse one once shipped.
 const (
+	NoticeCodeSessionTreeChanged                                = "session_tree_changed"
 	NoticeCodeTurnIdentityMismatch                              = "turn_identity_mismatch"
 	NoticeCodeFinalReadiness                                    = "final_readiness"
 	NoticeCodeEmptyFinal                                        = "empty_final"
@@ -32,6 +33,7 @@ const (
 	NoticeCodeSessionRecoveryDepthCap                           = "session_recovery_depth_cap"
 	NoticeCodeSessionShutdownRecoveryForked                     = "session_shutdown_recovery_forked"
 	NoticeCodeVerificationStalled                               = "verification_stalled"
+	NoticeCodeAskTimeoutInvalid                                 = "ask_timeout_invalid"
 	NoticeCodeDecisionReceipt, NoticeCodeContextEditingFallback = "decision_receipt", "context_editing_fallback"
 	// A reported lease wait always arrives as a pair: one of the two below
 	// closes the one above, so no surface is left holding an open wait.
@@ -60,6 +62,9 @@ const (
 	NoticeCodeApprovalModeUnrecognized = "approval_mode_unrecognized"
 	// Saved permission rules name no tool, so they match nothing; Detail is a PermissionRulesDormant.
 	NoticeCodePermissionRulesDormant = "permission_rules_dormant"
+	// A submission was refused while the session, workspace or runtime was changing.
+	// Its text says to resend, which is right for a frontend that keeps no queue; one that queues on the typed refusal says so itself.
+	NoticeCodeInputRefused = "input_refused"
 	// A turn handed its open list back to the user; Detail is the model's `need`, as it wrote it.
 	NoticeCodeAwaitUser = "await_user"
 	// A slash command nothing resolves, refused rather than sent as prose.

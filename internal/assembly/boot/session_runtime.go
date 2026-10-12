@@ -46,14 +46,21 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 	// writer stops holding the workspace there too, and the off tier takes no
 	// claim at all. Set once per assembly, so a live runtime keeps its tier.
 	writeclaim.SetWriteLeaseTiers(cfg.Agent.RelaxedWriteLease() || cfg.Agent.SkipWriteLease(), cfg.Agent.SkipWriteLease())
-	lease, err := workspacelease.New(root, config.WorkspaceLeaseDir(), func(w workspacelease.Wait) {
-		sink.Emit(workspaceLeaseNotice(w))
-	}, leaseOptions...)
-	if err != nil {
-		return sessionRuntime{}, fmt.Errorf("initialize workspace write lease: %w", err)
+	lease := opts.WorkspaceLease
+	if lease == nil {
+		var err error
+		lease, err = workspacelease.New(root, config.WorkspaceLeaseDir(), func(w workspacelease.Wait) {
+			sink.Emit(workspaceLeaseNotice(w))
+		}, leaseOptions...)
+		if err != nil {
+			return sessionRuntime{}, fmt.Errorf("initialize workspace write lease: %w", err)
+		}
+		lease.OnRelease(func(st workspacelease.Stats) { sink.Emit(workspaceLeaseAccount(st)) })
 	}
-	lease.OnRelease(func(st workspacelease.Stats) { sink.Emit(workspaceLeaseAccount(st)) })
-	manager := jobs.NewManager(sink, jobOptions...)
+	manager := opts.Jobs
+	if manager == nil {
+		manager = jobs.NewManager(sink, jobOptions...)
+	}
 
 	dir := opts.SessionDir
 	if dir == "" {

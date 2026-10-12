@@ -10,14 +10,15 @@ import (
 )
 
 // NotifyPrefs is what a window can be asked about the desktop notifications it
-// sends on this machine's behalf. Enabled gates the other three, which are what
-// is worth being interrupted for.
+// sends on this machine's behalf. Enabled gates the system notification; Sound
+// is a chime of its own. The other four say which events either is for.
 type NotifyPrefs struct {
 	Enabled       bool `json:"enabled"`
 	TurnDone      bool `json:"turnDone"`
 	Approval      bool `json:"approval"`
 	Ask           bool `json:"ask"`
 	FeedbackReply bool `json:"feedbackReply"`
+	Sound         bool `json:"sound"`
 }
 
 const codeNotifyRejected = "notifications.rejected"
@@ -48,7 +49,7 @@ func (h *Hub) NotifyPrefs() NotifyPrefs {
 		return NotifyPrefs{}
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath()).Notifications
-	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply}
+	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply, Sound: cfg.Sound}
 }
 
 // SetNotifyPrefs persists the switches and hands the holder the same answer, so
@@ -61,6 +62,7 @@ func (h *Hub) SetNotifyPrefs(next NotifyPrefs) (NotifyPrefs, error) {
 		ApprovalRequest: next.Approval,
 		AskRequest:      next.Ask,
 		FeedbackReply:   next.FeedbackReply,
+		Sound:           next.Sound,
 	}
 	path := config.UserConfigPath()
 	edit := config.LoadForEdit(path)

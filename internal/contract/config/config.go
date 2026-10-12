@@ -244,19 +244,6 @@ type SecretsConfig struct {
 	ProtectCredentialFiles bool `toml:"protect_credential_files"`
 }
 
-// UIConfig controls CLI presentation-only settings. Desktop appearance is kept in
-// DesktopConfig so desktop preferences cannot alter terminal output or prompts.
-type UIConfig struct {
-	Theme          string `toml:"theme"`           // auto|dark|light; empty resolves to auto
-	ThemeStyle     string `toml:"theme_style"`     // graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
-	ShortcutLayout string `toml:"shortcut_layout"` // classic|desktop; accepted for compatibility
-	CloseBehavior  string `toml:"close_behavior"`  // legacy desktop close behavior; prefer desktop.close_behavior
-	ShowReasoning  bool   `toml:"show_reasoning"`  // Ctrl+O / /verbose: show thinking text in CLI; false = collapsed
-	ShowTurnUsage  bool   `toml:"show_turn_usage"` // show per-request token/cost receipts in the CLI/TUI transcript
-	CursorShape    string `toml:"cursor_shape"`    // block|underline|bar; empty defaults to bar
-	CommandMode    string `toml:"commandmode"`     // ""|vi; vi gives the composer a vi command mode (empty = insert-always)
-}
-
 // DesktopExternalOpener returns the selected opener id; unavailable ids fall
 // back to the platform file manager in the desktop shell.
 func (c *Config) DesktopExternalOpener() string {
@@ -273,6 +260,9 @@ type NotificationsConfig struct {
 	ApprovalRequest bool `toml:"approval_request"`
 	AskRequest      bool `toml:"ask_request"`
 	FeedbackReply   bool `toml:"feedback_reply"`
+	// Sound plays a short system chime for the events switched on above, whether
+	// or not system notifications are; off unless asked for.
+	Sound bool `toml:"sound"`
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the
@@ -447,8 +437,11 @@ func (c *Config) DesktopDisplayMode() string {
 // DesktopConversationWidth returns the normalized desktop conversation width.
 // Unknown and missing values fall back to standard for backward compatibility.
 func (c *Config) DesktopConversationWidth() string {
-	if c != nil && strings.EqualFold(strings.TrimSpace(c.Desktop.ConversationWidth), "full") {
-		return "full"
+	if c != nil {
+		switch w := strings.ToLower(strings.TrimSpace(c.Desktop.ConversationWidth)); w {
+		case "full", "full-all":
+			return w
+		}
 	}
 	return "standard"
 }
@@ -911,10 +904,10 @@ func (c *Config) WriteRoots() []string {
 	return c.WriteRootsForRoot(".")
 }
 
-// WriteRootsForRoot is like WriteRoots but falls back to fallbackRoot when the
-// config doesn't explicitly set a workspace_root. Desktop tabs pass their
-// project root here so tool confinement is correct without changing cwd.
-func (c *Config) WriteRootsForRoot(fallbackRoot string) []string {
+// writeRootsBeforeExtras is WriteRoots with fallbackRoot standing in when the
+// config sets no workspace_root: the root plus the user's allow_write entries.
+// Desktop tabs pass their project root so confinement needs no cwd change.
+func (c *Config) writeRootsBeforeExtras(fallbackRoot string) []string {
 	root := c.expandSandboxPath(c.Sandbox.WorkspaceRoot)
 	if root == "" {
 		root = fallbackRoot
@@ -1125,10 +1118,9 @@ type AgentConfig struct {
 	// ColdResumePrune elides stale tool results when a session reopens past the
 	// provider cache window. nil = default enabled.
 	ColdResumePrune *bool `toml:"cold_resume_prune"`
-	// EmbeddedDiffDetection opts into marking a shell result whose whole output
-	// is a unified diff, so a frontend renders it as a diff instead of flat text.
-	// nil = default off.
-	EmbeddedDiffDetection *bool `toml:"embedded_diff_detection"`
+	// EmbeddedDiffDetection marks a shell result that is a whole unified diff; nil = off.
+	EmbeddedDiffDetection *bool             `toml:"embedded_diff_detection"`
+	AskTimeoutSeconds     AskTimeoutSetting `toml:"ask_timeout_seconds"` // user file only; 0 waits
 	// PlanModeReadOnlyCommands is retained for old config/session round trips. Main
 	// Plan bash calls now use the ordinary Permissions classifier and Sandbox.
 	PlanModeReadOnlyCommands []string `toml:"plan_mode_read_only_commands"`
@@ -1378,7 +1370,7 @@ func Default() *Config {
 		ConfigVersion:    freshConfigVersion,
 		DefaultModel:     "deepseek-flash",
 		CredentialsStore: CredentialsStoreAuto,
-		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true},
+		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true, ShowChangedFiles: true},
 		Desktop:          DesktopConfig{ConversationWidth: "standard"},
 		Billing:          BillingConfig{},
 		// Set here, not left to the zero value: an absent [secrets] still protects.

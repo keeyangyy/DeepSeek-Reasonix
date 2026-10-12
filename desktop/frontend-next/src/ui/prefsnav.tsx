@@ -191,8 +191,12 @@ export const SETTINGS: SettingEntry[] = [
   // an internal policy look like a required work mode.
   { section: "session", anchor: "preset", title: "完成标准", scope: "session", apply: "immediate", keywords: ["自动", "验证", "复核", "完成判定"] },
   { section: "session", anchor: "plan-mode", title: "计划模式", scope: "session", apply: "immediate", keywords: ["只读", "先规划"] },
+  { section: "session", anchor: "receipt", title: "交付验收卡片", scope: "machine", apply: "immediate", keywords: ["回执", "验收", "验证", "未验证", "receipt"] },
   // Written to the user file only, and read by the running turn at its next round.
+  { section: "session", anchor: "ask-timeout", title: "提问等待超时", scope: "machine", apply: "immediate", keywords: ["ask", "跳过", "无人回答", "长任务", "超时", "自动继续"] },
   { section: "session", anchor: "progress-watch", title: "长时间无进展", scope: "machine", apply: "immediate", keywords: ["暂停", "无进展", "空转", "卡住", "循环", "轮次", "token"] },
+  { section: "session", anchor: "changed-files", title: "文件改动", scope: "machine", apply: "immediate", keywords: ["改动", "变更", "文件", "已更改", "药丸", "输入框"] },
+  { section: "session", anchor: "fold-work", title: "折叠中间过程", scope: "machine", apply: "immediate", keywords: ["折叠", "中间过程", "工具调用", "思考", "最后一句", "收起", "摘要"] },
   // Written to the user file only; the kernel's background sweep reads it on each pass.
   { section: "session", anchor: "auto-archive", title: "自动归档不活跃的对话", scope: "machine", apply: "immediate", keywords: ["归档", "过期", "清理", "闲置", "天数"] },
   { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
@@ -247,6 +251,7 @@ export const SETTINGS: SettingEntry[] = [
   // Shown only while signed in; restoring writes through the ordinary config paths and reloads the runtime.
   { section: "account", anchor: "backup", title: "云备份", scope: "account", apply: "immediate", keywords: ["备份", "恢复", "换机", "同步", "导出"] },
   { section: "versions", anchor: "versions", title: "版本", scope: "machine", apply: "immediate", keywords: ["更新", "升级"] },
+  { section: "versions", anchor: "logs", title: "日志与异常退出记录", scope: "machine", apply: "none", keywords: ["日志", "崩溃", "闪退", "异常退出", "log", "logs", "crash", "路径"] },
   { section: "versions", anchor: "community", title: "社区与贡献者", scope: "machine", apply: "none", keywords: ["社区", "交流群", "QQ", "加群", "二维码", "discord", "贡献者", "contributors", "community"] },
   { section: "versions", anchor: "sponsor", title: "赞助", scope: "machine", apply: "none", keywords: ["捐助", "支付宝", "微信支付", "收款码", "paypal", "donate", "sponsor", "support", "alipay", "wechat"] },
   { section: "memory", anchor: "memory", title: "记忆", scope: "chosen", apply: "immediate", keywords: ["记住", "忘记", "事实"] },

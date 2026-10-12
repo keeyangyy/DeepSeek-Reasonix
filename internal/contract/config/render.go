@@ -89,6 +89,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		fmt.Fprintf(&b, "approval_request = %v   # notify when a tool approval is waiting\n", c.Notifications.ApprovalRequest)
 		fmt.Fprintf(&b, "ask_request = %v   # notify when a question is waiting\n", c.Notifications.AskRequest)
 		fmt.Fprintf(&b, "feedback_reply = %v   # notify when a feedback report gets a reply\n", c.Notifications.FeedbackReply)
+		fmt.Fprintf(&b, "sound = %v   # play a short chime for the events above, with or without system notifications; default off\n", c.Notifications.Sound)
 		b.WriteString("\n")
 	}
 
@@ -192,6 +193,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		b.WriteString("# plan_mode_read_only_commands = [\"gh issue view\"]   # legacy compatibility only; Plan bash uses Permissions\n")
 	}
 	renderEmbeddedDiffDetection(&b, c)
+	renderAskTimeout(&b, c)
 	renderAgentDelegation(&b, c)
 	if c.Agent.SubagentEffort != "" {
 		fmt.Fprintf(&b, "subagent_effort = %q   # default effort for subagent entry points\n", c.Agent.SubagentEffort)
@@ -468,6 +470,15 @@ func RenderTOMLProjectDelta(c *Config) string {
 		}
 		if c.UI.ShowTurnUsage != d.UI.ShowTurnUsage {
 			fmt.Fprintf(&b, "show_turn_usage = %v\n", c.UI.ShowTurnUsage)
+		}
+		if c.UI.ShowChangedFiles != d.UI.ShowChangedFiles {
+			fmt.Fprintf(&b, "show_changed_files = %v\n", c.UI.ShowChangedFiles)
+		}
+		if c.UI.FoldTurnWork != d.UI.FoldTurnWork {
+			fmt.Fprintf(&b, "fold_turn_work = %v\n", c.UI.FoldTurnWork)
+		}
+		if c.UI.ShowReceipt != d.UI.ShowReceipt {
+			fmt.Fprintf(&b, "show_receipt = %v\n", c.UI.ShowReceipt)
 		}
 		b.WriteString("\n")
 	}

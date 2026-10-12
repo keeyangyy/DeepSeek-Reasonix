@@ -35,6 +35,7 @@ export interface ThemePack {
   background?: ThemeBackground;
   sky?: ThemeSky;
   hasPreview?: boolean;
+  removable?: boolean;
   // Tokens the kernel dropped and why: an unknown name, or a value that could
   // not be let into a stylesheet. The pack still loads without them.
   warnings?: string[];

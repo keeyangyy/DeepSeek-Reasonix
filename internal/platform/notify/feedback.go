@@ -8,8 +8,8 @@ import (
 // SendFeedbackReply announces a feedback reply under the same two switches as
 // every other kind. The text carries no part of the reply.
 func SendFeedbackReply(sender Sender, say i18n.Messages, cfg config.NotificationsConfig) {
-	if !cfg.Enabled || !cfg.FeedbackReply || sender == nil {
+	if !cfg.FeedbackReply {
 		return
 	}
-	_ = sender.Send(Message{Title: say.NotifyTitle, Body: say.NotifyFeedbackReply})
+	announce(sender, cfg, Message{Title: say.NotifyTitle, Body: say.NotifyFeedbackReply})
 }

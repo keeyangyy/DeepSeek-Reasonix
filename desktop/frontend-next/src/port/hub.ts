@@ -1,3 +1,4 @@
+import { watchTree } from "./tree_events";
 import { HttpError, type AgentPort } from "./port";
 import type { RemoteAsk, RemoteHost, RemoteHostEdit, RemoteListing, RemoteProbe } from "./remote";
 import type { CloudShareOffer, DeviceSelf, ShareOffer, SharePort, ShareStatus } from "./share";
@@ -97,7 +98,38 @@ export interface TreeWorkspace {
   // True when the user chose this folder. A window always has a root — the one
   // it happened to launch in — and only this tells that apart from a project.
   remembered?: boolean;
+  // Every conversation the folder lists, loaded or not, and how many of those
+  // are archived. `sessions` is only the newest of them; a kernel that predates
+  // paging sends neither, and then `sessions` is all there is.
+  total?: number;
+  archived?: number;
+  // How many rows the request's scope and word match that `sessions` does not
+  // carry. Absent on a kernel that predates it, and then only `total` says.
+  remaining?: number;
   sessions: TreeSession[];
+}
+
+// How much of each folder tree() builds: `limit` for all of them (0 is every
+// row), `limits` overriding it per folder root.
+export type TreeScope = "" | "active" | "archived";
+
+// `scope` says which rows the window counts (active ones, only the archived, or
+// every row) and `q` keeps them to those whose title or name contains it.
+export interface TreeWindow {
+  limit?: number;
+  limits?: Record<string, number>;
+  scope?: TreeScope;
+  q?: string;
+}
+
+export function treeQuery(window: TreeWindow | undefined): string {
+  const q = new URLSearchParams();
+  if (window?.limit !== undefined) q.set("limit", String(window.limit));
+  if (window?.limits && Object.keys(window.limits).length > 0) q.set("limits", JSON.stringify(window.limits));
+  if (window?.scope) q.set("scope", window.scope);
+  if (window?.q?.trim()) q.set("q", window.q.trim());
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }
 
 // HubPort is the window's view of the kernel: which panes it drives and which
@@ -106,7 +138,8 @@ export interface HubPort extends SharePort {
   runtimes(): Promise<RuntimeView[]>;
   open(req: { root?: string; sessionPath?: string }): Promise<RuntimeView>;
   close(id: string): Promise<void>;
-  tree(): Promise<TreeWorkspace[]>;
+  tree(window?: TreeWindow): Promise<TreeWorkspace[]>;
+  onTreeChanged(listener: () => void): () => void;
   addWorkspace(path: string): Promise<TreeWorkspace>;
   removeWorkspace(path: string): Promise<void>;
   /** Show a listed project's folder in the system file manager. */
@@ -163,6 +196,8 @@ export interface HubPort extends SharePort {
   // host-only action.
   hostCapabilities(): Promise<HostCapabilities>;
   pickFolder(): Promise<string | null>;
+  // Machine settings resolve a local owner; workspace reads can pin a runtime.
+  machinePort(runtimeId?: string): AgentPort;
   // Absolute paths of every file dropped anywhere on the window. It belongs
   // here rather than on a pane because the window has one of it: the shell
   // registers its drop listener once and ignores a second call, so a per-pane
@@ -180,6 +215,7 @@ export class SseHub implements HubPort {
   // Bindings the shell exposes are pane-independent; this reaches them without
   // pretending to belong to a runtime.
   private readonly shell = new SsePort();
+  private readonly settings = new Map<string, AgentPort>();
   // Questions seen this session, kept so an answer can carry the identities the
   // kernel will check it against.
   private readonly asked = new Map<string, RemoteAsk>();
@@ -241,10 +277,15 @@ export class SseHub implements HubPort {
   async close(id: string) {
     await this.post<void>(`/runtimes/${encodeURIComponent(id)}/close`);
     this.ports.delete(id);
+    this.settings.delete(id);
   }
 
-  tree() {
-    return this.get<TreeWorkspace[]>("/tree");
+  onTreeChanged(listener: () => void) {
+    return watchTree(listener);
+  }
+
+  tree(window?: TreeWindow) {
+    return this.get<TreeWorkspace[]>("/tree" + treeQuery(window));
   }
 
   addWorkspace(path: string) {
@@ -512,6 +553,15 @@ export class SseHub implements HubPort {
 
   async leaveDevice() {
     await this.post<void>("/device/leave", {});
+  }
+
+  machinePort(runtimeId = ""): AgentPort {
+    const held = this.settings.get(runtimeId);
+    if (held) return held;
+    const base = runtimeId ? `/host/settings/runtime/${encodeURIComponent(runtimeId)}` : "/host/settings";
+    const port = new SsePort(base);
+    this.settings.set(runtimeId, port);
+    return port;
   }
 
   portFor(rt: RuntimeView): AgentPort {

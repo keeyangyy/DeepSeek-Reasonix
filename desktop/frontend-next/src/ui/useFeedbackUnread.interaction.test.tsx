@@ -16,7 +16,7 @@ const portOf = (ask: () => Promise<FeedbackMine>, prefs: NotifyPrefs | null = nu
     announceFeedbackReply: vi.fn(async () => {}),
     notifyPrefs: vi.fn(async () => prefs),
   }) as unknown as Faked;
-const ON: NotifyPrefs = { enabled: true, turnDone: true, approval: true, ask: true, feedbackReply: true };
+const ON: NotifyPrefs = { enabled: true, turnDone: true, approval: true, ask: true, feedbackReply: true, sound: false };
 
 let hidden = false;
 let focused = true;

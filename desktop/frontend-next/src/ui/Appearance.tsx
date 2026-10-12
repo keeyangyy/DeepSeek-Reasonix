@@ -15,6 +15,7 @@ import { WindowSection } from "./WindowSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { ThemeImport } from "./ThemeImport";
+import { ThemeRemove } from "./ThemeRemove";
 import { useThemeInventory } from "./useThemeInventory";
 
 // "" follows the machine; the rest are explicit, the same shape the light/dark
@@ -63,6 +64,7 @@ const WEIGHTS: [string, string, string][] = [
 const MEASURES: [string, string, string][] = [
   ["standard", "适宜阅读", "每行长度控制在一眼能回到行首的范围"],
   ["full", "铺满窗口", "正文跟随窗口宽度，宽屏上不留两侧空白"],
+  ["full-all", "连输入框一起铺满", "正文和输入框都跟随窗口宽度；输入框很宽时一行不易回到行首"],
 ];
 
 const EFFECTS: [EffectsMode, string, string][] = [
@@ -135,6 +137,26 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     [port, load, reloadThemes],
   );
 
+  const remove = useCallback(
+    (id: string) => {
+      setFailed("");
+      return port
+        .removeTheme(id)
+        .then(() => {
+          load();
+          reloadThemes();
+        })
+        .catch((e) => setFailed(reason(e)));
+    },
+    [port, load, reloadThemes],
+  );
+  const cell = (p: ThemePack) => (
+    <div className="pal-cell" key={p.id}>
+      <Swatch pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
+      {p.removable && <ThemeRemove name={p.name} onRemove={() => remove(p.id)} />}
+    </div>
+  );
+
   const custom = packs.some((p) => p.active);
   // Calm, workbench-like themes stay in the first shelf. Illustrated packs
   // are still first-class installed themes, but they no longer dominate the
@@ -151,7 +173,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
   const set = useCallback((patch: Partial<Look>) => onLook({ ...look, ...patch }), [look, onLook]);
   // Until the kernel has announced its range there is nothing to draw the
   // slider from; it is held inert rather than given a range of its own.
-  const zoomRange = look.zoomRange ?? { min: 0, max: 1, step: 1 };
+  const zoomRange = look.zoomRange ?? { min: 0, max: 2, step: 1 };
   const setPaper = useCallback(
     (patch: Partial<NonNullable<Look["wallpaper"]>>) =>
       look.wallpaper && onLook({ ...look, wallpaper: { ...look.wallpaper, ...patch } }),
@@ -248,9 +270,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="palettes" role="group" aria-label={t("界面主题")}>
             <Swatch name={t("默认")} on={!custom} onPick={() => pick("")} />
-            {featured.map((p) => (
-              <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-            ))}
+            {featured.map(cell)}
           </div>
           {illustrated.length > 0 && (
             <details className="theme-more">
@@ -262,9 +282,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 <span className="now">{t("{n} 个", { n: illustrated.length })}</span>
               </summary>
               <div className="palettes" role="group" aria-label={t("更多已安装主题")}>
-                {illustrated.map((p) => (
-                  <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-                ))}
+                {illustrated.map(cell)}
               </div>
             </details>
           )}

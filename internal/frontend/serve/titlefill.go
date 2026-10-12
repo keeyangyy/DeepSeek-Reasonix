@@ -84,6 +84,7 @@ func (s *Server) drainTitles() {
 			// Each title lands as it is minted: a crash mid-batch then loses
 			// nothing already paid for.
 			s.titles.flush()
+			s.bc.treeChanged()
 		}
 
 		f.mu.Lock()

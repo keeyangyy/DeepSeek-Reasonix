@@ -106,3 +106,17 @@ func TestFeedbackReplyRouteAbsentWithoutASender(t *testing.T) {
 		t.Errorf("a hub with no sender answered %d", got)
 	}
 }
+
+func TestSoundIsOffByDefaultAndRoundTripsIndependentlyOfTheToast(t *testing.T) {
+	_, h := notifyServer(t, &sentLog{})
+	if h.NotifyPrefs().Sound {
+		t.Fatal("an install that never wrote the key must not make a sound")
+	}
+	got, err := h.SetNotifyPrefs(NotifyPrefs{Sound: true, TurnDone: true})
+	if err != nil || !got.Sound || got.Enabled {
+		t.Fatalf("set sound only: %+v %v", got, err)
+	}
+	if again := h.NotifyPrefs(); !again.Sound || again.Enabled {
+		t.Fatalf("durable read: %+v", again)
+	}
+}

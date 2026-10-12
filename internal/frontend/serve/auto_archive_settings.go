@@ -20,7 +20,11 @@ func (s *Server) sweepInactiveSessions() int {
 	if !pinsSynced.Load() {
 		return 0
 	}
-	return s.ctl().ArchiveInactiveSessions()
+	n := s.ctl().ArchiveInactiveSessions()
+	if n > 0 {
+		s.bc.treeChanged()
+	}
+	return n
 }
 
 func (s *Server) registerAutoArchiveRoutes(mux *http.ServeMux) {

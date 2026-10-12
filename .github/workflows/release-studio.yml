@@ -202,7 +202,7 @@ jobs:
           version: 10
           run_install: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
           cache: pnpm
@@ -364,7 +364,7 @@ jobs:
       # run nothing but the signer, and windows-package packages in between.
       - name: Upload the unsigned Windows bundle for signing
         if: runner.os == 'Windows' && env.SIGN_WINDOWS == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-studio-windows-${{ matrix.goarch }}-bundle
           path: dist/${{ matrix.unpacked }}
@@ -397,7 +397,7 @@ jobs:
           wait "$zip_pid"
           mv ../../dist-zip/ReasonixStudio-windows-${{ matrix.goarch }}.zip ../../dist/
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: runner.os != 'Windows' || env.SIGN_WINDOWS != 'true'
         with:
           name: ${{ matrix.artifact }}
@@ -479,7 +479,7 @@ jobs:
           }
           if ($failed) { exit 1 }
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unsigned-studio-windows-${{ matrix.arch }}-bundle
           path: signing/app
@@ -534,7 +534,7 @@ jobs:
             -ExpectedSubject $env:EXPECTED_SUBJECT
           "digest=$(Get-Content -Raw "$env:RUNNER_TEMP/payload-digest")" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-studio-windows-payload-${{ matrix.arch }}
           path: signing/app
@@ -576,7 +576,7 @@ jobs:
           version: 10
           run_install: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
           cache: pnpm
@@ -588,7 +588,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The signed payload is the whole bundle, so it is packaged as it came.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signed-studio-windows-payload-${{ matrix.arch }}
           path: dist/${{ matrix.unpacked }}
@@ -614,7 +614,7 @@ jobs:
           wait "$zip_pid"
           mv ../../dist-zip/ReasonixStudio-windows-${{ matrix.arch }}.zip ../../dist/
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packaged-studio-windows-${{ matrix.arch }}
           path: |
@@ -649,12 +649,12 @@ jobs:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signed-studio-windows-payload-${{ matrix.arch }}
           path: payload
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packaged-studio-windows-${{ matrix.arch }}
           path: dist
@@ -732,7 +732,7 @@ jobs:
           }
           if ($failed) { exit 1 }
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packaged-studio-windows-${{ matrix.arch }}
           path: dist
@@ -795,7 +795,7 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
           "installer-sha256=$hash" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: studio-windows-signed-${{ matrix.arch }}
           path: dist/ReasonixStudio-*
@@ -832,13 +832,13 @@ jobs:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result == 'success'
         with:
           name: studio-windows-signed-${{ matrix.arch }}
           path: dist
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result != 'success'
         with:
           name: studio-build-windows-${{ matrix.arch }}
@@ -912,7 +912,7 @@ jobs:
             [ -f "dist/$want" ] || { echo "::error::no dist/$want"; exit 1; }
           done
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cli-archives
           path: dist/*
@@ -971,28 +971,28 @@ jobs:
       # Every package by its exact name, never a pattern: any job without
       # secrets can upload an artifact, and a pattern would publish it. Windows
       # comes from the installer signing job when it ran, else the build leg.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: studio-build-darwin-amd64
           path: staging/studio-build-darwin-amd64
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: studio-build-darwin-arm64
           path: staging/studio-build-darwin-arm64
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: studio-build-linux-amd64
           path: staging/studio-build-linux-amd64
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result == 'success'
         with:
           name: studio-windows-signed-amd64
           path: staging/studio-windows-amd64
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result == 'success'
         with:
           name: studio-windows-signed-arm64
@@ -1035,19 +1035,19 @@ jobs:
             check "$dir" "ReasonixStudio-windows-$arch.zip" "${!archive}"
           done
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result != 'success'
         with:
           name: studio-build-windows-amd64
           path: staging/studio-windows-amd64
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.windows-sign-installer.result != 'success'
         with:
           name: studio-build-windows-arm64
           path: staging/studio-windows-arm64
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: cli-archives
           path: staging/cli-archives
@@ -1404,7 +1404,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
@@ -1413,7 +1413,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ needs.resolve.outputs.version }}
         run: node npm/build.mjs "$VERSION" --publish
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.resolve.outputs.candidate != 'true'
         with:
           name: cli-archives
@@ -1467,7 +1467,7 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: cli-archives
           path: cli-archives

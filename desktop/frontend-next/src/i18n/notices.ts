@@ -26,6 +26,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   memory_migration_backup: "旧版记忆文件没能先备份，所以没有迁移，保持原样；详情里有具体原因",
   inbox_recovered: "已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”",
   queue_paused_hold: "待发送已暂停，这条消息已排入队列，点“继续派发”后才会发送",
+  input_refused: "会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发",
   unapplied_steer: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：",
   display_currency: "费用显示币种已设为 {mode}",
   job_finished: "后台任务已结束：{name}",
@@ -37,5 +38,6 @@ export const NOTICE_TEXT: Record<string, string> = {
   compact_held: "自动压缩暂缓，上次尝试没有完成：{why}",
   permission_rules_dormant: "有 {n} 条权限规则没有对应的工具，匹配不到任何调用，因此起不到限制作用（如「{list}」里的 {rule}）；到「设置 → 权限」里删除或改写，命令要写成 Bash(命令:*)",
   extension_skipped: "扩展 {ext} 的配套后台程序没有运行，该扩展本次（在 {point}）已被跳过；到「工具与集成」里查看并启动它，或停用该扩展",
+  ask_timeout_invalid: "配置文件里的提问等待时长无效（须为 0 或 10 到 86400 之间的整数），提问现在会一直等你回答；到设置里重新设一个",
   perseveration_loop: "模型卡在重复输出同一段文字，这一轮已停止；可以重试、补充引导，或换一个供应商/模型",
 };

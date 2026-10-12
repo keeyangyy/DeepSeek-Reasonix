@@ -108,7 +108,7 @@ func (t *Tool) planGitHubPluginPackage(ctx context.Context, req request) ([]acti
 
 func (t *Tool) planClaudeMarketplace(ctx context.Context, req request, src githubRepoSource, root, commit string) ([]action, []string, error) {
 	manifestPath := filepath.Join(root, filepath.FromSlash(claudeMarketplaceManifest))
-	body, err := os.ReadFile(manifestPath)
+	body, err := readBounded(manifestPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -193,7 +193,7 @@ func (t *Tool) planClaudeMarketplace(ctx context.Context, req request, src githu
 			if err != nil {
 				var unsupported *unsupportedMarketplaceObject
 				if selected == "" && errors.As(err, &unsupported) {
-					warnings = append(warnings, fmt.Sprintf("skipped Claude marketplace plugin %q: %s", entryName, unsupported.warning))
+					warnings = append(warnings, skippedMarketplaceWarning(entryName, unsupported.warning))
 					continue
 				}
 				return nil, warnings, fmt.Errorf("marketplace plugin %q: %w", entryName, err)
@@ -761,4 +761,10 @@ func removePluginSymlink(target, source string) error {
 		return nil
 	}
 	return os.Remove(target)
+}
+
+// skippedMarketplaceWarning keeps the sentence whole and shows the reason as a
+// literal: it can carry text from the marketplace's own source.
+func skippedMarketplaceWarning(entry, reason string) string {
+	return fmt.Sprintf("skipped Claude marketplace plugin %q: %s", entry, hostLiteral(reason))
 }

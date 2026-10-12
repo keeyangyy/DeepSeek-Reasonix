@@ -456,7 +456,9 @@ func (c *Controller) applyGoalCommand(input, display string) bool {
 	case GoalCommandResume:
 		if !c.ResumeGoal() {
 			c.notice(i18n.M.GoalNotPaused)
+			break
 		}
+		c.startGoalResumeTurn(display)
 	default:
 		goal := c.Goal()
 		if strings.TrimSpace(goal) == "" {

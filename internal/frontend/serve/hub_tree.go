@@ -19,11 +19,6 @@ import (
 	"reasonix/internal/state/store"
 )
 
-// treeSessionsPerWorkspace bounds one workspace's branch of the tree. A long
-// history is paged by opening the workspace, not by shipping all of it to a
-// sidebar that shows a dozen rows.
-const treeSessionsPerWorkspace = 50
-
 // maxRecoveryLineageWalk bounds the parent walk that groups recovery copies.
 // The chain is short by construction; the bound is there so damaged metadata
 // cannot spin the sidebar.
@@ -42,8 +37,17 @@ type treeWorkspace struct {
 	// Remembered marks a folder the user chose. A window always has a root — the
 	// one it happened to launch in — and a client that cannot tell the two apart
 	// shows "never picked a project" as if it were a project.
-	Remembered bool          `json:"remembered,omitempty"`
-	Sessions   []treeSession `json:"sessions"`
+	Remembered bool `json:"remembered,omitempty"`
+	// Total counts every conversation the workspace lists, loaded or not, and
+	// Archived the share of them that are archived. Sessions is the newest of
+	// them, as many as the request's window asked for.
+	Total    int `json:"total"`
+	Archived int `json:"archived,omitempty"`
+	// Remaining counts the rows the request's scope and query match that
+	// Sessions does not carry: what "show more" would still bring. Always sent, so
+	// a client can tell a kernel that predates it from one with nothing left.
+	Remaining int           `json:"remaining"`
+	Sessions  []treeSession `json:"sessions"`
 }
 
 // treeSession is one conversation. RuntimeID is set when a pane already has it
@@ -56,10 +60,7 @@ type treeSession struct {
 	Turns     int    `json:"turns,omitempty"`
 	RuntimeID string `json:"runtimeId,omitempty"`
 	Archived  bool   `json:"archived,omitempty"`
-	// Legacy marks a conversation kept by Reasonix 1.x: this build reads that
-	// log and never writes it, so the row says so rather than looking native.
-	Legacy bool `json:"legacy,omitempty"`
-	Pinned bool `json:"pinned,omitempty"`
+	Pinned    bool   `json:"pinned,omitempty"`
 	// AutoArchivedAt is unix milliseconds of an automatic archive, else absent.
 	AutoArchivedAt int64 `json:"autoArchivedAt,omitempty"`
 	// Unread is a turn that finished since the person last looked. The kernel
@@ -76,6 +77,8 @@ type treeSession struct {
 
 func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tree", h.tree)
+	mux.HandleFunc("GET /tree/events", h.treeEvents)
+	mux.HandleFunc("GET /tree/events/replay", h.treeEventsReplay)
 	mux.HandleFunc("POST /tree/workspaces", h.addWorkspace)
 	mux.HandleFunc("POST /tree/workspaces/remove", h.removeWorkspace)
 	mux.HandleFunc("POST /tree/workspaces/move", h.moveWorkspace)
@@ -91,7 +94,11 @@ func (h *Hub) registerTreeRoutes(mux *http.ServeMux) {
 // tree answers the whole sidebar in one request: every remembered workspace
 // with the sessions saved under it. Titles come from each project's cache and
 // are never generated here — the pane that opens a session does that.
-func (h *Hub) tree(w http.ResponseWriter, _ *http.Request) {
+func (h *Hub) tree(w http.ResponseWriter, r *http.Request) {
+	window, ok := parseTreeWindow(w, r)
+	if !ok {
+		return
+	}
 	open := h.openSessions()
 	roots := h.roots()
 	out := make([]treeWorkspace, 0, len(roots))
@@ -107,74 +114,11 @@ func (h *Hub) tree(w http.ResponseWriter, _ *http.Request) {
 		if st, err := os.Stat(ref.dir); err != nil || !st.IsDir() {
 			node.Missing = true
 		}
-		node.Sessions = append(node.Sessions, h.workspaceSessions(ref.dir, open)...)
+		page := h.workspacePage(ref.dir, node.Name, open, window, window.limitFor(ref.dir))
+		node.Sessions, node.Total, node.Archived, node.Remaining = page.Sessions, page.Total, page.Archived, page.Remaining
 		out = append(out, node)
 	}
 	writeJSON(w, out)
-}
-
-// workspaceSessions lists one folder's conversations, hiding what the pickers
-// hide: subagent traces and redundant recovery copies. A copy that a pane has
-// open stays, because something is driving it.
-func (h *Hub) workspaceSessions(root string, open map[string]string) []treeSession {
-	dir := SessionDirFor(root)
-	listed, err := sessionstore.ListSessions(dir)
-	if err != nil {
-		return nil
-	}
-	titles := h.titleCacheFor(dir)
-	legacy := h.legacyCacheFor(dir)
-	byID := make(map[string]sessionstore.SessionInfo, len(listed))
-	for _, si := range listed {
-		byID[sessionstore.BranchID(si.Path)] = si
-	}
-	out := make([]treeSession, 0, len(listed))
-	// Lineage root -> the row that copies of it fold into. The list is
-	// newest-first, so the first copy to arrive is the one still being written.
-	lead := map[string]int{}
-	for _, si := range listed {
-		if len(out) >= treeSessionsPerWorkspace {
-			break
-		}
-		base := filepath.Base(si.Path)
-		if store.IsSubagentTranscriptName(base) {
-			continue
-		}
-		runtimeID := open[sessionstore.CanonicalSessionPath(si.Path)]
-		if runtimeID == "" && hiddenRecoveryCopy(si, "") {
-			continue
-		}
-		name := strings.TrimSuffix(base, ".jsonl")
-		// A pane driving a copy keeps its own row: folding it away would hide
-		// the conversation someone is looking at.
-		folds := si.Recovered && runtimeID == ""
-		if folds {
-			if at, ok := lead[recoveryLineageRoot(si, byID)]; ok {
-				out[at].Copies = append(out[at].Copies, treeSession{Path: si.Path, Name: name, Turns: si.Turns})
-				continue
-			}
-		}
-		// A name the user typed outranks the generated one; without this a
-		// rename would be written to the sidecar and never show up.
-		title := strings.TrimSpace(si.CustomTitle)
-		if title == "" {
-			title, _ = titles.get(name+".jsonl", titleSource(si.Preview), sessionstore.SessionContentModTime(si.Path).UnixNano())
-		}
-		if title == "" {
-			title = previewTitle(si.Preview)
-		}
-		if folds {
-			lead[recoveryLineageRoot(si, byID)] = len(out)
-		}
-		out = append(out, treeSession{
-			Path: si.Path, Name: name, Title: title, Turns: si.Turns, RuntimeID: runtimeID, Archived: si.Archived, Unread: si.Unread,
-			Legacy: legacy.legacyOf(si.Path),
-		})
-		decorateArchiveState(&out[len(out)-1], si.Path)
-	}
-	legacy.flush()
-	attachVersions(dir, out, h.openSessionsIn(root))
-	return append(h.unlistedOpenSessions(root, out), out...)
 }
 
 // attachVersions hangs each conversation's earlier versions under its row. It
@@ -753,23 +697,6 @@ func (h *Hub) titleCacheFor(dir string) *titleCache {
 	}
 	c := newTitleCache(dir)
 	h.titles[dir] = c
-	return c
-}
-
-// legacyCacheFor keeps one reader per project directory, for the same reason
-// titleCacheFor does: entries are keyed by file name, which is unique within a
-// project and not across them.
-func (h *Hub) legacyCacheFor(dir string) *legacyCache {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.legacy == nil {
-		h.legacy = map[string]*legacyCache{}
-	}
-	if c := h.legacy[dir]; c != nil {
-		return c
-	}
-	c := newLegacyCache(dir)
-	h.legacy[dir] = c
 	return c
 }
 

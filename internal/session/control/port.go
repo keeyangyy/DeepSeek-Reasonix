@@ -266,6 +266,9 @@ type RuntimeSettings interface {
 	SavePermissionRules(in PermissionLists) error
 	RevokeSessionGrant(rule string) int
 	RevokeRememberedProjectRule(rule string) error
+	WorkspaceRoots() (WorkspaceRoots, error)
+	AddWorkspaceRoot(dir string) (string, error)
+	RemoveWorkspaceRoot(dir string) error
 	SandboxSettings() SandboxSettings
 	SaveSandboxSettings(in SandboxSettings) error
 	BrowserToolsSettings() BrowserToolsSettings
@@ -278,11 +281,19 @@ type RuntimeSettings interface {
 	SaveCompactionSettings(softLimitTokens int) error
 	DisplayCurrencySettings() DisplayCurrencySettings
 	SaveDisplayCurrency(mode string) error
+	ChangedFilesSettings() ChangedFilesSettings
+	SaveChangedFilesSettings(show bool) error
+	FoldWorkSettings() FoldWorkSettings
+	SaveFoldWorkSettings(fold bool) error
 	ProgressWatchSettings() ProgressWatchSettings
 	SaveProgressWatchSettings(in ProgressWatchSettings) error
+	AskTimeoutSettings() AskTimeoutSettings
+	SaveAskTimeoutSettings(seconds int) error
 	AutoArchiveSettings() AutoArchiveSettings
 	SaveAutoArchiveSettings(in AutoArchiveSettings) error
 	ArchiveInactiveSessions() int
+	ReceiptSettings() ReceiptSettings
+	SaveReceiptSettings(show bool) error
 	ConfigProblem() *ConfigProblem
 	RepairConfigFile() (string, error)
 }
@@ -374,6 +385,10 @@ type Input interface {
 	ComposeSynthetic(text string) string
 	ResolveRefs(ctx context.Context, line string) (block string, errs []string)
 	HasRefs(line string) bool
+	// StoredAttachments is the attachments a message references that the host
+	// stored, so a transcript draws them from a field instead of reading the
+	// text for a spelling.
+	StoredAttachments(text string) []event.Attachment
 	CompletionData(lang string) CompletionData
 	ImageInputEnabled() bool
 	DroppedRef(path string) (token, displayPath string, err error)

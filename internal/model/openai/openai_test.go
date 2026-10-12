@@ -2516,3 +2516,20 @@ func TestNormaliseUsageAnthropicStyleFallback(t *testing.T) {
 		})
 	}
 }
+
+// A replayed tool call recorded with no arguments goes out as an empty object:
+// a strict gateway parses the arguments string and refuses an empty one.
+func TestBuildRequestReplaysNoArgumentToolCallAsEmptyObject(t *testing.T) {
+	c := &client{name: "x", model: "m", baseURL: "https://api.example.com/v1"}
+	body, err := json.Marshal(c.buildRequest(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "go"},
+		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "c1", Name: "status", Arguments: ""}}},
+		{Role: provider.RoleTool, ToolCallID: "c1", Name: "status", Content: "ok"},
+	}}))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"arguments":"{}"`) {
+		t.Fatalf("replayed arguments are not an empty object: %s", body)
+	}
+}

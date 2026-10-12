@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -115,13 +116,17 @@ func builtinAssetName(id string, kind Kind, ext string) string {
 	return "builtin/" + id + "." + string(kind) + ext
 }
 
+// ErrBadID is an id that cannot name a pack: empty, a path, or one the file
+// system would read differently from how it was written.
+var ErrBadID = errors.New("theme: not a pack id")
+
 func validID(id string) error {
 	id = strings.TrimSpace(id)
-	if id == "" {
-		return fmt.Errorf("theme: empty id")
-	}
-	if id != filepath.Base(id) || strings.ContainsAny(id, `/\`) {
-		return fmt.Errorf("theme: %q is not a pack id", id)
+	switch {
+	case id == "":
+		return fmt.Errorf("%w: empty", ErrBadID)
+	case id == "." || id == "..", id != filepath.Base(id), strings.ContainsAny(id, "/\\\x00"), strings.HasSuffix(id, "."):
+		return fmt.Errorf("%w", ErrBadID)
 	}
 	return nil
 }

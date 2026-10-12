@@ -84,7 +84,7 @@ func TestSanitizeToolPairingLeavesWellFormedUnchanged(t *testing.T) {
 	in := []Message{
 		{Role: RoleSystem, Content: "sys"},
 		{Role: RoleUser, Content: "q"},
-		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "ls"}}},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "ls", Arguments: "{}"}}},
 		{Role: RoleTool, ToolCallID: "c1", Name: "ls", Content: "main.go"},
 		{Role: RoleAssistant, Content: "done"},
 	}
@@ -337,7 +337,8 @@ func TestSanitizeToolPairingClosesTruncatedArgs(t *testing.T) {
 		{`{"items": [1, 2`, `{"items": [1, 2]}`},
 		{`total garbage`, `{}`},
 		{`{"ok": true}`, `{"ok": true}`},
-		{``, ``},
+		{``, `{}`},
+		{" \n", `{}`},
 	}
 	for _, c := range cases {
 		in := []Message{
@@ -764,5 +765,18 @@ func TestMockProviderImplementsInterface(t *testing.T) {
 	got := <-ch
 	if got.Type != ChunkDone {
 		t.Errorf("Chunk.Type = %d, want ChunkDone", got.Type)
+	}
+}
+
+// A saved session keeps what the gateway sent, so an empty arguments string
+// survives a save and load; only the copy headed to a provider is repaired.
+func TestSessionNormalizationKeepsEmptyArguments(t *testing.T) {
+	in := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "status", Arguments: ""}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "status", Content: "ok"},
+	}
+	out := NormalizeSessionMessages(in)
+	if got := out[0].ToolCalls[0].Arguments; got != "" {
+		t.Fatalf("session history changed empty arguments to %q", got)
 	}
 }

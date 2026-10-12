@@ -87,6 +87,7 @@ func (s *Server) sweepRecoveryBranches(grace time.Duration) int {
 	}
 	if swept > 0 {
 		slog.Info("serve: moved redundant recovery branches to the session trash", "count", swept)
+		s.bc.treeChanged()
 	}
 	return swept
 }

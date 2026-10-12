@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"reasonix/internal/base/testenv"
@@ -42,6 +43,7 @@ type themeRow struct {
 	Tokens     map[string]map[string]string `json:"tokens"`
 	Background *theme.Background            `json:"background"`
 	HasPreview bool                         `json:"hasPreview"`
+	Removable  bool                         `json:"removable"`
 }
 
 func listThemes(t *testing.T, base string) []themeRow {
@@ -196,5 +198,96 @@ func TestThemesListCarriesBackgroundPlacement(t *testing.T) {
 	}
 	if !got.HasPreview {
 		t.Fatal("shipped pack reports no preview")
+	}
+}
+
+func deleteReq(t *testing.T, url string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
+
+func TestRemoveThemeDeletesTheLibraryPackAndResetsAnActiveOne(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	installPack(t, "dusk", "Dusk")
+	srv := themeServer(t)
+	if resp := postJSON(t, srv.URL+"/themes", map[string]any{"id": "dusk"}); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("activate = %d", resp.StatusCode)
+	}
+	if !find(t, listThemes(t, srv.URL), "dusk").Removable {
+		t.Fatal("a library pack is not listed as removable")
+	}
+	if resp := deleteReq(t, srv.URL+"/themes/dusk"); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE = %d", resp.StatusCode)
+	}
+	for _, row := range listThemes(t, srv.URL) {
+		if row.ID == "dusk" {
+			t.Fatal("the pack is still listed")
+		}
+		if row.Active {
+			t.Fatalf("%q is still active after the active pack was removed", row.ID)
+		}
+	}
+	if cfg, err := config.Load(); err != nil || cfg.Desktop.ThemePack != "" {
+		t.Fatalf("config names %q (err %v), want the default appearance", cfg.Desktop.ThemePack, err)
+	}
+}
+
+func TestRemoveThemeRefusesWhatIsNotInTheLibrary(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	srv := themeServer(t)
+	if resp := deleteReq(t, srv.URL+"/themes/nothing-here"); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("DELETE unknown = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestRemoveThemeAnswersABadIDAs400WithoutLeakingPaths(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	srv := themeServer(t)
+	for _, id := range []string{"a%00b", "%2E%2E", "dusk.", "a%2Fb"} {
+		resp := deleteReq(t, srv.URL+"/themes/"+id)
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "theme.bad_id") {
+			t.Fatalf("DELETE %s = %d %s, want 400 theme.bad_id", id, resp.StatusCode, body)
+		}
+		if strings.Contains(string(body), home) || strings.Contains(string(body), "theme.json") {
+			t.Fatalf("DELETE %s leaked a server path: %s", id, body)
+		}
+	}
+}
+
+// When the config cannot be written the pack must still be there, so the
+// config never names a pack that is gone.
+func TestRemoveThemeKeepsThePackWhenTheConfigCannotBeWritten(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	installPack(t, "dusk", "Dusk")
+	srv := themeServer(t)
+	if resp := postJSON(t, srv.URL+"/themes", map[string]any{"id": "dusk"}); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("activate = %d", resp.StatusCode)
+	}
+	cfg := config.UserConfigPath()
+	if err := os.Chmod(filepath.Dir(cfg), 0o500); err != nil {
+		t.Skip("cannot make the config directory read-only here")
+	}
+	defer os.Chmod(filepath.Dir(cfg), 0o700)
+	if f, err := os.CreateTemp(filepath.Dir(cfg), "probe"); err == nil {
+		f.Close()
+		t.Skip("the config directory stays writable here")
+	}
+	if resp := deleteReq(t, srv.URL+"/themes/dusk"); resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("DELETE = %d, want 500", resp.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(theme.Dir(), "dusk", "theme.json")); err != nil {
+		t.Fatalf("the pack went although the config could not follow: %v", err)
 	}
 }

@@ -22,7 +22,7 @@ const ROUTES = [
   "/changes", "/commit", "/attachments", "/drop", "/checkpoints", "/branches", "/compact", "/compaction", "/rewind",
   "/extensions", "/themes", "/plugins", "/market", "/surfaces", "/feedback",
   "/fork", "/summarize", "/forget", "/bypass", "/auto-approve-tools",
-  "/permissions", "/sandbox", "/progress-watch", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/write-lease", "/remember-approval",
+  "/permissions", "/sandbox", "/progress-watch", "/ask-timeout", "/changed-files-settings", "/fold-work-settings", "/display-currency", "/auto-archive", "/context", "/storage", "/tray", "/browser", "/browser-host", "/asks", "/update", "/receipt-settings", "/write-lease", "/remember-approval",
   "/host", "/notifications", "/share", "/pair", "/device",
   "/slash", "/workspaces", "/welcome", "/usage", "/config", "/studio",
 ];
@@ -48,6 +48,9 @@ export default defineConfig(({ mode }) => {
     // that goes red by arrangement teaches people to re-run it, not read it.
     test: {
       css: true,
+      setupFiles: ["./src/testsetup.ts"],
+      testTimeout: 60_000,
+      hookTimeout: 60_000,
       pool: "threads",
     },
     server: {

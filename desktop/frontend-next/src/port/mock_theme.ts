@@ -9,12 +9,14 @@ export class MockTheme extends MockNetwork {
 
   private slots: Record<string, string> = {};
 
+  private removed = new Set<string>();
+
   // Two packs so the picker has something to switch between; the fixture is
   // where the mapping gets exercised without a Go process.
   async themes(): Promise<ThemePack[]> {
-    return [
+    const packs: ThemePack[] = [
       {
-        id: "dusk", name: "Dusk", author: "fixture", active: this.activeTheme === "dusk",
+        id: "dusk", name: "Dusk", author: "fixture", removable: true, active: this.activeTheme === "dusk",
         tokens: {
           light: { bg: "#F6F3EE", bgSoft: "#FBF9F5", panel: "#FFFFFF", border: "#DDD5C8", fg: "#1B1814", fgDim: "#5F564A", accent: "#8A5A2B" },
           dark: { bg: "#0F0D0B", bgSoft: "#141110", panel: "#1B1715", border: "#332C26", fg: "#EFE9E1", fgDim: "#9A8F82", accent: "#D89B5A" },
@@ -32,10 +34,16 @@ export class MockTheme extends MockNetwork {
         },
       },
     ];
+    return packs.filter((p) => !this.removed.has(p.id));
   }
 
   async activateTheme(id: string) {
     this.activeTheme = id;
+  }
+
+  async removeTheme(id: string) {
+    if (this.activeTheme === id) this.activeTheme = "";
+    this.removed.add(id);
   }
 
   async importTheme(files: File[]): Promise<ThemeImport> {

@@ -206,3 +206,50 @@ func TestSendFeedbackReplyNeedsBothSwitches(t *testing.T) {
 		t.Errorf("body = %q", sender.messages[0].Body)
 	}
 }
+
+type chimingSender struct {
+	recordSender
+	chimes int
+}
+
+func (s *chimingSender) Chime() error {
+	s.chimes++
+	return nil
+}
+
+func TestSoundIsItsOwnSwitchAndFollowsTheEventSwitches(t *testing.T) {
+	cases := []struct {
+		name         string
+		cfg          config.NotificationsConfig
+		wantMessages int
+		wantChimes   int
+	}{
+		{"off by default", config.NotificationsConfig{TurnDone: true, ApprovalRequest: true, AskRequest: true}, 0, 0},
+		{"sound without system notifications", config.NotificationsConfig{Sound: true, TurnDone: true}, 0, 1},
+		{"both", config.NotificationsConfig{Enabled: true, Sound: true, TurnDone: true}, 1, 1},
+		{"notifications without sound", config.NotificationsConfig{Enabled: true, TurnDone: true}, 1, 0},
+		{"sound but the event switch is off", config.NotificationsConfig{Sound: true}, 0, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sender := &chimingSender{}
+			sink := NewSink(&recordSink{}, sender, i18n.English, NewSettings(tc.cfg))
+			sink.Emit(event.Event{Kind: event.TurnDone})
+			if len(sender.messages) != tc.wantMessages || sender.chimes != tc.wantChimes {
+				t.Fatalf("messages=%d chimes=%d, want %d and %d", len(sender.messages), sender.chimes, tc.wantMessages, tc.wantChimes)
+			}
+		})
+	}
+}
+
+func TestFeedbackReplyChimesUnderTheSameSwitches(t *testing.T) {
+	sender := &chimingSender{}
+	SendFeedbackReply(sender, i18n.English, config.NotificationsConfig{Sound: true, FeedbackReply: true})
+	if sender.chimes != 1 || len(sender.messages) != 0 {
+		t.Fatalf("chimes=%d messages=%d", sender.chimes, len(sender.messages))
+	}
+	SendFeedbackReply(sender, i18n.English, config.NotificationsConfig{Sound: true})
+	if sender.chimes != 1 {
+		t.Fatal("a reply chimed with its own switch off")
+	}
+}

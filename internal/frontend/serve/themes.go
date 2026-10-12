@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,6 +20,7 @@ func (s *Server) registerThemeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /themes", s.activateTheme)
 	mux.HandleFunc("POST /themes/import", s.importTheme)
 	mux.HandleFunc("POST /themes/folder", s.openThemeFolder)
+	mux.HandleFunc("DELETE /themes/{id}", s.removeTheme)
 	mux.HandleFunc("GET /themes/{id}/{asset}", s.themeAsset)
 }
 
@@ -32,6 +34,7 @@ type themeView struct {
 	Background  *theme.Background            `json:"background,omitempty"`
 	Sky         *theme.Sky                   `json:"sky,omitempty"`
 	HasPreview  bool                         `json:"hasPreview,omitempty"`
+	Removable   bool                         `json:"removable,omitempty"`
 	// What the pack asked for and did not get. It rides on the listing so the
 	// author sees it in the picker rather than only in a log they never read.
 	Warnings []string `json:"warnings,omitempty"`
@@ -51,7 +54,7 @@ func (s *Server) themes(w http.ResponseWriter, r *http.Request) {
 		out = append(out, themeView{
 			ID: p.ID, Name: p.Name, Author: p.Author, Description: p.Description,
 			Active: p.ID == active, Tokens: p.Tokens,
-			Background: p.Background, Sky: p.Sky, HasPreview: p.HasPreview,
+			Background: p.Background, Sky: p.Sky, HasPreview: p.HasPreview, Removable: p.Removable,
 			Warnings: p.Warnings,
 		})
 	}
@@ -81,6 +84,46 @@ func (s *Server) activateTheme(w http.ResponseWriter, r *http.Request) {
 	edit.Desktop.ThemePack = id
 	if err := edit.SaveTo(config.UserConfigPath()); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeTheme deletes a pack from the user's library. When the pack was the
+// active one and nothing of that id is left to load, the default appearance
+// takes over rather than leaving the config naming a pack that is gone.
+func (s *Server) removeTheme(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := theme.CanRemove(id); err != nil {
+		switch {
+		case errors.Is(err, theme.ErrBadID):
+			refuse(w, http.StatusBadRequest, "theme.bad_id", "that is not a theme id", nil)
+		case errors.Is(err, theme.ErrNotInstalled):
+			notFound(w, "theme", id)
+		default:
+			saveFailed(w, http.StatusInternalServerError, "theme.remove_failed", err)
+		}
+		return
+	}
+	// The config settles first: if it cannot be written the pack is still
+	// there, and if the files then fail to go the old choice is put back.
+	path := config.UserConfigPath()
+	edit := config.LoadForEdit(path)
+	active := strings.TrimSpace(edit.Desktop.ThemePack)
+	resets := active == id && !theme.Shipped(id)
+	if resets {
+		edit.Desktop.ThemePack = ""
+		if err := edit.SaveTo(path); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if err := theme.Remove(id); err != nil {
+		if resets {
+			edit.Desktop.ThemePack = active
+			_ = edit.SaveTo(path)
+		}
+		saveFailed(w, http.StatusInternalServerError, "theme.remove_failed", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

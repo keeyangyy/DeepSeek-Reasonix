@@ -75,7 +75,9 @@ type toolCallPlan struct {
 	criteriaRewritten []string
 	mutationObserved  bool
 	mutationAfterDone bool
-	executed          bool
+	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
+	ranClean bool
+	executed bool
 	// nestedOrigin is the first external origin among calls this tool made
 	// through its invoker; it labels the result when the tool declares none.
 	nestedOrigin tool.Provenance
@@ -723,6 +725,7 @@ func (a *Agent) finishToolExecution(ctx context.Context, plan *toolCallPlan) too
 	// tool.after: extensions rule on the executed result (success or error)
 	// before evidence, hooks, and recovery observation, so every downstream
 	// consumer sees the final (possibly replaced) outcome.
+	plan.ranClean = err == nil
 	result, err = a.interceptToolAfter(ctx, call, result, err)
 	// A tool that refused its own call never ran: report it like the permission
 	// and plan-mode blocks above rather than as an execution failure.

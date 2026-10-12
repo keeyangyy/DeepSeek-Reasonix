@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"reasonix/internal/base/nilutil"
 )
@@ -134,6 +135,7 @@ type UnavailableImage struct {
 // structural facts; raw partial reasoning remains on the LocalOnly Message for
 // display and is never copied into the recovery prompt.
 type InterruptedTurnRecovery struct {
+	StreamFailure           StreamFailureCause       `json:"stream_failure,omitempty"`
 	Pending                 bool                     `json:"pending,omitempty"`
 	CompletedTools          []InterruptedToolSummary `json:"completed_tools,omitempty"`
 	InterruptedTools        []string                 `json:"interrupted_tools,omitempty"`
@@ -328,7 +330,7 @@ func normalizeMessages(msgs []Message, dropOrphanTools bool) []Message {
 			// correctness requirement.
 			calls := backfillToolCallNames(m.ToolCalls, msgs[i+1:j])
 			m.ToolCalls = calls
-			out = append(out, repairToolCallArgs(m))
+			out = append(out, repairToolCallArgs(m, dropOrphanTools))
 			if dropOrphanTools {
 				out = append(out, pairToolResults(calls, msgs[i+1:j])...)
 			} else {
@@ -369,7 +371,7 @@ func tryNormalizeFastPath(msgs []Message, dropOrphanTools bool) ([]Message, bool
 			for j < len(msgs) && msgs[j].Role == RoleTool && !msgs[j].LocalOnly {
 				j++
 			}
-			if !toolTurnWellFormed(m.ToolCalls, msgs[i+1:j]) || needsToolCallArgRepair(m.ToolCalls) {
+			if !toolTurnWellFormed(m.ToolCalls, msgs[i+1:j]) || needsToolCallArgRepair(m.ToolCalls, dropOrphanTools) {
 				return nil, false
 			}
 			i = j
@@ -401,96 +403,6 @@ func toolTurnWellFormed(calls []ToolCall, results []Message) bool {
 		}
 	}
 	return true
-}
-
-func needsToolCallArgRepair(calls []ToolCall) bool {
-	for _, tc := range calls {
-		if tc.Arguments != "" && !json.Valid([]byte(tc.Arguments)) {
-			return true
-		}
-	}
-	return false
-}
-
-// repairToolCallArgs returns m with any undecodable tool-call Arguments closed
-// into valid JSON (copy-on-write; the caller's history is never mutated). Empty
-// arguments pass through — some gateways send "" for no-arg tools.
-func repairToolCallArgs(m Message) Message {
-	broken := false
-	for _, tc := range m.ToolCalls {
-		if tc.Arguments != "" && !json.Valid([]byte(tc.Arguments)) {
-			broken = true
-			break
-		}
-	}
-	if !broken {
-		return m
-	}
-	calls := make([]ToolCall, len(m.ToolCalls))
-	copy(calls, m.ToolCalls)
-	for i := range calls {
-		if calls[i].Arguments == "" || json.Valid([]byte(calls[i].Arguments)) {
-			continue
-		}
-		calls[i].Arguments = closeTruncatedJSON(calls[i].Arguments)
-	}
-	m.ToolCalls = calls
-	return m
-}
-
-// closeTruncatedJSON best-effort completes a JSON document cut off mid-stream
-// (unterminated string, open braces, dangling comma/colon); anything still
-// invalid after closing degrades to "{}".
-func closeTruncatedJSON(s string) string {
-	var stack []byte
-	inStr, esc := false, false
-	for i := range len(s) {
-		c := s[i]
-		if inStr {
-			switch {
-			case esc:
-				esc = false
-			case c == '\\':
-				esc = true
-			case c == '"':
-				inStr = false
-			}
-			continue
-		}
-		switch c {
-		case '"':
-			inStr = true
-		case '{':
-			stack = append(stack, '}')
-		case '[':
-			stack = append(stack, ']')
-		case '}', ']':
-			if len(stack) > 0 {
-				stack = stack[:len(stack)-1]
-			}
-		}
-	}
-	out := s
-	if esc {
-		out = out[:len(out)-1]
-	}
-	if inStr {
-		out += `"`
-	}
-	trimmed := strings.TrimRight(out, " \t\r\n")
-	switch {
-	case strings.HasSuffix(trimmed, ","):
-		out = trimmed[:len(trimmed)-1]
-	case strings.HasSuffix(trimmed, ":"):
-		out = trimmed + "null"
-	}
-	for _, v := range slices.Backward(stack) {
-		out += string(v)
-	}
-	if !json.Valid([]byte(out)) {
-		return "{}"
-	}
-	return out
 }
 
 // pairToolResults answers each tool_call with its result, backfilling a
@@ -751,20 +663,29 @@ func (e *AuthError) Error() string {
 // Factory builds a Provider from a resolved Config.
 type Factory func(cfg Config) (Provider, error)
 
-var registry = map[string]Factory{}
+// registry is read by every Build and written by init and by tests that run in
+// parallel, so every access holds mu.
+var registry = struct {
+	mu        sync.RWMutex
+	factories map[string]Factory
+}{factories: map[string]Factory{}}
 
 // Register adds a factory under a kind (e.g. "openai"). Intended for init().
 // It panics on a duplicate kind, since that is a compile-time wiring mistake.
 func Register(kind string, f Factory) {
-	if _, dup := registry[kind]; dup {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	if _, dup := registry.factories[kind]; dup {
 		panic("provider: duplicate kind " + kind)
 	}
-	registry[kind] = f
+	registry.factories[kind] = f
 }
 
 // New instantiates the provider of the given kind.
 func New(kind string, cfg Config) (Provider, error) {
-	f, ok := registry[kind]
+	registry.mu.RLock()
+	f, ok := registry.factories[kind]
+	registry.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("provider: unknown kind %q (registered: %v)", kind, Kinds())
 	}
@@ -780,6 +701,7 @@ func New(kind string, cfg Config) (Provider, error) {
 
 // Kinds returns the registered kinds, sorted.
 func Kinds() []string {
-	out := slices.Sorted(maps.Keys(registry))
-	return out
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	return slices.Sorted(maps.Keys(registry.factories))
 }

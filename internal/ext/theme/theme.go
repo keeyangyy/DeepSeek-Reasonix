@@ -44,6 +44,9 @@ type Pack struct {
 	Background  *Background                  `json:"background,omitempty"`
 	Sky         *Sky                         `json:"sky,omitempty"`
 	HasPreview  bool                         `json:"hasPreview,omitempty"`
+	// Removable is true for a pack that lives in the user's own library, which
+	// is the only place Remove reaches.
+	Removable bool `json:"removable,omitempty"`
 	// Warnings names the tokens that were dropped and why. The pack still
 	// loads: one bad value must not cost the author every good one.
 	Warnings []string `json:"warnings,omitempty"`
@@ -140,6 +143,7 @@ func List() []Pack {
 			if err != nil {
 				continue
 			}
+			pack.Removable = true
 			byID[pack.ID] = pack
 		}
 	}
