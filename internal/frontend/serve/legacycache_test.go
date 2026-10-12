@@ -133,7 +133,7 @@ func TestWorkspaceSessionsCarriesTheLegacyMark(t *testing.T) {
 	legacySession(t, sessions, "mine.jsonl", nativeLogHeader)
 
 	h := NewHub(HubOptions{})
-	got := h.workspaceSessions(root, map[string]string{})
+	got := h.workspacePage(root, "", map[string]string{}, treeWindow{}, 0).Sessions
 	if len(got) != 2 {
 		t.Fatalf("tree has %d rows, want 2", len(got))
 	}
