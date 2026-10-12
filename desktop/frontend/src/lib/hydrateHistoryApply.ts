@@ -499,7 +499,20 @@ export function pageInFlightAssistantId(items: readonly SignatureItem[]): string
 // Keeps a still-present pointer, otherwise re-points at the page's in-flight
 // assistant row — a dangling pointer would rebuild a tail row on next delta.
 export function pageAssistantPointer(current: string | undefined, pageItems: readonly SignatureItem[]): string | undefined {
-  return current && pageItems.some((item) => item.id === current) ? current : pageInFlightAssistantId(pageItems);
+  let askBoundaryIndex = -1;
+  for (let i = pageItems.length - 1; i >= 0; i -= 1) {
+    const item = pageItems[i];
+    if ((item.kind === "tool" && item.name === "ask") || (item.kind === "notice" && item.decisionReceipt?.kind === "ask")) {
+      askBoundaryIndex = i;
+      break;
+    }
+  }
+  const pointer = current && pageItems.some((item) => item.kind === "assistant" && item.id === current)
+    ? current
+    : pageInFlightAssistantId(pageItems);
+  const pointerIndex = pageItems.findIndex((item) => item.kind === "assistant" && item.id === pointer);
+  // Ask separates the segment that asked from the one that resumes.
+  return pointerIndex > askBoundaryIndex ? pointer : undefined;
 }
 
 // Page tool rows are written when the call starts; an in-flight tool the live

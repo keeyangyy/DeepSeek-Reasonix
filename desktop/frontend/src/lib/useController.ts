@@ -40,7 +40,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, messageIdCoveredLiveItemIds, pageAssistantPointer, pageCoveredLiveItemIds, pageInFlightAssistantId, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, messageIdCoveredLiveItemIds, pageAssistantPointer, pageCoveredLiveItemIds, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent, normalizeSessionGeneration, preserveSessionIdentity, sessionIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -1122,11 +1122,11 @@ function applyStreamBatch(s: State, segments: StreamSegment[]): State {
   return applyDeltaSegments(s, segments);
 }
 
-function rebaseLiveAssistantToPage(pageItems: Item[], state: State) {
-  const current = state.items.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && Boolean(item.messageID) && Boolean(item.id === state.currentAssistant || item.wasStreamed));
-  if (!current) return;
-  const page = pageItems.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.messageID === current.messageID);
-  if (!page) return;
+function rebaseLiveAssistantToPage(pageItems: Item[], state: State) { // Rebase only the active assistant segment.
+  if (state.ask) return;
+  const current = state.items.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.id === (state.currentAssistant ?? state.live?.id) && Boolean(item.messageID));
+  const page = current && pageItems.find((item): item is Extract<Item, { kind: "assistant" }> => item.kind === "assistant" && item.messageID === current.messageID);
+  if (!current || !page || pageAssistantPointer(page.id, pageItems) !== page.id) return;
   const live = state.currentAssistant === current.id && state.live?.id === current.id ? state.live : undefined;
   if (!live && !current.wasStreamed) return;
   const text = live ? live.text : current.text, reasoning = live ? live.reasoning : current.reasoning;
@@ -1142,6 +1142,11 @@ function rebaseLiveAssistantToPage(pageItems: Item[], state: State) {
     currentAssistant: live ? page.id : state.currentAssistant,
     live: live ? { ...live, id: page.id } : state.live,
   };
+}
+
+function historyAssistantState(state: State, items: readonly SignatureItem[], rebased: ReturnType<typeof rebaseLiveAssistantToPage>) {
+  const currentAssistant = state.ask ? undefined : rebased?.currentAssistant ?? pageAssistantPointer(state.currentAssistant, items);
+  return { currentAssistant, live: state.ask ? undefined : rebased?.live ?? (currentAssistant === state.currentAssistant ? state.live : undefined) };
 }
 
 /** Closed + open user-wait ms for the active turn (approval/ask). */
@@ -1914,8 +1919,9 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     case "ask_request": {
       if (s.cancelRequested) return s;
       if (e.ask?.id !== undefined && e.ask.id === s.resolvedPromptId) return s;
+      const settled = settleCurrentAssistant(s); // Finish pre-Ask reasoning before waiting.
       return beginPromptWait({
-        ...s,
+        ...settled,
         activeTurnId: e.turnId ?? s.activeTurnId,
         ask: e.ask ? { ...e.ask, turnId: e.turnId ?? e.ask.turnId, runtimeEpoch: e.runtimeEpoch ?? e.ask.runtimeEpoch } : e.ask,
         promptArrivedAt: e.ask?.id === s.promptArrivedId ? s.promptArrivedAt : promptEventClock(),
@@ -2332,8 +2338,7 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
-        currentAssistant: rebasedAssistant?.currentAssistant ?? pageAssistantPointer(s.currentAssistant, pageItems),
-        live: rebasedAssistant?.live ?? (pageItems.some((item) => item.id === s.currentAssistant) ? s.live : undefined),
+        ...historyAssistantState(s, pageItems, rebasedAssistant),
       };
     }
     case "history_rebase": {
@@ -2362,10 +2367,7 @@ export function reducer(s: State, a: Action): State {
         historyDigest: a.digest,
         historyLayoutRevision: s.historyLayoutRevision + 1,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" },
-        currentAssistant: rebasedAssistant?.currentAssistant ?? (
-          s.currentAssistant && remove?.has(s.currentAssistant) ? pageAssistantPointer(s.currentAssistant, pageItems) : s.currentAssistant
-        ),
-        live: rebasedAssistant?.live ?? (s.currentAssistant && remove?.has(s.currentAssistant) ? undefined : s.live),
+        ...historyAssistantState(s, merged, rebasedAssistant),
       };
     }
     case "latest_compaction": {
@@ -2405,7 +2407,6 @@ export function reducer(s: State, a: Action): State {
       const nonCompactionRest = rest.filter((item) => item.kind !== "compaction");
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
-      const liveDropped = Boolean(remove && s.currentAssistant && remove.has(s.currentAssistant));
       const merged = compactArchivedToolItems([...carriedCompactions, ...liftLiveToolStatus(pageItems, s.items), ...nonCompactionRest]);
       assertNoDuplicateItems(merged, "history_prepend");
       noteDedupDrop(s.meta?.sessionPath ?? "", "prepend", a.removeIds.length);
@@ -2425,8 +2426,7 @@ export function reducer(s: State, a: Action): State {
         historyRevision: a.revision,
         historyDigest: a.digest,
         historyMutation: { seq: s.historyMutation.seq + 1, kind: "prepend" },
-        currentAssistant: rebasedAssistant?.currentAssistant ?? (liveDropped ? pageInFlightAssistantId(pageItems) : s.currentAssistant),
-        live: rebasedAssistant?.live ?? (liveDropped ? undefined : s.live),
+        ...historyAssistantState(s, merged, rebasedAssistant),
       };
     }
     // Ref-resolved full content landed for history items already on screen:
