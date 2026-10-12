@@ -10,6 +10,7 @@ import {
   hydratedHistoryApplyMode,
   itemSignature,
   pageCoveredLiveItemIds,
+  pageAssistantPointer,
   pageOverlapsLiveContent,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
@@ -316,6 +317,139 @@ const assistantRow = (id: string, text: string) =>
   ok(tool?.kind === "tool" && tool.status === "running", "a live running tool keeps its status when the page copy says stopped");
   ok(next.items.filter((it) => it.kind === "assistant").length === 1, "the superseded live assistant row does not remain beside the page copy");
   ok(next.currentAssistant === "h:9", "the streaming pointer re-points at the page's in-flight assistant row");
+}
+
+// Ask is a segment boundary. Switching back to a session while Ask is waiting
+// can hydrate the pre-Ask assistant again; that row must not become the target
+// for the sampling attempt that resumes after the answer.
+{
+  const oldAssistant = { ...assistantRow("a:turn-ask:0", "pre-Ask thought"), messageID: "message-before-ask", wasStreamed: true as const };
+  const pageAssistant = { ...assistantRow("h:before-ask", "persisted pre-Ask thought"), messageID: "message-before-ask" };
+  const askTool = { ...toolRow("ask-call", "running"), name: "ask" };
+  const askReceipt = {
+    kind: "notice" as const,
+    id: "ask-receipt",
+    level: "info" as const,
+    text: "answered",
+    decisionReceipt: { id: "ask-1", occurrenceId: "ask-receipt-1", kind: "ask", subject: "Choose", outcome: "answered" },
+  };
+  const waiting: ReducerState = {
+    ...initialState,
+    activeTurnId: "turn-ask",
+    items: [oldAssistant, askTool],
+    currentAssistant: oldAssistant.id,
+    live: { id: oldAssistant.id, text: "pre-Ask thought", reasoning: "pre-Ask thought", reasoningComplete: false },
+    ask: { id: "ask-1" } as never,
+    promptEpoch: 2,
+  };
+  const promptStarted = reducer({ ...waiting, ask: undefined }, {
+    type: "event",
+    e: { kind: "ask_request", ask: { id: "ask-1" } } as never,
+  });
+  ok(promptStarted.currentAssistant === undefined && promptStarted.live === undefined, "ask_request closes the prior assistant segment before waiting for the user");
+  const replaced = reducer(waiting, {
+    type: "history_replace",
+    items: [pageAssistant, { ...askTool, status: "stopped" }, askReceipt],
+    startTurn: 1,
+    totalTurns: 2,
+    hasOlder: false,
+    revision: 10,
+  });
+  ok(replaced.currentAssistant === undefined && replaced.live === undefined, "history_replace during Ask wait releases the pre-prompt assistant pointer");
+  ok(pageAssistantPointer(pageAssistant.id, [pageAssistant, askTool, askReceipt]) === undefined, "an Ask tool and answered receipt invalidate the earlier assistant pointer");
+
+  let resumed = reducer(replaced, { type: "ask_submit_succeeded", id: "ask-1", epoch: 2 });
+  resumed = reducer(resumed, { type: "event", e: { kind: "reasoning", reasoning: "post-Ask thought" } });
+  const newAssistantId = resumed.currentAssistant;
+  ok(Boolean(newAssistantId) && newAssistantId !== pageAssistant.id, "post-Ask reasoning allocates a new assistant row");
+  resumed = reducer(resumed, { type: "event", e: { kind: "message", text: "final response", reasoning: "post-Ask thought" } });
+  const oldIndex = resumed.items.findIndex((item) => item.kind === "assistant" && item.id === pageAssistant.id);
+  const toolIndex = resumed.items.findIndex((item) => item.kind === "tool" && item.id === "ask-call");
+  const receiptIndex = resumed.items.findIndex((item) => item.kind === "notice" && item.id === "ask-receipt");
+  const newIndex = resumed.items.findIndex((item) => item.kind === "assistant" && item.id === newAssistantId);
+  const newRow = resumed.items.find((item) => item.kind === "assistant" && item.id === newAssistantId);
+  ok(oldIndex >= 0 && oldIndex < toolIndex && toolIndex < receiptIndex && receiptIndex < newIndex, "history_replace keeps Ask, receipt, and resumed assistant in transcript order");
+  ok(newRow?.kind === "assistant" && newRow.reasoning === "post-Ask thought" && newRow.text === "final response", "post-Ask reasoning and final text stay on the new row");
+
+  const alreadyAnswered = reducer({
+    ...waiting,
+    ask: undefined,
+    items: [oldAssistant, askTool, askReceipt],
+    live: undefined,
+  }, {
+    type: "history_replace",
+    items: [pageAssistant, { ...askTool, status: "done" }, askReceipt],
+    startTurn: 1,
+    totalTurns: 2,
+    hasOlder: false,
+    revision: 12,
+  });
+  ok(alreadyAnswered.currentAssistant === undefined, "a post-answer page cannot restore the pre-Ask assistant as the live target");
+}
+
+// Rebase must match the exact active pointer, not the first assistant row that
+// happened to be marked as streamed in an earlier attempt.
+{
+  const earlier = { ...assistantRow("a:turn-rebase:0", "earlier attempt"), messageID: "message-earlier", wasStreamed: true as const };
+  const active = { ...assistantRow("a:turn-rebase:1", "active attempt"), messageID: "message-active", wasStreamed: true as const };
+  const pageEarlier = { ...assistantRow("h:earlier", "history earlier"), messageID: "message-earlier" };
+  const pageActive = { ...assistantRow("h:active", "history active"), messageID: "message-active" };
+  const rebased = reducer({
+    ...initialState,
+    currentAssistant: active.id,
+    live: { id: active.id, text: "active live text", reasoning: "active live thought", reasoningComplete: false },
+    items: [earlier, active],
+  }, {
+    type: "history_replace",
+    items: [pageEarlier, pageActive],
+    startTurn: 1,
+    totalTurns: 1,
+    hasOlder: false,
+    revision: 13,
+  });
+  const earlierPage = rebased.items.find((item) => item.kind === "assistant" && item.id === pageEarlier.id);
+  const activePage = rebased.items.find((item) => item.kind === "assistant" && item.id === pageActive.id);
+  ok(earlierPage?.kind === "assistant" && earlierPage.text === "history earlier", "rebase leaves earlier streamed assistant history untouched");
+  ok(activePage?.kind === "assistant" && activePage.text === "active live text" && activePage.reasoning === "active live thought", "rebase transfers live content to the exact current assistant row");
+}
+
+{
+  const oldAssistant = { ...assistantRow("a:turn-ask-prepend:0", "pre-Ask thought"), messageID: "message-before-ask", wasStreamed: true as const };
+  const askTool = { ...toolRow("ask-prepend-call", "running"), name: "ask" };
+  const pageAssistant = { ...assistantRow("h:ask-prepend", "pre-Ask thought"), messageID: "message-before-ask" };
+  const receipt = {
+    kind: "notice" as const,
+    id: "ask-prepend-receipt",
+    level: "info" as const,
+    text: "answered",
+    decisionReceipt: { id: "ask-prepend", occurrenceId: "ask-prepend-receipt-1", kind: "ask", subject: "Choose", outcome: "answered" },
+  };
+  const waiting: ReducerState = {
+    ...initialState,
+    historyPrefixCount: 1,
+    activeTurnId: "turn-ask-prepend",
+    items: [{ kind: "user", id: "u:turn-ask-prepend", text: "question" }, oldAssistant, askTool],
+    currentAssistant: oldAssistant.id,
+    live: { id: oldAssistant.id, text: "pre-Ask thought", reasoning: "pre-Ask thought", reasoningComplete: false },
+    ask: { id: "ask-prepend" } as never,
+  };
+  const prepended = reducer(waiting, {
+    type: "history_prepend",
+    items: [pageAssistant, { ...askTool, status: "stopped" }, receipt],
+    removeIds: [oldAssistant.id, askTool.id],
+    startTurn: 0,
+    totalTurns: 2,
+    hasOlder: false,
+    revision: 11,
+  });
+  ok(prepended.currentAssistant === undefined && prepended.live === undefined, "history_prepend during Ask wait releases the stale assistant pointer");
+  let resumed = reducer(prepended, { type: "ask_submit_succeeded", id: "ask-prepend", epoch: 0 });
+  resumed = reducer(resumed, { type: "event", e: { kind: "text", text: "continued" } });
+  const assistantIds = resumed.items.filter((item) => item.kind === "assistant").map((item) => item.id);
+  const askIndex = resumed.items.findIndex((item) => item.kind === "tool" && item.id === askTool.id);
+  const receiptIndex = resumed.items.findIndex((item) => item.kind === "notice" && item.id === receipt.id);
+  const continuedIndex = resumed.items.findIndex((item) => item.kind === "assistant" && item.id === resumed.currentAssistant);
+  ok(assistantIds.length === 2 && askIndex < receiptIndex && receiptIndex < continuedIndex, "history_prepend preserves the answered Ask boundary before resumed output");
 }
 
 // Recorder token rule (frontendDiagnostics.safeToken): row descriptors must
