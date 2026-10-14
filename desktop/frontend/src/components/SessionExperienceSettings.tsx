@@ -5,6 +5,7 @@ import { app } from "../lib/bridge";
 import { useT } from "../lib/i18n";
 import { useCommittedCommand } from "../lib/useCommittedCommand";
 import { applySessionExperience, getSessionExperience, type SessionExperience } from "../lib/sessionExperience";
+import { getDefaultCollapsed, setDefaultCollapsed } from "../lib/defaultCollapsedPreference";
 import { hydrateReasoningDisplayMode } from "../lib/reasoningDisplayPreference";
 import type { SettingsView } from "../lib/types";
 import { SettingsField, SettingsSection } from "./SettingsForm";
@@ -18,6 +19,7 @@ type Props = {
 export function SessionExperienceSettings({ snapshot, busy, apply }: Props) {
   const t = useT();
   const [mode, setMode] = useState<SessionExperience>(getSessionExperience);
+  const [startCollapsed, setStartCollapsed] = useState(getDefaultCollapsed);
   const present = useCommittedCommand((next: SessionExperience) => {
     setMode(next);
     applySessionExperience(next);
@@ -37,6 +39,16 @@ export function SessionExperienceSettings({ snapshot, busy, apply }: Props) {
           className={`set-seg__btn${mode === value ? " set-seg__btn--on" : ""}`} role="radio"
           aria-checked={mode === value} disabled={busy} onClick={() => void save(value)}>
           {t(`settings.sessionExperience.${value}`)}
+        </button>)}
+      </SettingsOptions>
+    </SettingsField>
+    <SettingsField label={t("settings.defaultCollapsed")} hint={t("settings.defaultCollapsedHint")} icon={<PanelBottom size={18} />}>
+      <SettingsOptions layout="field" className="set-seg" role="radiogroup" aria-label={t("settings.defaultCollapsed")}>
+        {([false, true] as const).map(value => <button key={String(value)} type="button"
+          className={`set-seg__btn${startCollapsed === value ? " set-seg__btn--on" : ""}`} role="radio"
+          aria-checked={startCollapsed === value} disabled={busy}
+          onClick={() => { setStartCollapsed(value); setDefaultCollapsed(value); }}>
+          {t(value ? "settings.defaultCollapsed.on" : "settings.defaultCollapsed.off")}
         </button>)}
       </SettingsOptions>
     </SettingsField>

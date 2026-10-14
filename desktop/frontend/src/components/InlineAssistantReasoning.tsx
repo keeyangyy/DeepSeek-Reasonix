@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useWorkProcessPresentation } from "../lib/sessionExperience";
+import { useDefaultCollapsed } from "../lib/defaultCollapsedPreference";
 import type { AssistantItem } from "../lib/transcriptRows";
 import { useT } from "../lib/i18n";
 import { LiveStreamContext } from "./LiveStreamContext";
@@ -25,31 +26,37 @@ export function InlineAssistantReasoning({
   const beginUserResize = useTranscriptUserResizeIntent();
   const live = useContext(LiveStreamContext);
   const presentation = useWorkProcessPresentation();
+  const defaultCollapsed = useDefaultCollapsed();
   const shown = live?.id === item.id ? { reasoning: live.reasoning, streaming: true, reasoningComplete: live.reasoningComplete } : item;
   const running = shown.streaming && !shown.reasoningComplete;
   const followActive = autoFollowActive ?? shown.streaming;
-  const [open, setOpen] = useState(presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && followActive));
+  const [open, setOpen] = useState(
+    () => !defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && followActive)),
+  );
   const userOverridden = useRef(false);
   const previousRunning = useRef(running);
   const previousFollowActive = useRef(followActive);
   const previousExperience = useRef(presentation.experience);
+  const previousCollapsed = useRef(defaultCollapsed);
   useEffect(() => {
     const modeChanged = previousExperience.current !== presentation.experience;
+    const collapsedChanged = previousCollapsed.current !== defaultCollapsed;
     const wasRunning = previousRunning.current;
     const wasFollowActive = previousFollowActive.current;
     previousExperience.current = presentation.experience;
+    previousCollapsed.current = defaultCollapsed;
     previousRunning.current = running;
     previousFollowActive.current = followActive;
-    if (modeChanged) {
+    if (modeChanged || collapsedChanged) {
       userOverridden.current = false;
-      setOpen(presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && followActive));
-    } else if (running && !wasRunning && presentation.showWhileRunning) {
+      setOpen(!defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && followActive)));
+    } else if (running && !wasRunning && presentation.showWhileRunning && !defaultCollapsed) {
       userOverridden.current = false;
       setOpen(true);
     } else if (!presentation.keepExpandedAfterCompletion && !followActive && wasFollowActive && !userOverridden.current) {
       setOpen(false);
     }
-  }, [followActive, presentation, running]);
+  }, [defaultCollapsed, followActive, presentation, running]);
   const toggle = useCallback(() => {
     beginUserResize();
     userOverridden.current = true;

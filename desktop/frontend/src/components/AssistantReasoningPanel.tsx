@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useWorkProcessPresentation } from "../lib/sessionExperience";
+import { useDefaultCollapsed } from "../lib/defaultCollapsedPreference";
 import { useCollapseAnimation } from "../lib/useCollapseAnimation";
 import { useT } from "../lib/i18n";
 import type { Item } from "../lib/useController";
@@ -27,35 +28,41 @@ export function AssistantReasoningPanel({
 }) {
   const t = useT();
   const presentation = useWorkProcessPresentation();
+  const defaultCollapsed = useDefaultCollapsed();
   const running = item.streaming && !item.reasoningComplete;
   const followsWhileStreaming = presentation.showWhileRunning || expandWhileStreaming;
   const keepExpanded = presentation.keepExpandedAfterCompletion;
-  const [open, setOpen] = useState(defaultExpanded || keepExpanded || (followsWhileStreaming && item.streaming));
+  const [open, setOpen] = useState(
+    () => !defaultCollapsed && (defaultExpanded || keepExpanded || (followsWhileStreaming && item.streaming)),
+  );
   const bodyRef = useRef<HTMLDivElement>(null);
   const userOverridden = useRef(false);
   const previousStreaming = useRef(item.streaming);
   const previousComplete = useRef(item.reasoningComplete ?? false);
   const previousExperience = useRef(presentation.experience);
+  const previousCollapsed = useRef(defaultCollapsed);
 
   useEffect(() => {
     const wasStreaming = previousStreaming.current;
     const wasComplete = previousComplete.current;
     const complete = item.reasoningComplete ?? false;
     const modeChanged = previousExperience.current !== presentation.experience;
+    const collapsedChanged = previousCollapsed.current !== defaultCollapsed;
     previousStreaming.current = item.streaming;
     previousComplete.current = complete;
     previousExperience.current = presentation.experience;
-    if (modeChanged) {
+    previousCollapsed.current = defaultCollapsed;
+    if (modeChanged || collapsedChanged) {
       userOverridden.current = false;
-      setOpen(defaultExpanded || keepExpanded || (followsWhileStreaming && item.streaming));
+      setOpen(!defaultCollapsed && (defaultExpanded || keepExpanded || (followsWhileStreaming && item.streaming)));
     } else if (item.streaming) {
       if (!wasStreaming) userOverridden.current = false;
-      if (defaultExpanded || keepExpanded) setOpen(true);
-      else if (!userOverridden.current && followsWhileStreaming) setOpen(true);
+      if (!defaultCollapsed && (defaultExpanded || keepExpanded)) setOpen(true);
+      else if (!defaultCollapsed && !userOverridden.current && followsWhileStreaming) setOpen(true);
     } else if ((complete && !wasComplete) || wasStreaming) {
       if (!defaultExpanded && !keepExpanded && !userOverridden.current) setOpen(false);
     }
-  }, [defaultExpanded, followsWhileStreaming, keepExpanded, item.reasoningComplete, item.streaming, presentation.experience]);
+  }, [defaultCollapsed, defaultExpanded, followsWhileStreaming, keepExpanded, item.reasoningComplete, item.streaming, presentation.experience]);
 
   const toggle = () => {
     userOverridden.current = true;

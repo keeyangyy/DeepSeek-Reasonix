@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import { SessionExperienceSettings } from "../components/SessionExperienceSettings";
 import { LocaleProvider } from "../lib/i18n";
 import { getSessionExperience } from "../lib/sessionExperience";
+import { getDefaultCollapsed } from "../lib/defaultCollapsedPreference";
 import type { SettingsView } from "../lib/types";
 
 const dom = new JSDOM("<div id='root'></div>", { url: "http://localhost" });
@@ -41,7 +42,7 @@ const root = createRoot(document.getElementById("root")!);
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")];
 try {
   await act(async () => root.render(<LocaleProvider><SettingsHost /></LocaleProvider>));
-  assert.equal(buttons().length, 2);
+  assert.equal(buttons().length, 4, "standard/deep plus the start-collapsed switch");
   assert.equal(buttons()[0].getAttribute("aria-checked"), "true");
   await act(async () => buttons()[1].click());
   assert.equal(getSessionExperience(), "deep");
@@ -56,6 +57,14 @@ try {
   assert.equal(getSessionExperience(), "deep", "failed write reloads even when backend returns the same previous value");
   assert.equal(buttons()[1].getAttribute("aria-checked"), "true");
   assert.deepEqual(writes, ["deep", "standard"]);
+
+  // Start-collapsed is a local preference: clicking the second switch button
+  // toggles the stored value without touching the backend contract.
+  assert.equal(getDefaultCollapsed(), false);
+  await act(async () => buttons()[3].click());
+  assert.equal(getDefaultCollapsed(), true);
+  await act(async () => buttons()[2].click());
+  assert.equal(getDefaultCollapsed(), false);
 
   backend = { ...backend, sessionExperience: undefined };
   await act(async () => reload());
