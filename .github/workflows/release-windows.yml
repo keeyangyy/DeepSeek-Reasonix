@@ -8,13 +8,17 @@ name: Release Windows
 # secrets; none of that applies here, and release-stable-trigger.yml is guarded
 # off in this repository so upstream tags cannot dispatch it.
 #
-# Tag convention: v1.38.NN, where 1.38 is the upstream baseline the fork tracks
-# and NN is the fork's own increment. Three numeric segments are required: the
-# NSIS installer builds VIProductVersion from `${version}.0` (see
+# Tag convention: v1.38.NN, or the pre-release form v1.38.NN-beta.M, where 1.38
+# is the upstream baseline the fork tracks and NN is the fork's own increment.
+# Three numeric segments are required: the NSIS installer builds
+# VIProductVersion from `${version}.0` (see
 # desktop/build/windows/installer/project.nsi), so a four-segment tag such as
 # v1.38.2.1 would produce an invalid five-segment version and fail the build.
+# The -beta.M suffix is stripped before it reaches NSIS (scripts/desktop-build.sh
+# does numver="${numver%%-*}"), so v1.38.54-beta.1 builds as the valid 1.38.54.
 #
 #   git tag v1.38.21 && git push origin v1.38.21
+#   git tag v1.38.54-beta.1 && git push origin v1.38.54-beta.1
 #
 # Produces a GitHub Release with the portable archive and the NSIS installer.
 
@@ -58,8 +62,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::tag must be vMAJOR.MINOR.PATCH with numeric segments, got: $RELEASE_TAG" >&2
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+            echo "::error::tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-beta.N, got: $RELEASE_TAG" >&2
             echo "::error::four-segment tags (e.g. v1.38.2.1) break the NSIS installer build" >&2
             exit 1
           fi
