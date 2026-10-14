@@ -62,6 +62,18 @@ globalThis.MouseEvent = dom.window.MouseEvent;
 globalThis.localStorage = dom.window.localStorage;
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+let nextFrameId = 0;
+const pendingFrames = new Map<number, FrameRequestCallback>();
+const holdFrame = (callback: FrameRequestCallback) => {
+  const id = ++nextFrameId;
+  pendingFrames.set(id, callback);
+  return id;
+};
+const cancelHeldFrame = (id: number) => { pendingFrames.delete(id); };
+dom.window.requestAnimationFrame = holdFrame;
+dom.window.cancelAnimationFrame = cancelHeldFrame;
+globalThis.requestAnimationFrame = holdFrame;
+globalThis.cancelAnimationFrame = cancelHeldFrame;
 
 const tab: TabMeta = {
   id: "tab-repro",
@@ -109,8 +121,13 @@ let historyStarted = false;
 
 window.runtime = {
   EventsOn: (name: string, callback: (...data: unknown[]) => void) => {
-    if (name === "agent:event") eventHandlers.push(callback as (event: WireEvent) => void);
-    return () => {};
+    if (name !== "agent:event") return () => {};
+    const handler = callback as (event: WireEvent) => void;
+    eventHandlers.push(handler);
+    return () => {
+      const index = eventHandlers.indexOf(handler);
+      if (index >= 0) eventHandlers.splice(index, 1);
+    };
   },
   BrowserOpenURL: () => {},
 };
@@ -157,35 +174,60 @@ const fire = async (event: WireEvent) => {
     await flushPromises();
   });
 };
+const flushPendingFrames = async () => {
+  const callbacks = [...pendingFrames.values()];
+  pendingFrames.clear();
+  await act(async () => {
+    callbacks.forEach((callback) => callback(0));
+    await flushPromises();
+  });
+};
 const assistants = () =>
   (controller?.state.items ?? []).filter((item) => item.kind === "assistant");
 
-// 一轮开始，并流出一部分（live 侧文本仍是"半截"）
+// 一轮开始，并挂起正文帧；历史页稍后返回较旧文本。
 // 后端在采样前就铸好这条消息的 id，并随 begin 事件下发 —— live 行必须带上它
 await fire({ kind: "turn_started", tabId: tab.id } as WireEvent);
-await fire({ kind: "stream_attempt", tabId: tab.id, streamAttempt: { id: "sa-1", action: "begin", messageID: "msg-1" } } as WireEvent);
-await fire({ kind: "text", tabId: tab.id, text: "hel" } as WireEvent);
+await fire({ kind: "stream_attempt", tabId: tab.id, streamAttempt: { id: "sa-1", action: "begin", messageId: "msg-1" } } as WireEvent);
+await fire({ kind: "text", tabId: tab.id, text: "hello live suffix" } as WireEvent);
 ok(assistants().length === 1, "流式期间只有一条 assistant 行");
+ok(pendingFrames.size > 0, "正文增量仍挂在尚未刷新的动画帧中");
+ok(assistants()[0]?.messageID === "msg-1", "live assistant carries the backend message identity");
 
-// 切走再切回：页在 live 之后到达，且页里是这一轮的**完整版本**
+// 切走再切回：页在 live 之后到达，但文本比 queued live delta 更旧。
+const mutationBeforePage = controller?.state.historyMutation.seq ?? 0;
 historyGate.resolve(
   historySliceFromMessages(
     tab.id,
     [
       { role: "user", content: "write hello" },
-      { role: "assistant", id: "msg-1", content: "hello world" },
+      { role: "assistant", id: "msg-1", content: "hello" },
     ],
     { cursor: "", turns: 1 },
     { revision: 1, digest: "digest-v1" },
   ),
 );
-await waitFor("hydration completion", () => controller?.state.hydrating === false);
+await waitFor("hydration completion", () =>
+  controller?.state.hydrating === false && controller.state.historyMutation.seq > mutationBeforePage,
+);
 
-// 核心断言：同一轮的 assistant 只应存在一份（现状预期为红）
+// The page owns the completed message; any queued frame must not recreate the
+// removed live shell at the tail.
 ok(
   assistants().length === 1,
   `同一轮 assistant 只应存在一份（实际 ${assistants().length} 份）`,
 );
+ok(controller?.state.currentAssistant === assistants()[0]?.id,
+  "the active stream pointer is rebound to the page row with the same message ID");
+ok(assistants()[0]?.text === "hello live suffix", "a stale page does not discard the live suffix");
+await flushPendingFrames();
+ok(assistants().length === 1, "flushing the old frame does not recreate a second assistant row");
+
+await fire({ kind: "text", tabId: tab.id, text: "!" } as WireEvent);
+await flushPendingFrames();
+await fire({ kind: "turn_done", tabId: tab.id } as WireEvent);
+ok(assistants().length === 1, "later text stays on the page-owned assistant row");
+ok(assistants()[0]?.text === "hello live suffix!", "later text appends to the preserved live suffix");
 ok(
   (controller?.state.items ?? []).some((item) => item.kind === "user"),
   "页里的 user 行应保留",

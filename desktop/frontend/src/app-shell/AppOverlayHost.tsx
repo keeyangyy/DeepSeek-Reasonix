@@ -1,7 +1,6 @@
-import { lazy, Suspense, type ComponentProps } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentProps } from "react";
 import { RemoteHostKeyDialog } from "../components/RemoteHostKeyDialog";
 import { RemoteSecretDialog } from "../components/RemoteSecretDialog";
-import { ShortcutsCheatsheet } from "../components/ShortcutsCheatsheet";
 import { StartupSplash } from "../components/StartupSplash";
 import { ManagementSurface } from "../components/ManagementSurface";
 
@@ -10,7 +9,9 @@ const SessionRecoveryVersionsHost = lazy(() => import("../components/SessionReco
 const loadSettingsPage = () => import("../components/SettingsPanelEntry").then((module) => ({ default: module.SettingsPanel }));
 const loadTrashPage = () => import("../components/TrashPage").then((module) => ({ default: module.TrashPage }));
 const loadAutomationPage = () => import("../custom/features/heartbeat/HeartbeatPanel").then((module) => ({ default: module.HeartbeatView }));
+const loadShortcutsCheatsheet = () => import("../components/ShortcutsCheatsheet").then((module) => ({ default: module.ShortcutsCheatsheet }));
 type LoadedProps<T> = T extends () => Promise<{ default: React.ComponentType<infer Props> }> ? Props : never;
+const ShortcutsCheatsheet = lazy(loadShortcutsCheatsheet);
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
 const TranscriptSelectionMenu = lazy(() => import("../components/TranscriptSelectionMenu").then((module) => ({ default: module.TranscriptSelectionMenu })));
 const WorktreeMergeModal = lazy(() => import("../components/WorktreeMergeModal").then((module) => ({ default: module.WorktreeMergeModal })));
@@ -27,11 +28,20 @@ export type AppOverlayHostProps = {
   trash?: Region<LoadedProps<typeof loadTrashPage>, "active">;
   automation?: Region<LoadedProps<typeof loadAutomationPage>, "active">;
   palette?: Region<ComponentProps<typeof CommandPalette>, "open" | "items" | "placeholder" | "emptyText">;
-  shortcuts: Region<ComponentProps<typeof ShortcutsCheatsheet>, "open" | "platform" | "t">;
+  shortcuts: Region<LoadedProps<typeof loadShortcutsCheatsheet>, "open" | "platform" | "t">;
   startup?: Region<ComponentProps<typeof StartupSplash>, "hold">;
   selection: Region<ComponentProps<typeof TranscriptSelectionMenu>, "enabled" | "resetKey">;
   worktree?: Region<ComponentProps<typeof WorktreeMergeModal>, "tabId" | "isOpen">;
 };
+
+function ShortcutsCheatsheetRegion({ shortcuts }: { shortcuts: AppOverlayHostProps["shortcuts"] }) {
+  const [hasOpened, setHasOpened] = useState(shortcuts.view.open);
+  useEffect(() => {
+    if (shortcuts.view.open) setHasOpened(true);
+  }, [shortcuts.view.open]);
+  if (!hasOpened) return null;
+  return <Suspense fallback={null}><ShortcutsCheatsheet {...shortcuts.view} {...shortcuts.commands} /></Suspense>;
+}
 
 /** Presentation-only overlay region. Async ownership stays in feature owners. */
 export function AppOverlayHost({ history, recovery, settings, trash, automation, palette, shortcuts, startup, selection, worktree }: AppOverlayHostProps) {
@@ -48,7 +58,7 @@ export function AppOverlayHost({ history, recovery, settings, trash, automation,
       <RemoteHostKeyDialog />
       <RemoteSecretDialog />
       {palette && <Suspense fallback={null}><CommandPalette {...palette.view} {...palette.commands} /></Suspense>}
-      <ShortcutsCheatsheet {...shortcuts.view} {...shortcuts.commands} />
+      <ShortcutsCheatsheetRegion shortcuts={shortcuts} />
       {startup && <StartupSplash {...startup.view} {...startup.commands} />}
       <Suspense fallback={null}><TranscriptSelectionMenu {...selection.view} {...selection.commands} /></Suspense>
       {worktree && <Suspense fallback={null}><WorktreeMergeModal {...worktree.view} {...worktree.commands} /></Suspense>}

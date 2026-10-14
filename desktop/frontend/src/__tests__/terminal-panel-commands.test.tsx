@@ -38,8 +38,7 @@ const key = (shiftKey = false) => document.dispatchEvent(new KeyboardEvent("keyd
 try {
   useLayoutStore.getState().setTerminalPanelOpen(false);
   await paint(true);
-  const terminalButton = document.querySelector(".lucide-terminal")?.closest("button")
-    ?? [...document.querySelectorAll("button")].find(button => button.getAttribute("aria-label") === "Terminal");
+  const terminalButton = document.querySelector<HTMLButtonElement>('button[aria-pressed]');
   assert.ok(terminalButton);
   assert.equal(terminalButton.disabled, true);
   assert.equal(document.querySelector(".terminal-drawer")?.childElementCount, 0, "remote surface cannot mount a warm local TerminalPanel");
