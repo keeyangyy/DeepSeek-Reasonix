@@ -296,7 +296,19 @@ for (const path of localeChunks) {
   // ceiling for cross-platform CI.
   // Search assignment copy adds 239 / 231 B over main-v2 (63147 / 63920 B).
   // Measured result: 63386 / 64151 B; retain bounded cross-platform headroom.
-  const budget = name.startsWith("zh-TW-") ? 62.8 * 1024 : 62.1 * 1024;
+  // The process-fold policy adds six short labels per dialect (the folding-mode
+  // switch and its hints); the measured chunks move to 62.2 KiB zh and
+  // 62.9 KiB zh-TW, so retain the next one-decimal ceiling for each dialect.
+  // The trash turns filter adds four short labels per dialect; the bulk-action
+  // bar adds seven more (select-all/clear, {n}-selected count, restore/delete
+  // selected, row aria). zh measures 63827 B (62.331 KiB) and zh-TW 64622 B
+  // (63.107 KiB); retain the next one-decimal ceiling for each dialect.
+  // The sub-agent status strip adds two labels per dialect (running count,
+  // overflow count) plus the fold header's sub-agent count; the measured chunks
+  // move just past the previous ceiling, so retain the next one-decimal one.
+  // The folded-work index setting adds three labels per dialect (the switch
+  // and its hints); measured chunks move past the prior ceilings again.
+  const budget = name.startsWith("zh-TW-") ? 63.5 * 1024 : 62.7 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -414,6 +426,36 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // The main-v2 merge of the default-collapsed preference and the fork-session
 // flow adds ~0.7 KiB to the initial path (measured 2401.2 KiB on CI). Keep
 // the raise explicit and bounded, with headroom for toolchain/hash drift.
-const rawInitialBudgetKiB = 2_402.0;
+// The process-fold policy (three-mode fold switch, its own fold-state module,
+// and the localized labels) adds 3.1 KiB over the 2405.2 KiB baseline; the
+// merged payload measures 2408.3 KiB. Retain 0.2 KiB build headroom.
+// The compaction-card anchor module (hydrated restore-at-original-spot for
+// compaction rows) measures 2409.2 KiB on the initial path; retain 0.2 KiB
+// build headroom without widening the gzip gate.
+// 2026-09-22: scheduled dark-theme mode (themeSchedule.ts) + appearance UI +
+// i18n keys add 1.6 KiB on the initial path (2411.6 KiB measured); widen to
+// 2412 with the gzip gate untouched.
+// 2026-09-23: session-switch diagnostics + switch parallelism add 1.4 KiB
+// (2413.4 KiB measured); widen to 2414 with the gzip gate untouched.
+// 2026-09-23: A1+A2-a history id/turnId plumbing add 0.8 KiB (2414.2 KiB
+// measured); widen to 2415 with the gzip gate untouched.
+// 2026-09-26: the trash turns filter and the bulk-action selection bar add
+// 0.9 KiB (2415.0 KiB measured); widen to 2416 with the gzip gate untouched.
+// 2026-09-27: the sidebar light/dark quick switch adds 8.5 KiB on the initial
+// path (2423.5 KiB measured) — the switch component, its subscription hook and
+// the theme override logic are the bulk; widen to 2424.
+// 2026-09-29: the sub-agent status strip adds the sidecar polling hook, the
+// strip component and its CSS, and the fold-header sub-agent count (2427.9 KiB
+// measured); widen to 2429.
+// 2026-10-07: the sidebar permanent-delete entry — the row button, the item in
+// both context menus, the purge branch on both archive entry points, and its
+// labels — adds 0.6 KiB (2429.6 KiB measured); widen to 2430.
+// 2026-10-11: transcript row ordering and receipt identity add 0.3 KiB
+// (2430.5 KiB measured; HEAD baseline 2430.2 KiB). Widen the raw ceiling to
+// 2431; all gzip budgets remain unchanged.
+// Same-path generation fences, unique virtual-block keys, the live-tail
+// placeholder fix, Ask counts, and compact topic actions measure 2432.148 KiB
+// locally. Retain 0.452 KiB of toolchain headroom; gzip/chunk budgets stay put.
+const rawInitialBudgetKiB = 2_432.6;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
