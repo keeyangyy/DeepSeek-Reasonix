@@ -182,19 +182,10 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 		if strings.TrimSpace(item.Prompt) == "" {
 			return "", fmt.Errorf("task %d: prompt is required", i+1)
 		}
-		// Fleet writers without write_paths claim the whole workspace so the
-		// preflight can detect multi-writer collisions before anything starts.
-		forceBackgroundClaim := !item.ReadOnly
+		// Fleet writers without write_paths claim nothing（推断式 whole-workspace 会让此类 writer 互斥串行）。
 		spec, err := f.taskTool.buildTaskSpec(ctx, item.Prompt, item.Description, item.Profile, item.WritePaths, item.Tools, item.MaxSteps, item.Model, item.Effort, "", "", false, item.ReadOnly)
 		if err != nil {
 			return "", fmt.Errorf("task %d: %w", i+1, err)
-		}
-		if forceBackgroundClaim && !spec.Grant.ReadOnly && spec.Grant.WritePaths.Empty() {
-			whole, werr := WholeWorkspaceWriteClaim(f.taskTool.workspaceRoot)
-			if werr != nil {
-				return "", fmt.Errorf("task %d: %w", i+1, werr)
-			}
-			spec.Grant.WritePaths = whole
 		}
 		spec.Sched.Nested = SubagentDepth(ctx) > 0
 		spec.Sched.RunInBackground = false // fleet owns backgrounding

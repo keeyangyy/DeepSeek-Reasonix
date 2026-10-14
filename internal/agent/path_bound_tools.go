@@ -242,8 +242,11 @@ func parentWriteGuardTarget(name string) bool {
 }
 
 // parentWriteReservation builds the WritePathSet a parent tool must hold while
-// executing. Path-aware built-ins reserve concrete targets; bash/MCP reserve
-// the whole workspace (targets cannot be judged reliably).
+// executing. Only path-aware built-ins reserve concrete targets. Bash, MCP, and
+// other opaque writers reserve nothing: their targets cannot be judged reliably,
+// and reserving the whole workspace made every shell command (even a proven
+// read-only one the classifier did not recognize) serialize against any running
+// background writer. Scope is deliberately limited to declared paths.
 func parentWriteReservation(workDir, toolName string, args json.RawMessage) (WritePathSet, error) {
 	if pathBoundWriterNames[toolName] {
 		paths, err := extractWritePathsFromArgs(toolName, workDir, args)
@@ -269,8 +272,9 @@ func parentWriteReservation(workDir, toolName string, args json.RawMessage) (Wri
 		}
 		return set, nil
 	}
-	// Bash and MCP/custom writers.
-	return WholeWorkspaceWriteClaim(workDir)
+	// Bash and MCP/custom writers declare no claim: their targets are not
+	// statically knowable, so we do not guess a whole-workspace reservation.
+	return WritePathSet{}, nil
 }
 
 func extractWritePathsFromArgs(toolName, workDir string, args json.RawMessage) ([]string, error) {

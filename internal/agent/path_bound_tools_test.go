@@ -267,21 +267,24 @@ func TestAgentReservesParentWriteBeforePreToolUse(t *testing.T) {
 	}
 }
 
-func TestParentWriteReservationBashClaimsWholeWorkspace(t *testing.T) {
+// TestParentWriteReservationOpaqueWritersTakeNoClaim pins the narrowed scope:
+// bash and MCP targets are not statically knowable, so they reserve nothing and
+// never serialize against other writers. Only declared paths are protected.
+func TestParentWriteReservationOpaqueWritersTakeNoClaim(t *testing.T) {
 	root := t.TempDir()
 	claim, err := parentWriteReservation(root, "bash", json.RawMessage(`{"command":"echo hi"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !claim.WholeWorkspace {
-		t.Fatalf("bash reservation must claim whole workspace, got %+v", claim)
+	if !claim.Empty() {
+		t.Fatalf("bash reservation must take no workspace claim, got %+v", claim)
 	}
 	mcp, err := parentWriteReservation(root, "mcp__srv__write", json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !mcp.WholeWorkspace {
-		t.Fatalf("MCP writer reservation must claim whole workspace")
+	if !mcp.Empty() {
+		t.Fatalf("MCP writer reservation must take no workspace claim, got %+v", mcp)
 	}
 }
 
