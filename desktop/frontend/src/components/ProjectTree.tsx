@@ -1202,6 +1202,7 @@ export function ProjectTree({
               onChange={(event) => setTopicDraft(event.target.value)}
               onFocus={(event) => event.target.select()}
               onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                 if (event.key === "Enter") void commitRenameTopic(topicId);
                 if (event.key === "Escape") setEditingTopic(null);
               }}
@@ -1691,6 +1692,7 @@ export function ProjectTree({
               value={projectDraft}
               onChange={(event) => setProjectDraft(event.target.value)}
               onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                 if (event.key === "Enter") void commitRenameProject(projectRoot);
                 if (event.key === "Escape") setEditingProject(null);
               }}
