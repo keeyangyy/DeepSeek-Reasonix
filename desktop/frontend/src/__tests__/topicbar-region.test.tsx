@@ -54,6 +54,13 @@ try {
     input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   });
   assert.equal(calls.at(-1), "draft:Renamed A", "DOM event is converted synchronously to a draft value");
+  const composingEnter = new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true });
+  const safariEnter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  Object.defineProperty(safariEnter, "keyCode", { value: 229 });
+  const beforeComposition = calls.length;
+  await act(async () => { input.dispatchEvent(composingEnter); input.dispatchEvent(safariEnter); });
+  assert.equal(calls.length, beforeComposition, "IME confirmation does not commit the title");
+  assert.equal(composingEnter.defaultPrevented, false, "IME keeps Enter for candidate confirmation");
   const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
   const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
   await act(async () => { input.dispatchEvent(enter); input.dispatchEvent(escape); });
