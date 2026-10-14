@@ -361,6 +361,41 @@ export function duplicateItemRows(items: readonly SignatureItem[]): SignatureIte
   return dupes;
 }
 
+// Arbitrary-position duplicate detection between two item lists (multiset
+// match). Unlike duplicateLiveItemIds, which only matches a page suffix
+// against a live prefix, this detects duplicates regardless of position.
+// The returned ids belong to the second list (b).
+export function findDuplicateItemIds(a: readonly SignatureItem[], b: readonly SignatureItem[]): string[] {
+  const counts = new Map<string, number>();
+  for (const item of a) {
+    const signature = itemSignature(item);
+    counts.set(signature, (counts.get(signature) ?? 0) + 1);
+  }
+  const dupes: string[] = [];
+  for (const item of b) {
+    const signature = itemSignature(item);
+    const remaining = counts.get(signature) ?? 0;
+    if (remaining > 0) {
+      counts.set(signature, remaining - 1);
+      dupes.push(item.id);
+    }
+  }
+  return dupes;
+}
+
+// Assert that an item list contains no duplicate IDs. Throws so duplicate-
+// render regressions are caught during development and CI instead of
+// surfacing as user-visible double rows.
+export function assertNoDuplicateItems(items: readonly SignatureItem[], label: string): void {
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (seen.has(item.id)) {
+      throw new Error(`[${label}] duplicate item id: ${item.id} (kind=${item.kind})`);
+    }
+    seen.add(item.id);
+  }
+}
+
 // The assistant row owning the page's in-flight turn: walk the tail for the
 // newest unfinished tool row and take the nearest assistant row before it. A
 // tail that already starts a newer turn (user/assistant) has no owner.
