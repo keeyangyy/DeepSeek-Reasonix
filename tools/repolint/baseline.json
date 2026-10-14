@@ -1270,21 +1270,18 @@
     "internal/recovery/decision_test.go": {
       "essay": 1
     },
-    "internal/recovery/gate_decision.go": {
+    "internal/recovery/gate.go": {
       "complexity": 2,
-      "essay": 4
+      "essay": 4,
+      "file-size": 685
     },
     "internal/recovery/gate_test.go": {
       "test-file-size": 746
     },
     "internal/recovery/rules.go": {
-      "essay": 1
-    },
-    "internal/recovery/rules_command_risk.go": {
-      "complexity": 15
-    },
-    "internal/recovery/rules_command_safe.go": {
-      "complexity": 4
+      "complexity": 19,
+      "essay": 1,
+      "file-size": 211
     },
     "internal/remote/auth.go": {
       "essay": 1
@@ -1502,6 +1499,9 @@
     },
     "sdk/go/wire.go": {
       "essay": 1
+    },
+    "workers/crash-report/src/index.ts": {
+      "file-size": 874
     }
   }
 }
