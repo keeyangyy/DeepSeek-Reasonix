@@ -103,12 +103,14 @@ function cachedCompactions<T extends AnchorRowLike>(
 }
 
 // Insert cards before their anchor user row (Nth from the end), keeping cache
-// order within one anchor; cards without a usable anchor append at the end.
-// Exception: usersAfter === 0 (the card sat at the stream end when compaction
-// finished and no user row followed) means every rebuilt history row is
-// post-compaction content — the card belongs BEFORE that history (top), not
-// after it. Rebuilds that load older pages above keep working via the anchor
-// refresh on user append.
+// order within one anchor; cards whose anchor no longer names the same user row
+// append at the end.
+// Exception: usersAfter === 0 (nothing followed the card) or usersAfter >
+// userCount (the anchored turns scrolled past the page window in a long
+// session) means every rebuilt history row is post-compaction content — the
+// card belongs BEFORE that history (top), not after it (the old tail fallback
+// dumped it at the stream bottom). Rebuilds that load older pages above keep
+// working via the anchor refresh on user append.
 function insertCompactionsAtAnchors<T extends AnchorRowLike>(
   nextItems: T[],
   cards: readonly CompactionCacheEntry<T>[],
@@ -121,9 +123,14 @@ function insertCompactionsAtAnchors<T extends AnchorRowLike>(
   const head: T[] = [];
   const tail: T[] = [];
   for (const entry of cards) {
+    // A card is anchored to the user rows that FOLLOW it. When that count
+    // exceeds the rebuild's user count the anchored turns scrolled past the page
+    // window (long session: the page is a newer suffix), so the card's folded
+    // content precedes every rebuilt row — it belongs BEFORE them (head), not
+    // after them (tail), which dumped it at the stream bottom. Same for
+    // usersAfter === 0 (nothing followed the card).
     if (entry.usersAfter <= 0 || entry.usersAfter > userCount) {
-      if (entry.usersAfter === 0) head.push(entry.card);
-      else tail.push(entry.card);
+      head.push(entry.card);
       continue;
     }
     const bucket = byAnchor.get(entry.usersAfter);
