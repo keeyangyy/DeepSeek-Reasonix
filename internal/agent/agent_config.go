@@ -33,4 +33,8 @@ type agentConfig struct {
 	recentKeep             int
 	archiveDir             string
 	legacyAnchorSafetyGate bool
+	// foldIndex gates the folded-work index and recall. nil means enabled,
+	// matching the config's own default so a host that never passes a value
+	// keeps the feature on.
+	foldIndex *bool
 }

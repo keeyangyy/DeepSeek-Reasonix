@@ -253,6 +253,7 @@ type TaskTool struct {
 	maxSteps                      int
 	contextWindow                 int
 	compactRatio                  float64
+	foldIndex                     *bool
 	recentKeep                    int
 	temperature                   float64
 	archiveDir                    string
@@ -313,6 +314,7 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		contextWindow:    opts.ContextWindow,
 		recentKeep:       opts.RecentKeep,
 		compactRatio:     opts.CompactRatio,
+		foldIndex:        opts.FoldIndex,
 		temperature:      opts.Temperature,
 		archiveDir:       opts.ArchiveDir,
 		keepPolicy:       opts.KeepPolicy,

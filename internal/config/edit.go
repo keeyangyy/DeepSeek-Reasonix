@@ -451,6 +451,13 @@ func (c *Config) SetColdResumePrune(enabled bool) error {
 	return nil
 }
 
+// SetFoldIndex toggles the folded-work index on compaction summaries (and the
+// recall tool that reads it).
+func (c *Config) SetFoldIndex(enabled bool) error {
+	c.Agent.FoldIndex = &enabled
+	return nil
+}
+
 // SetCompactRatio updates the sole user-controlled automatic compaction
 // threshold. Allowed range is CompactRatioMin–CompactRatioMax; presets are
 // 0.70 / 0.80 / 0.85.

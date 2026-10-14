@@ -46,6 +46,9 @@ func (a *Agent) installMaintenanceProjection(in maintenanceInstall) (bool, error
 	next.SchemaVersion = compactionStateSchemaCurrent
 	next.TranscriptVersion = in.transcriptVersion
 	next.Generation++
+	// Free maintenance is a successful generation change: the recall budget
+	// starts fresh, same as after a summary commit.
+	next.Recall = RecallLedger{Generation: next.Generation}
 	next.PromptCacheKey = a.currentPromptCacheKey()
 	next.Projection = ContextProjection{
 		Messages: projected, TranscriptVersion: in.transcriptVersion, ProjectionVersion: projectionVersion,

@@ -71,9 +71,11 @@ func (a *Agent) summaryProjectionState(commit summaryProjectionCommit) Compactio
 	}
 	// LastReceipt is authoritative; do not mirror last_trigger/last_mode/token
 	// counters or top-level blocked_* fields (stripped again on save).
+	// A successful commit opens a new generation and a fresh recall budget.
 	return CompactionState{
 		SchemaVersion: compactionStateSchemaCurrent, TranscriptVersion: commit.transcriptVersion,
 		Generation: commit.generation + 1, PromptCacheKey: a.currentPromptCacheKey(),
+		Recall: RecallLedger{Generation: commit.generation + 1},
 		Projection: ContextProjection{
 			Messages: commit.projected, TranscriptVersion: commit.transcriptVersion,
 			ProjectionVersion: projectionVersion, CoveredCount: commit.covered, CoveredPrefixHash: coveredHash,

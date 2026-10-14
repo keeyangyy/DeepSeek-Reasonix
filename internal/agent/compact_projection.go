@@ -277,6 +277,17 @@ func (a *Agent) compressVisibleRange(
 		a.emitCompactionAborted(trigger, "summary failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
+	// Same product-side index step as the automatic path: a digest from this
+	// fold is addressed exactly like one the host installed on its own.
+	if a.foldIndexEnabled() {
+		a.sess.compactionMu.Lock()
+		stateSnapshot := a.sess.compactionState
+		a.sess.compactionMu.Unlock()
+		region, regionStart, keptAt := compressFoldIndexRegion(snap.visible, plan)
+		if region != nil {
+			summary = a.foldIndexAttach(summary, region, snap.visible, regionStart, keptAt, snap.canonical, stateSnapshot, prepared.fold)
+		}
+	}
 	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
@@ -296,7 +307,10 @@ func (a *Agent) compressVisibleRange(
 	result.Messages = len(plan.fold)
 	result.ProjectionTokens = projectionTokens
 	result.Mode = res.Mode
-	if projectionTokens >= result.SourceTokens {
+	// The acceptance comparison ignores the folded-work index on both sides,
+	// same as the automatic path: index churn alone must not count as the
+	// saving that justifies a fold.
+	if a.estimatedVisibleRequestTokens(stripFoldIndexes(projection)) >= a.estimatedVisibleRequestTokens(stripFoldIndexes(snap.visible)) {
 		if pinnedCheckpoint {
 			result.Reason = "pinned-context-too-large: checkpoint prevents compaction from reducing context"
 			a.emitCompactionTelemetry(tele)
@@ -635,7 +649,18 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		a.emitCompactionAborted(trigger, "summarize failed: "+err.Error())
 		return CompactionNoop, err
 	}
-	summary, err := a.interceptCompactionComplete(ctx, res.Text)
+	// The folded-work index is attached before the completion hook so the hook
+	// (and everything downstream) sees the digest the way recall will address
+	// it. A disabled index leaves the digest untouched.
+	summary := res.Text
+	if a.foldIndexEnabled() {
+		region := msgs[head:start]
+		keptAt := func(i int) bool {
+			return isSessionContextMessage(region[i]) && head+i == latestContext
+		}
+		summary = a.foldIndexAttach(summary, region, msgs, head, keptAt, canonical, stateSnapshot, fold)
+	}
+	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -651,7 +676,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		projMsgs = append(projMsgs, projectionMessagesPreservingPinnedContext(bodySuffix)...)
 	}
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
-	projMsgs, spliced, projTokens, err := a.preparePinnedCheckpointCandidate(trigger, projMsgs, canonical, covered, sourceTokens, &tele)
+	projMsgs, spliced, projTokens, err := a.preparePinnedCheckpointCandidate(trigger, projMsgs, canonical, msgs, covered, sourceTokens, &tele)
 	if err != nil {
 		a.emitCompactionAborted(trigger, "pinned checkpoint failed: "+err.Error())
 		return CompactionNoop, err
@@ -682,7 +707,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 
 func (a *Agent) preparePinnedCheckpointCandidate(
 	trigger string,
-	projection, canonical []provider.Message,
+	projection, canonical, sourceView []provider.Message,
 	covered, sourceTokens int,
 	tele *CompactionTelemetry,
 ) ([]provider.Message, []provider.Message, int, error) {
@@ -694,7 +719,12 @@ func (a *Agent) preparePinnedCheckpointCandidate(
 	projectionTokens := a.estimatedVisibleRequestTokens(spliced)
 	tele.ProjectionTokens = projectionTokens
 	a.emitCompactionTelemetry(*tele)
-	if err := a.acceptCheckpointCandidate(trigger, sourceTokens, projectionTokens); err != nil {
+	// Acceptance ignores the folded-work index on both sides: trimming an
+	// index is not a real saving, and counting it would let an unchanged view
+	// pass "the candidate must be smaller" on pure index churn.
+	if err := a.acceptCheckpointCandidate(trigger,
+		a.estimatedVisibleRequestTokens(stripFoldIndexes(sourceView)),
+		a.estimatedVisibleRequestTokens(stripFoldIndexes(spliced))); err != nil {
 		if pinnedCheckpoint {
 			return nil, nil, 0, fmt.Errorf("pinned-context-too-large: checkpoint prevents compaction acceptance: %w", err)
 		}
