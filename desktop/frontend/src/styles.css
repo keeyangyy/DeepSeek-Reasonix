@@ -30984,6 +30984,14 @@ body > .mermaid-diagram--fullscreen {
   color: var(--fg);
 }
 
+.sidebar--workbench .project-tree__topic-action--delete:hover,
+.app--classic .project-tree__topic-action--delete:hover,
+.sidebar--workbench .project-tree__topic-action--delete-armed,
+.app--classic .project-tree__topic-action--delete-armed {
+  color: var(--danger, #e5484d);
+  border-color: color-mix(in srgb, var(--danger, #e5484d) 45%, transparent);
+}
+
 .sidebar--workbench .project-tree__topic-action:disabled,
 .sidebar--workbench .project-tree__topic-action:disabled:hover,
 .app--classic .project-tree__topic-action:disabled,

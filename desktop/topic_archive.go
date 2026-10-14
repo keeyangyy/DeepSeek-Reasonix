@@ -31,6 +31,13 @@ func (a *App) TrashTopic(topicID string) error {
 	return friendlySessionFileError(a.trashTopic(topicID))
 }
 
+// PurgeTopic permanently deletes a topic and every session it owns, without
+// publishing a recoverable trash entry. Active runtime work is refused exactly
+// as archiving refuses it.
+func (a *App) PurgeTopic(topicID string) error {
+	return friendlySessionFileError(a.removeTopic(topicID, removalPermanent))
+}
+
 func (a *App) topicHasActiveRuntimeWork(topicID string) bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -44,7 +51,13 @@ func (a *App) topicHasActiveRuntimeWork(topicID string) bool {
 	return false
 }
 
-func (a *App) trashTopic(topicID string) (retErr error) {
+func (a *App) trashTopic(topicID string) error {
+	return a.removeTopic(topicID, removalToTrash)
+}
+
+// removeTopic retires a topic and its sessions according to mode: published to
+// the local trash, or permanently removed in place.
+func (a *App) removeTopic(topicID string, mode removalMode) (retErr error) {
 	topicID = strings.TrimSpace(topicID)
 	if topicID == "" {
 		return fmt.Errorf("topicID is required")
@@ -59,7 +72,7 @@ func (a *App) trashTopic(topicID string) (retErr error) {
 		slog.Debug("desktop: topic archive timing", "outcome", outcome, "phase", trace.phase,
 			"total_ms", time.Since(started).Milliseconds(), "target_count", trace.targetCount, "runtime_count", trace.runtimeCount)
 	}()
-	fallback, changedDirs, err := a.commitTopicArchive(topicID, &trace)
+	fallback, changedDirs, err := a.commitTopicArchive(topicID, mode, &trace)
 	if err != nil {
 		return err
 	}
@@ -99,7 +112,7 @@ func (a *App) trashTopic(topicID string) (retErr error) {
 	return nil
 }
 
-func (a *App) commitTopicArchive(topicID string, trace *topicArchiveTrace) (fallbackRuntimeTarget, []string, error) {
+func (a *App) commitTopicArchive(topicID string, mode removalMode, trace *topicArchiveTrace) (fallbackRuntimeTarget, []string, error) {
 	trace.phase = "runtime_lock"
 	releaseRuntime, ok := a.tryLockRuntimeMutation("trash-topic")
 	if !ok {
@@ -138,7 +151,7 @@ func (a *App) commitTopicArchive(topicID string, trace *topicArchiveTrace) (fall
 	}
 	defer ownership.release()
 	trace.phase = "mark_cleanup_pending"
-	rollbackMarkers, err := markTopicArchiveCleanupPending(topicID, targets)
+	rollbackMarkers, err := markTopicArchiveCleanupPending(topicID, targets, mode)
 	if err != nil {
 		ownership.rollback()
 		return fallbackRuntimeTarget{}, nil, err
@@ -174,23 +187,30 @@ func (a *App) commitTopicArchive(topicID string, trace *topicArchiveTrace) (fall
 		a.removeSessionCatalogPath(target.sessionPath, "topic_archived")
 		if timedOutTargets[i] {
 			guard := ownership.take(target.sessionPath)
-			go delayedDesktopTopicTrash(target.dir, target.sessionPath, target.key, guard, destroys)
+			if mode == removalPermanent {
+				go delayedDesktopTopicRemove(target.sessionPath, guard, destroys)
+			} else {
+				go delayedDesktopTopicTrash(target.dir, target.sessionPath, target.key, guard, destroys)
+			}
 			continue
 		}
 		trace.phase = "move_artifacts"
+		if mode == removalPermanent {
+			trace.phase = "delete_artifacts"
+		}
 		var err error
 		if hook := topicArchiveCleanupHookForTest; hook != nil {
 			err = hook()
 		}
 		if err == nil {
-			err = trashSessionArtifactsWithGuard(target.dir, target.sessionPath, target.key, ownership.take(target.sessionPath))
+			err = removeSessionArtifactsWithGuardByMode(mode, target.dir, target.sessionPath, target.key, ownership.take(target.sessionPath))
 		}
 		finishDestroyHandles(destroys)
 		if err != nil {
 			// Cleanup-pending is the durable commit point. Once bindings have
-			// detached, report the archive as accepted and let startup
+			// detached, report the removal as accepted and let startup
 			// reconciliation finish any filesystem operation that could not.
-			slog.Warn("desktop: topic archive cleanup remains pending")
+			slog.Warn("desktop: topic cleanup remains pending")
 		}
 	}
 	trace.phase = "delete_topic_metadata"
@@ -202,8 +222,8 @@ func (a *App) commitTopicArchive(topicID string, trace *topicArchiveTrace) (fall
 	return fallback, changedDirs, nil
 }
 
-func markTopicArchiveCleanupPending(topicID string, targets []topicTrashTarget) (func(), error) {
-	if err := markTopicArchiveMetadataPending(topicID, targets); err != nil {
+func markTopicArchiveCleanupPending(topicID string, targets []topicTrashTarget, mode removalMode) (func(), error) {
+	if err := markTopicArchiveMetadataPending(topicID, targets, mode); err != nil {
 		return nil, err
 	}
 	marked := make([]string, 0, len(targets))
@@ -218,7 +238,7 @@ func markTopicArchiveCleanupPending(topicID string, targets []topicTrashTarget) 
 		}
 	}
 	for _, target := range targets {
-		if err := agent.MarkCleanupPending(target.sessionPath, "delete"); err != nil {
+		if err := agent.MarkCleanupPending(target.sessionPath, cleanupPendingOperation(mode)); err != nil {
 			rollback()
 			return rollback, err
 		}

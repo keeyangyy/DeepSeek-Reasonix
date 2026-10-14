@@ -19,6 +19,7 @@ import { projectTreeSessionArchiveTargetKey, projectTreeTopicArchiveTargetKey, p
 import { topicShortcutLabel, type TopicShortcutEntry } from "../lib/topicShortcuts";
 import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { Tooltip } from "./Tooltip";
+import { projectTreeRemovalButtons, projectTreeRemovalMenuItems, type ProjectTreeRemovalMode } from "./ProjectTreeTopicRemoval";
 import { WorktreeBadge } from "./WorktreeBadge";
 import { useProjectCreation } from "./useProjectCreation";
 import { useProjectTreeRuntimeProjection } from "../lib/useProjectTreeRuntimeProjection";
@@ -255,6 +256,7 @@ export function ProjectTree({
   const [isolatingProject, setIsolatingProject] = useState<string | null>(null);
   const [worktreeAvailability, setWorktreeAvailability] = useState<Record<string, { available: boolean; reason?: string }>>({});
   const [confirmArchiveTarget, setConfirmArchiveTarget] = useState<string | null>(null);
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<string | null>(null);
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<string | null>(null);
   const [dragProjectRoot, setDragProjectRoot] = useState<string | null>(null);
   const [dropProject, setDropProject] = useState<{ root: string; position: ProjectDropPosition } | null>(null);
@@ -282,13 +284,14 @@ export function ProjectTree({
     setMenuProject(null);
     setMenuPoint(null);
     setConfirmArchiveTarget(null);
+    setConfirmDeleteTarget(null);
     setConfirmRemoveProject(null);
     setWorkbenchHeaderMenu(null);
   }, []);
   const topicLoadSeqRef = useRef<Record<string, number>>({});
   const topicLoadErrorRef = useRef<Record<string, string>>({});
   const refreshRef = useRef<ProjectTreeRefresh>(async () => {});
-  const { trashingTopics, trashingSessions, currentArchiveTombstones, trashTopic, trashSession } = useProjectTreeArchiveController({
+  const { trashingTopics, trashingSessions, currentArchiveTombstones, trashTopic, trashSession, purgeTopic, purgeSession } = useProjectTreeArchiveController({
     treeRef, topicLoadSeqRef, topicPageStateRef, updateTopicPageState, refreshRef,
     optimisticallyRemoveTopic: (topicId) => setTree((current) => projectTreeWithoutTopic(current, topicId)),
     closeMenu, onTopicsChanged, showToast,
@@ -757,7 +760,14 @@ export function ProjectTree({
       setIsolatingProject(null);
     }
   };
-  const trashTopicAny = (topicId: string) => remoteSessionActions.remove(topicId, () => trashTopic(topicId));
+  const selectTopicRemoval = (mode: ProjectTreeRemovalMode, topicId: string, targetKey: string) => {
+    const purge = mode === "purge";
+    const armed = purge ? confirmDeleteTarget === targetKey : confirmArchiveTarget === targetKey;
+    const setArmed = purge ? setConfirmDeleteTarget : setConfirmArchiveTarget;
+    if (!armed) { setArmed(targetKey); return; }
+    setArmed(null);
+    void remoteSessionActions.remove(topicId, () => (purge ? purgeTopic(topicId) : trashTopic(topicId)));
+  };
   const startRenameTopic = (node: ProjectNode, label: string) => {
     setMenuNodeKey(null);
     setMenuProject(null);
@@ -1176,17 +1186,15 @@ export function ProjectTree({
           disabled: aiRenamingTopic !== null || Boolean(node.remoteSession),
           onSelect: () => void aiRenameSession(topicId),
         },
-        {
-          key: "trash",
-          icon: <Archive className={topicTrashing ? "project-tree__archive-spinner" : undefined} size={13} />,
-          label: confirmArchiveTarget === archiveTargetKey ? t("history.confirmMoveToTrash") : t("history.moveToTrash"),
-          disabled: archiveBlocked || topicTrashing,
-          danger: true,
-          onSelect: () => {
-            if (confirmArchiveTarget === archiveTargetKey) void trashTopicAny(topicId);
-            else setConfirmArchiveTarget(archiveTargetKey);
+        ...projectTreeRemovalMenuItems({
+          blocked: archiveBlocked, busy: topicTrashing,
+          armed: { trash: confirmArchiveTarget === archiveTargetKey, purge: confirmDeleteTarget === archiveTargetKey },
+          labels: {
+            trash: t("history.moveToTrash"), trashConfirm: t("history.confirmMoveToTrash"),
+            purge: t("history.deletePermanently"), purgeConfirm: t("history.confirmDeletePermanently"),
           },
-        },
+          onSelect: (mode) => selectTopicRemoval(mode, topicId, archiveTargetKey),
+        }),
       ];
       if (!isSessionNode && editingTopic === topicId) {
         return (
@@ -1322,11 +1330,7 @@ export function ProjectTree({
                 {statusLabel}
               </span>
             )}
-            {compactTopics && metaFull && (
-              <span className="sr-only">
-                {metaFull}
-              </span>
-            )}
+            {compactTopics && metaFull && <span className="sr-only">{metaFull}</span>}
           </button>
           {unread && <span className="project-tree__topic-unread-dot" aria-hidden="true" />}
           {projectTreeShouldRenderTopicActions(isSessionNode, variant, unread) && !(node.remoteSession && !node.remoteSession.name) && (
@@ -1351,27 +1355,23 @@ export function ProjectTree({
                   <Pin size={15} aria-hidden="true" />
                 </button>
               </Tooltip>
-              <Tooltip label={t("projectTree.archiveTopic")} side="top" className="project-tree__topic-action-slot">
-                <button
-                  className={`project-tree__topic-action project-tree__topic-action--archive${topicTrashing ? " project-tree__topic-action--busy" : ""}`}
-                  type="button"
-                  aria-label={t("projectTree.archiveTopic")}
-                  aria-busy={topicTrashing} disabled={archiveBlocked || topicTrashing}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void trashTopicAny(topicId);
-                  }}
-                >
-                  <Archive className={topicTrashing ? "project-tree__archive-spinner" : undefined} size={15} aria-hidden="true" />
-                </button>
-              </Tooltip>
+              {projectTreeRemovalButtons({
+                blocked: archiveBlocked, busy: topicTrashing,
+                armed: { trash: confirmArchiveTarget === archiveTargetKey, purge: confirmDeleteTarget === archiveTargetKey },
+                labels: {
+                  trash: t("projectTree.archiveTopic"), trashConfirm: t("history.confirmMoveToTrash"),
+                  purge: t("projectTree.deleteTopic"), purgeConfirm: t("history.confirmDeletePermanently"),
+                },
+                onSelect: (mode) => selectTopicRemoval(mode, topicId, archiveTargetKey),
+              })}
             </span>
           )}
           {isSessionNode ? (
             <ProjectTreeSessionArchiveMenu
-              open={topicMenuOpen} point={menuPoint} sessionPath={sessionPath} blocked={archiveBlocked || topicTrashing} busy={sessionTrashing} confirmed={confirmArchiveTarget === archiveTargetKey}
-              onConfirm={() => setConfirmArchiveTarget(archiveTargetKey)} onTrash={() => { setConfirmArchiveTarget(null); void trashSession(sessionPath); }} onClose={closeMenu} />
+              open={topicMenuOpen} point={menuPoint} sessionPath={sessionPath} blocked={archiveBlocked || topicTrashing} busy={sessionTrashing}
+              confirmed={confirmArchiveTarget === archiveTargetKey} confirmedDelete={confirmDeleteTarget === archiveTargetKey}
+              onConfirm={() => setConfirmArchiveTarget(archiveTargetKey)} onTrash={() => { setConfirmArchiveTarget(null); void trashSession(sessionPath); }}
+              onConfirmDelete={() => setConfirmDeleteTarget(archiveTargetKey)} onPurge={() => { setConfirmDeleteTarget(null); void purgeSession(sessionPath); }} onClose={closeMenu} />
           ) : <ContextMenu open={topicMenuOpen} point={menuPoint} items={topicMenuItems} minWidth={178} ariaLabel={t("projectTree.topicActions")} onClose={closeMenu} />}
           {shortcutIndex > 0 && (
             <span className="project-tree__topic-shortcut" aria-hidden="true">
