@@ -180,11 +180,15 @@ type ThemeActiveView struct {
 // settings overview + theme gallery. One call supplies everything the UI needs
 // without inferring which style is actually effective.
 type ThemeExperienceView struct {
-	ThemeMode      string         `json:"themeMode"`               // auto|light|dark
+	ThemeMode      string         `json:"themeMode"`               // auto|light|dark|schedule
 	BaseStyle      string         `json:"baseStyle"`               // graphite|aurora|…
 	EffectiveStyle string         `json:"effectiveStyle"`          // pack.baseStyle when pack active, else baseStyle
 	ActiveThemeID  string         `json:"activeThemeId,omitempty"` // official/user/plugin only; never a base id
 	ActivePack     *ThemePackView `json:"activePack,omitempty"`
+	// ScheduleDarkStart/End are the dark-window bounds ("HH:MM") for
+	// theme=schedule; empty when unconfigured.
+	ScheduleDarkStart string `json:"scheduleStart,omitempty"`
+	ScheduleDarkEnd   string `json:"scheduleEnd,omitempty"`
 	// Warnings aggregates non-fatal plugin theme discovery issues (invalid
 	// contributed files skipped) so the gallery can surface them.
 	Warnings []string `json:"warnings,omitempty"`
