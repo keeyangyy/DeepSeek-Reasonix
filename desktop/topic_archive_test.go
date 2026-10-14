@@ -372,7 +372,7 @@ func TestTopicArchiveIntentCompletesSessionsAndMetadataAfterRestart(t *testing.T
 	}
 	sessionPath := writeTopicSessionWithPrompt(t, dir, "restart-commit.jsonl", topicID, "Restart commit", projectRoot, "preserve me", time.Now())
 	targets := []topicTrashTarget{{dir: dir, sessionPath: sessionPath, key: filepath.Base(sessionPath)}}
-	if err := markTopicArchiveMetadataPending(topicID, targets); err != nil {
+	if err := markTopicArchiveMetadataPending(topicID, targets, removalToTrash); err != nil {
 		t.Fatalf("mark archive intent: %v", err)
 	}
 

@@ -62,6 +62,17 @@ export function TrashPage({ active, onBack, list, restore, purge }: {
       confirmLabel: m("confirm"), cancelLabel: m("cancel"), tone: "danger" })) await mutate(snapshot, "purge");
   };
   const [lastKind, setLastKind] = useState<"restore" | "purge">("purge");
+  // Bulk purge of an explicit row selection. It shares the same mutate() path as
+  // the single-row and clear-trash flows, but keeps its own confirm copy: the
+  // selection is exactly what the user checked (never rows the filters hid), so
+  // it must not reuse clearDescription's "including hidden items" wording.
+  const requestPurgeMany = async (paths: string[]) => {
+    if (busyRef.current) return;
+    const snapshot = [...new Set(paths)];
+    if (snapshot.length === 0) return;
+    if (await confirm({ title: m("purgeSelectedTitle"), message: m("purgeSelectedDescription", { n: snapshot.length }),
+      confirmLabel: m("confirm"), cancelLabel: m("cancel"), tone: "danger" })) await mutate(snapshot, "purge");
+  };
   return <ManagementPageShell active={active} onBack={onBack} title={`${t("history.trashTitle")} · ${sessions.filter((item) => !item.recoveryCopy).length}`}
     description={m("trashDescription")} actions={<><button className="btn btn--small" disabled={busy || loading} onClick={() => void refresh()}><RotateCw size={14} />{m("refresh")}</button><button className="btn btn--small btn--danger history-clear" disabled={busy || !sessions.some((item) => !item.recoveryCopy)} onClick={() => void requestPurge(sessions.filter((item) => !item.recoveryCopy).map((item) => item.path), true)}>{t("history.clearTrash")}</button></>}>
     {loadFailed && <div className="management-notice" role="alert">{m("loadFailed")}<button className="btn btn--small" disabled={busy} onClick={() => void refresh()}>{m("retry")}</button></div>}
@@ -72,7 +83,9 @@ export function TrashPage({ active, onBack, list, restore, purge }: {
       onPreview={async (path) => (await app.PreviewSession(path)) ?? []}
       onRestore={async (path) => { await mutate([path], "restore"); }}
       onPurge={async (path) => { await requestPurge([path], false); }}
-      onPurgeAll={async (paths) => { await requestPurge(paths, true); }} /></div>
+      onPurgeAll={async (paths) => { await requestPurge(paths, true); }}
+      onRestoreMany={async (paths) => { await mutate(paths, "restore"); }}
+      onPurgeMany={requestPurgeMany} /></div>
     {active && dialog}
   </ManagementPageShell>;
 }
