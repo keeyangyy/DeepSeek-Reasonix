@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"context"
-	"cmp"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
