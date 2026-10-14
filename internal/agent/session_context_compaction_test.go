@@ -1,13 +1,15 @@
 package agent
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"reasonix/internal/provider"
 	"reasonix/internal/sessioncontext"
 )
 
-func TestCompactionExcludesAllContextsFromSummaryAndKeepsLatestFoldSnapshot(t *testing.T) {
+func TestCompactionFoldsContextsIntoSummaryAndKeepsLatestFoldSnapshot(t *testing.T) {
 	old := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "old"}).Content)
 	latestSnapshot := sessioncontext.Build(sessioncontext.Sections{Workspace: "new", SkillsCatalog: "catalog"})
 	latest := HostGeneratedUserMessage(latestSnapshot.Content)
@@ -24,13 +26,14 @@ func TestCompactionExcludesAllContextsFromSummaryAndKeepsLatestFoldSnapshot(t *t
 	if len(kept) != 1 || kept[0].Content != latestSnapshot.Content || kept[0].Origin != provider.MessageOriginHost {
 		t.Fatalf("kept context = %+v", kept)
 	}
-	if len(fold) != 4 || retention.Dropped != 2 {
-		t.Fatalf("fold=%+v retention=%+v", fold, retention)
+	// Snapshots fold like any other message so the summarizer replays the same
+	// byte-identical prefix the ordinary request sent. The newest is also kept
+	// so the projection still carries the live runtime index.
+	if len(fold) != len(region) || retention.Dropped != 2 {
+		t.Fatalf("fold=%d retention=%+v, want every region message folded", len(fold), retention)
 	}
-	for _, message := range fold {
-		if isSessionContextMessage(message) {
-			t.Fatalf("summarizer input retained session context: %+v", message)
-		}
+	if !containsSessionContext(fold) {
+		t.Fatalf("summarizer input dropped session context, breaking the cached prefix: %+v", fold)
 	}
 
 	projection := checkpointProjectionMessages(
@@ -50,7 +53,7 @@ func TestCompactionExcludesAllContextsFromSummaryAndKeepsLatestFoldSnapshot(t *t
 	}
 }
 
-func TestCompactionDropsFoldContextsWhenLatestRemainsInRecentTail(t *testing.T) {
+func TestCompactionFoldsContextsWhenLatestRemainsInRecentTail(t *testing.T) {
 	old := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "old"}).Content)
 	latest := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "tail"}).Content)
 	all := []provider.Message{
@@ -60,15 +63,42 @@ func TestCompactionDropsFoldContextsWhenLatestRemainsInRecentTail(t *testing.T) 
 	}
 	a := &Agent{}
 	kept, fold, _ := a.partitionFoldForProjectionAt(all[1:4], 1, latestSessionContextIndex(all))
-	if len(kept) != 0 || len(fold) != 2 {
-		t.Fatalf("kept=%+v fold=%+v", kept, fold)
+	if len(kept) != 0 || len(fold) != 3 {
+		t.Fatalf("kept=%+v fold=%+v, want the region's snapshot folded", kept, fold)
+	}
+	if !containsSessionContext(fold) {
+		t.Fatalf("summarizer input dropped session context, breaking the cached prefix: %+v", fold)
 	}
 	if all[4].Content != latest.Content {
 		t.Fatal("recent-tail context bytes changed")
 	}
 }
 
-func TestExplicitCompressionExcludesContextsAndDropsOnlySelectedOldSnapshots(t *testing.T) {
+func containsSessionContext(messages []provider.Message) bool {
+	return slices.ContainsFunc(messages, isSessionContextMessage)
+}
+
+// TestSnapshotRuleOnlyAppliesToContextBearingFolds keeps the extra instruction
+// conditional: appending it unconditionally shrinks the summary output budget on
+// small windows and breaks chunked-merge recovery.
+func TestSnapshotRuleOnlyAppliesToContextBearingFolds(t *testing.T) {
+	snapshot := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "/work"}).Content)
+	a := &Agent{}
+	withContext := a.compactionInstructionFor([]provider.Message{snapshot, {Role: provider.RoleUser, Content: "hi"}}, "")
+	if !strings.Contains(withContext, "Never restate host-generated session-context snapshots") {
+		t.Fatalf("context-bearing fold lost the snapshot rule: %q", withContext)
+	}
+	plain := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
+	withoutContext := a.compactionInstructionFor(plain, "")
+	if strings.Contains(withoutContext, "Never restate") {
+		t.Fatalf("context-free fold gained the snapshot rule: %q", withoutContext)
+	}
+	if withoutContext != compactionInstructionWithFocus("") {
+		t.Fatal("context-free fold must use the unmodified instruction")
+	}
+}
+
+func TestExplicitCompressionFoldsContextsAndDropsOnlySelectedOldSnapshots(t *testing.T) {
 	old := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "old"}).Content)
 	latest := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "latest"}).Content)
 	visible := []provider.Message{
@@ -82,10 +112,14 @@ func TestExplicitCompressionExcludesContextsAndDropsOnlySelectedOldSnapshots(t *
 	if !ok {
 		t.Fatalf("plan = %+v", plan)
 	}
-	for _, message := range plan.fold {
-		if isSessionContextMessage(message) {
-			t.Fatalf("explicit summarizer retained context: %+v", message)
-		}
+	// Both snapshots sit inside the selected range, so both enter the summarizer
+	// input: the summary request replays the ordinary request's prefix, and
+	// omitting them would break that shared prefix (prompt-cache reuse).
+	if got := countSessionContexts(plan.fold); got != 2 {
+		t.Fatalf("explicit summarizer context count = %d, want both in-range snapshots: %+v", got, plan.fold)
+	}
+	if !foldMatchesVisiblePrefix(visible, plan.fold) {
+		t.Fatal("explicit fold is not a contiguous replay of the visible prefix: cache reuse is forfeited")
 	}
 	projection := buildVisibleCompressionProjection(visible, plan, "summary")
 	if got := countSessionContexts(projection); got != 1 {
