@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"strings"
 
 	"reasonix/internal/agent"
@@ -64,9 +63,7 @@ func (a *App) kickHistoryReadModelRepair(sessionPath string) {
 			delete(a.historyIndexRebuilds, key)
 			a.historySliceMu.Unlock()
 		}()
-		if err := agent.RepairSessionDisplayReadModel(sessionPath); err != nil {
-			slog.Debug("desktop: history read-model repair failed", "path", sessionPath, "err", err)
-		}
+		repairDesktopSessionReadModel(sessionPath, "kick-read-model")
 	})
 }
 
@@ -99,7 +96,5 @@ func (a *App) rebuildHistoryIndexForLiveSession(sessionPath string) {
 	if !ok || !ps.UnchangedSincePersisted {
 		return
 	}
-	if err := agent.RepairSessionDisplayReadModel(sessionPath); err != nil {
-		slog.Debug("desktop: live history read-model rebuild failed", "path", sessionPath, "err", err)
-	}
+	repairDesktopSessionReadModel(sessionPath, "live-rebuild")
 }
