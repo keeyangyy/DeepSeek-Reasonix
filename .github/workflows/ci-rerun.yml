@@ -46,8 +46,9 @@ jobs:
           # "the turn never closed" is a test-internal budget timeout (half of
           # the binary deadline), the same class as ": timed out"; "go: unlinkat
           # ...: Access is denied" is the runner's antivirus holding the freshly
-          # built test binary. Both pass on a rerun.
-          flake_re='found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime\.semasleep|runtime\.semawakeup|waitforsingleobject wait_failed|setevent failed|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat'
+          # built test binary. Both pass on a rerun. "exceeded its total test
+          # deadline" is the same class for the long round-budget chat test.
+          flake_re='found pointer to free object|fatal error: fault|fatal error: unknown caller pc|runtime: netpoll failed|runtime\.semasleep|runtime\.semawakeup|waitforsingleobject wait_failed|setevent failed|TempDir RemoveAll cleanup|: timed out|timed out waiting for|timed out after [0-9]+|the turn never closed|go: unlinkat|exceeded its total test deadline'
 
           jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TARGET/jobs?per_page=100" \
             --jq '.jobs[] | select(.conclusion=="failure") | "\(.id)\t\(.name)"')"
