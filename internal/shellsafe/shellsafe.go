@@ -30,14 +30,31 @@ var readOnlyCommands = map[string]bool{
 	"man": true, "info": true, "help": true,
 	"true": true, "false": true, "test": true, "[": true,
 	"basename": true, "dirname": true, "realpath": true, "readlink": true,
-	// PowerShell inspection cmdlets. Keep this list intentionally narrow: only
-	// cmdlets whose verb is intrinsically observational belong here. The parser
-	// still rejects pipelines, substitutions, redirections, and command chains.
+	// System, disk, and process observation. env is deliberately absent: any
+	// argument makes it a command wrapper whose effects stay fail-closed;
+	// printenv covers that need.
+	"groups": true, "nproc": true, "uptime": true, "free": true, "pgrep": true,
+	"lscpu": true, "lsblk": true, "vmstat": true, "iostat": true,
+	// Network observation: socket/interface state only.
+	"netstat": true, "ss": true, "ifconfig": true,
+	// Checksum, encoding, and binary inspection: read a file, emit to stdout.
+	"md5sum": true, "sha256sum": true, "base64": true,
+	"od": true, "hexdump": true, "strings": true,
+	// jq evaluates a filter but only reads input and writes stdout.
+	"jq": true,
+	// PowerShell inspection cmdlets. Only observational verbs belong here; the
+	// parser still rejects pipelines, substitutions, redirects, and chains.
 	"get-childitem": true, "get-content": true, "get-item": true,
 	"get-location": true, "get-process": true, "get-command": true,
 	"get-nettcpconnection": true,
 	"resolve-path":         true, "select-string": true, "measure-object": true,
 	"compare-object": true,
+	"get-date":       true, "test-path": true, "get-filehash": true, "get-itemproperty": true,
+	"get-member": true, "get-help": true, "get-alias": true, "get-variable": true,
+	"get-psdrive": true, "get-host": true, "get-culture": true, "get-timezone": true,
+	"get-computerinfo": true, "get-random": true,
+	// cmd's dir is a Get-ChildItem alias; harmless where it does not exist.
+	"dir": true,
 }
 
 // workspaceNonMutatingCommands holds commands that do not write workspace
@@ -88,6 +105,10 @@ var readOnlyPrefixes = map[string]map[string]bool{
 	"node":    {"-v": true, "--version": true},
 	"python":  {"--version": true, "-v": true, "-V": true},
 	"python3": {"--version": true, "-v": true, "-V": true},
+	"dotnet":  {"--version": true},
+	"rustc":   {"--version": true, "-v": true, "-V": true},
+	"java":    {"-version": true, "--version": true},
+	"javac":   {"-version": true, "--version": true},
 }
 
 // ContainsShellSyntax reports whether a command uses shell operators or
