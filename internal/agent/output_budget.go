@@ -37,9 +37,12 @@ type outputBudgetState struct {
 	lastUsage         atomic.Pointer[provider.Usage]
 	activeReqShape    atomic.Pointer[requestCalibrationShape]
 	promptCalibration atomic.Pointer[promptTokenCalibration]
-	contextUsage      atomic.Pointer[contextUsage] // gauge's memoised prompt size
-	learned           atomic.Pointer[learnedContextBudget]
-	admission         atomic.Pointer[contextAdmission]
+	// sessionCalibrations keeps prompt calibration per transcript path so a
+	// session's estimate cannot be poisoned by another session's content mix.
+	sessionCalibrations sync.Map
+	contextUsage        atomic.Pointer[contextUsage] // gauge's memoised prompt size
+	learned             atomic.Pointer[learnedContextBudget]
+	admission           atomic.Pointer[contextAdmission]
 }
 
 // learnedContextBudget is an Agent-local observation of the live provider/model
@@ -86,17 +89,28 @@ type promptTokenCalibration struct {
 	compactChars int64
 	cjkRunes     int64
 	cjkBytes     int64
+	// imageCount prices image attachments out of the char ratio (their vision
+	// tokens land in promptTokens while base64 refs stay out of requestChars).
+	imageCount int
+	// overheadChars/overheadTokens split the fixed per-request framing (tool
+	// schemas + system prompt) out of the linear ratio: tokens = A + B×chars.
+	overheadChars  int64
+	overheadTokens int64
 }
 
 // requestCalibrationShape pairs the conservative provider-visible text and CJK
 // composition used for overflow protection with the legacy content-only shape
 // used by fold economics. Keeping them in one immutable pointer ensures readers
-// never combine calibration fields from different prepared requests.
+// never combine calibration fields from different prepared requests. imageCount
+// and overhead* carry the non-linear pricing parts (see promptTokenCalibration).
 type requestCalibrationShape struct {
-	requestChars int64
-	compactChars int64
-	cjkRunes     int64
-	cjkBytes     int64
+	requestChars   int64
+	compactChars   int64
+	cjkRunes       int64
+	cjkBytes       int64
+	imageCount     int
+	overheadChars  int64
+	overheadTokens int64
 }
 
 // reset drops what belongs to the transcript being replaced. Prompt-token
@@ -113,13 +127,39 @@ func (a *Agent) setPromptTokenCalibration(promptTokens int, shape requestCalibra
 	if a == nil || promptTokens <= 0 || shape.requestChars <= 0 {
 		return
 	}
-	a.sess.output.promptCalibration.Store(&promptTokenCalibration{
-		promptTokens: promptTokens,
-		requestChars: shape.requestChars,
-		compactChars: shape.compactChars,
-		cjkRunes:     shape.cjkRunes,
-		cjkBytes:     shape.cjkBytes,
-	})
+	cal := &promptTokenCalibration{
+		promptTokens:   promptTokens,
+		requestChars:   shape.requestChars,
+		compactChars:   shape.compactChars,
+		cjkRunes:       shape.cjkRunes,
+		cjkBytes:       shape.cjkBytes,
+		imageCount:     shape.imageCount,
+		overheadChars:  shape.overheadChars,
+		overheadTokens: shape.overheadTokens,
+	}
+	a.sess.output.promptCalibration.Store(cal)
+	// Session-scoped copy keeps each transcript on its own content mix; the
+	// model-level pointer stays as cold-start fallback. Sharing one ratio
+	// across sessions is what makes estimates drift after switching sessions.
+	if key := a.SessionPath(); key != "" {
+		a.sess.output.sessionCalibrations.Store(key, cal)
+	}
+}
+
+// loadPromptCalibration prefers the current session's calibration and falls
+// back to the model-level one written by whatever request calibrated last.
+func (a *Agent) loadPromptCalibration() *promptTokenCalibration {
+	if a == nil {
+		return nil
+	}
+	if key := a.SessionPath(); key != "" {
+		if v, ok := a.sess.output.sessionCalibrations.Load(key); ok {
+			if cal, _ := v.(*promptTokenCalibration); cal != nil {
+				return cal
+			}
+		}
+	}
+	return a.sess.output.promptCalibration.Load()
 }
 
 func (a *Agent) setPromptTokenCalibrationFromActive(promptTokens int) {
@@ -249,12 +289,42 @@ func (a *Agent) requestCalibrationShape(req provider.Request) requestCalibration
 
 func requestCalibrationShapeWithPolicy(req provider.Request, policy provider.SharedWindowInputPolicy) requestCalibrationShape {
 	requestChars, cjkRunes, cjkBytes := requestCalibrationTextShape(req, policy)
+	overheadChars, imageCount := requestCalibrationOverheadShape(req)
 	return requestCalibrationShape{
-		requestChars: requestChars,
-		compactChars: int64(charsOfMessages(req.Messages)),
-		cjkRunes:     cjkRunes,
-		cjkBytes:     cjkBytes,
+		requestChars:   requestChars,
+		compactChars:   int64(charsOfMessages(req.Messages)),
+		cjkRunes:       cjkRunes,
+		cjkBytes:       cjkBytes,
+		imageCount:     imageCount,
+		overheadChars:  overheadChars,
+		overheadTokens: estimateTextTokensInt64(overheadChars),
 	}
+}
+
+// requestCalibrationOverheadShape splits the fixed per-request framing (tool
+// schemas + system prompt) out of the message text, and counts vision
+// attachments: their payload never rides requestChars, so their vision tokens
+// are added back explicitly instead of riding the text ratio.
+func requestCalibrationOverheadShape(req provider.Request) (overheadChars int64, imageCount int) {
+	add := func(s string) { overheadChars += int64(len(s)) }
+	for _, msg := range req.Messages {
+		if msg.LocalOnly {
+			continue
+		}
+		imageCount += len(msg.Images)
+		if msg.Role == provider.RoleSystem {
+			overheadChars += 4
+			add(string(msg.Role))
+			add(msg.Content)
+		}
+	}
+	for _, schema := range req.Tools {
+		overheadChars += 8
+		add(schema.Name)
+		add(schema.Description)
+		add(string(schema.Parameters))
+	}
+	return overheadChars, imageCount
 }
 
 // requestCalibrationTextShape counts common shared-window text plus only the
@@ -306,28 +376,59 @@ func requestCalibrationTextShape(req provider.Request, policy provider.SharedWin
 	return chars, cjkRunes, cjkBytes
 }
 
+// visionTokensPerImageEstimate prices one image attachment outside the char
+// ratio (measured 1–7k per screenshot; a flat middle estimate stops image-heavy
+// requests from inflating the text ratio).
+const visionTokensPerImageEstimate = 2_000
+
+// estimateTextTokensInt64 is the fixed-framing token price for overhead chars
+// (tool schemas + system prompt): English/JSON shaped, ~4 bytes per token.
+func estimateTextTokensInt64(chars int64) int64 {
+	if chars <= 0 {
+		return 0
+	}
+	return (chars + 3) / 4
+}
+
 func (a *Agent) calibratedPromptTokens(shape requestCalibrationShape) (int, bool) {
 	if shape.requestChars <= 0 {
 		return 0, false
 	}
-	if cal := a.sess.output.promptCalibration.Load(); cal != nil && cal.requestChars > 0 {
-		ratio := float64(cal.promptTokens) / float64(cal.requestChars)
-		if ratio > 0.05 && ratio < 2 {
-			trustedChars := shape.requestChars
-			excessCJKBytes := int64(0)
-			// A higher CJK share cannot safely reuse the aggregate ratio. Scale its
-			// represented share and price only the excess at the cold rate,
-			// preserving exact calibration for stable CJK sessions.
-			if shape.cjkRunes*cal.requestChars > cal.cjkRunes*shape.requestChars {
-				trustedCJKBytes := min(cal.cjkBytes*shape.requestChars/cal.requestChars, shape.cjkBytes)
-				excessCJKBytes = shape.cjkBytes - trustedCJKBytes
-				trustedChars -= excessCJKBytes
-			}
-			cold := math.Ceil(float64(excessCJKBytes) * fallbackTokPerChar)
-			return int(math.Ceil(float64(trustedChars)*ratio) + cold), true
-		}
+	cal := a.loadPromptCalibration()
+	if cal == nil || cal.requestChars <= 0 {
+		return 0, false
 	}
-	return 0, false
+	// Learn only the marginal text ratio: strip the fixed framing and the
+	// per-image vision tokens out of the calibration sample so neither can
+	// smear across the estimate (tokens = A + B×chars, not ratio×chars).
+	textChars := cal.requestChars - cal.overheadChars
+	if textChars <= 0 {
+		return 0, false
+	}
+	textTokens := float64(cal.promptTokens) - float64(cal.overheadTokens) - float64(cal.imageCount)*visionTokensPerImageEstimate
+	if textTokens <= 0 {
+		return 0, false
+	}
+	ratio := textTokens / float64(textChars)
+	if ratio <= 0.05 || ratio >= 2 {
+		return 0, false
+	}
+	trustedChars := shape.requestChars - shape.overheadChars
+	if trustedChars < 0 {
+		trustedChars = 0
+	}
+	excessCJKBytes := int64(0)
+	// A higher CJK share cannot safely reuse the aggregate ratio. Scale its
+	// represented share and price only the excess at the cold rate,
+	// preserving exact calibration for stable CJK sessions.
+	if shape.cjkRunes*cal.requestChars > cal.cjkRunes*shape.requestChars {
+		trustedCJKBytes := min(cal.cjkBytes*shape.requestChars/cal.requestChars, shape.cjkBytes)
+		excessCJKBytes = shape.cjkBytes - trustedCJKBytes
+		trustedChars -= excessCJKBytes
+	}
+	cold := math.Ceil(float64(excessCJKBytes) * fallbackTokPerChar)
+	images := float64(shape.imageCount) * visionTokensPerImageEstimate
+	return int(math.Ceil(float64(shape.overheadTokens) + float64(trustedChars)*ratio + images + cold)), true
 }
 
 // estimatedPromptTokens sizes the provider-visible messages in real tokens —
@@ -344,13 +445,15 @@ func (a *Agent) estimatedRequestTokens(req provider.Request) int {
 }
 
 func (a *Agent) estimatedShapeTokens(shape requestCalibrationShape) int {
-	if shape.requestChars <= 0 {
+	if shape.requestChars <= 0 && shape.imageCount <= 0 {
 		return 0
 	}
 	if calibrated, ok := a.calibratedPromptTokens(shape); ok {
 		return calibrated
 	}
-	return int(float64(shape.requestChars) * fallbackTokPerChar)
+	// Cold estimate: char ratio plus per-image pricing (image payloads never
+	// ride requestChars).
+	return int(float64(shape.requestChars)*fallbackTokPerChar) + shape.imageCount*visionTokensPerImageEstimate
 }
 
 func isCJKRune(r rune) bool {
