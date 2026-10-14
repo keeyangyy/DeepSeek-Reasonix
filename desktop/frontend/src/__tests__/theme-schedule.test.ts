@@ -1,6 +1,5 @@
 // Run: tsx src/__tests__/theme-schedule.test.ts
 
-import { strict as assert } from "node:assert";
 import { isDarkSchedule, nextScheduleTransition, parseClock } from "../lib/themeSchedule";
 
 let passed = 0;
