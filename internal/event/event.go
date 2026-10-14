@@ -444,6 +444,7 @@ type Compaction struct {
 	Messages int    // Done: how many messages were folded into the summary
 	Summary  string // Done: the briefing the agent keeps relying on
 	Archive  string // Done: path the dropped originals were archived to ("" if none)
+	Reason   string // Aborted: why the pass did not complete ("" on success)
 }
 
 // ContextMaintenance is the typed wire-safe receipt for snip/prune/noop/
@@ -551,6 +552,7 @@ type Event struct {
 	Guardian           GuardianResult
 	DecisionReceipt    *provider.DecisionReceipt // Notice: durable user decision receipt
 	WriteIntent        bool                      // local write-ahead checkpoint, not a user notice
+	ReplayOnly         bool                      // prompt replay re-emission: publish to sinks, never re-append to the turn ledger
 	Recovery           *RecoveryStatus           // optional local recovery details
 	RetryAttempt       int                       // Retrying: 1-based attempt about to be made
 	RetryMax           int                       // Retrying: total attempts before giving up

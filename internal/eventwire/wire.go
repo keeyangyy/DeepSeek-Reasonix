@@ -211,6 +211,7 @@ func ToWire(e event.Event) Event {
 		w.Compaction = &Compaction{
 			Trigger: e.Compaction.Trigger, Messages: e.Compaction.Messages,
 			Summary: e.Compaction.Summary, Archive: e.Compaction.Archive,
+			Reason: e.Compaction.Reason,
 		}
 	case event.ContextMaintenanceEvent:
 		if m := e.Maintenance; m != nil {
@@ -363,6 +364,7 @@ type Compaction struct {
 	Messages int    `json:"messages,omitempty"`
 	Summary  string `json:"summary,omitempty" externalizable:"true"`
 	Archive  string `json:"archive,omitempty" externalizable:"true"`
+	Reason   string `json:"reason,omitempty" externalizable:"true"`
 }
 
 // AskOption is one JSON-formatted choice in a structured ask request.

@@ -2,15 +2,72 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
+	"reasonix/internal/store"
 	"reasonix/internal/tool"
 )
+
+// writeCompactionSidecar manages the session compaction sidecar
+// (<session>.ckpt/): a "compacting.json" in-progress marker and the finished
+// "latest-compaction.json" record. It lives in the agent so a compaction that
+// finishes after its tab was released (switch-away mid-run) still persists —
+// the controller's own sessionPath and executor can be cleared by then.
+func writeCompactionSidecar(sessionPath, kind string, rec *CompactionRecord) {
+	if sessionPath == "" {
+		return
+	}
+	dir := store.SessionCheckpointDir(sessionPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	switch kind {
+	case "marker":
+		b, _ := json.Marshal(map[string]string{"startedAt": strconv.FormatInt(time.Now().UnixMilli(), 10)})
+		_ = os.WriteFile(filepath.Join(dir, "compacting.json"), b, 0o644)
+	case "record":
+		if rec == nil {
+			return
+		}
+		b, err := json.Marshal(rec)
+		if err != nil {
+			return
+		}
+		_ = os.WriteFile(filepath.Join(dir, "latest-compaction.json"), b, 0o644)
+		_ = os.Remove(filepath.Join(dir, "compacting.json"))
+	case "clear":
+		_ = os.Remove(filepath.Join(dir, "compacting.json"))
+	}
+}
+
+// CompactionRecord is the persisted summary of the most recent compaction.
+// It lives in the sidecar so a session re-opened after its tab was released
+// (switch-away mid-compact) can still render the compression result.
+type CompactionRecord struct {
+	Trigger  string `json:"trigger,omitempty"`
+	Messages int    `json:"messages"`
+	Summary  string `json:"summary"`
+}
+
+// setLastCompaction records the receipt (atomic store) for sidecar persistence.
+func (a *Agent) setLastCompaction(rec *CompactionRecord) {
+	a.lastCompaction.Store(rec)
+}
+
+// LastCompaction returns the most recent compaction record, if any.
+func (a *Agent) LastCompaction() *CompactionRecord {
+	return a.lastCompaction.Load()
+}
 
 const (
 	maxCompressAnchorBytes = 512
@@ -188,14 +245,25 @@ func (a *Agent) compressVisibleRange(
 		inputMode = SummaryInputCachePrefix
 	}
 
+	// Sidecar in-progress marker (same contract as /compact): capture the
+	// session path up front so a tab released mid-run still lands the record.
+	sidecarPath := a.SessionPath()
+	writeCompactionSidecar(sidecarPath, "marker", nil)
+	sidecarSettled := false
+	defer func() {
+		if !sidecarSettled {
+			writeCompactionSidecar(sidecarPath, "clear", nil)
+		}
+	}()
+
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
 	prepared, reason, err := a.prepareVisibleCompression(ctx, trigger, plan.fold, instructions, inputMode)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "prepare failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	if reason != "" {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, reason)
 		result.Reason = reason
 		return result, nil
 	}
@@ -206,21 +274,21 @@ func (a *Agent) compressVisibleRange(
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "summary failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "intercept failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 
 	projection := buildVisibleCompressionProjection(snap.visible, plan, summary)
 	projection, pinnedCheckpoint, err := rebasePinnedContextProjection(projection, snap.canonical, len(snap.canonical))
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "pinned rebase failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	projectionTokens := a.estimatedVisibleRequestTokens(projection)
@@ -232,12 +300,12 @@ func (a *Agent) compressVisibleRange(
 		if pinnedCheckpoint {
 			result.Reason = "pinned-context-too-large: checkpoint prevents compaction from reducing context"
 			a.emitCompactionTelemetry(tele)
-			a.emitCompactionAborted(trigger)
+			a.emitCompactionAborted(trigger, result.Reason)
 			return result, nil
 		}
 		result.Reason = "compressed context would not be smaller"
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, result.Reason)
 		return result, nil
 	}
 
@@ -255,13 +323,19 @@ func (a *Agent) compressVisibleRange(
 			tele.Error = err.Error()
 			a.emitCompactionTelemetry(tele)
 		}
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "commit failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	a.emitCompactionTelemetry(tele)
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(plan.fold), Summary: summary, Archive: state.LastReceipt.Archive,
 	}})
+	// Same sidecar contract as /compact so the button path also survives a
+	// mid-run switch-away and re-opens with the result.
+	sidecarRec := &CompactionRecord{Trigger: trigger, Messages: len(plan.fold), Summary: summary}
+	a.setLastCompaction(sidecarRec)
+	writeCompactionSidecar(sidecarPath, "record", sidecarRec)
+	sidecarSettled = true
 	result.Status = "ok"
 	result.Reason = ""
 	return result, nil
@@ -335,10 +409,10 @@ func (a *Agent) planVisibleCompression(snap explicitCompressionSnapshot, directi
 		selected := i >= start && i < end
 		mergeSummary := i < completedEnd && isCompactionSummary(msg)
 		if isSessionContextMessage(msg) {
-			// Context never enters the summarizer. Once an older snapshot falls
-			// inside the explicitly compressed range, remove it from the
-			// projection; the latest valid snapshot remains byte-identical.
-			plan.dropMask[i] = selected && i != latestContext
+			if selected {
+				plan.fold = append(plan.fold, msg)
+				plan.dropMask[i] = i != latestContext
+			}
 			continue
 		}
 		if msg.Role == provider.RoleSystem || i < head || (!selected && !mergeSummary) {
@@ -495,6 +569,18 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, fmt.Errorf("%w: fixed prefix (%d tokens) already exceeds trigger (%d)", errCheckpointRejected, fixedPrefixTokens, a.compactTrigger())
 	}
 
+	// Sidecar in-progress marker: capture the session path before anything can
+	// clear it (the tab may be released while the summarizer runs) and record
+	// compaction activity so a re-opened tab can poll for the finished record.
+	sidecarPath := a.SessionPath()
+	writeCompactionSidecar(sidecarPath, "marker", nil)
+	sidecarSettled := false
+	defer func() {
+		if !sidecarSettled {
+			writeCompactionSidecar(sidecarPath, "clear", nil)
+		}
+	}()
+
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
 	if a.svc.hooks != nil {
 		if hookInstr := a.svc.hooks.PreCompact(ctx, trigger); hookInstr != "" {
@@ -510,7 +596,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	if req.mustFree || trigger != CompactionTriggerManual {
 		start = a.maximumSafeSummaryPrefixEnd(msgs, head, start, instructions)
 		if start <= head {
-			a.emitCompactionAborted(trigger)
+			a.emitCompactionAborted(trigger, "no balanced prefix leaves enough room for a summary response")
 			return CompactionNoop, fmt.Errorf("%w: no balanced prefix leaves enough room for a summary response", errCheckpointRejected)
 		}
 	}
@@ -519,23 +605,23 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	regionHadPinnedRevision := containsPinnedContextRevision(msgs[head:start])
 	kept, fold, retention := a.partitionFoldForProjectionAt(msgs[head:start], head, latestContext)
 	if len(fold) == 0 {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "nothing to fold in the selected range")
 		return CompactionNoop, nil
 	}
 	originalFoldHash := providerVisibleFingerprint(modelInputMessages(fold))
 	var err error
 	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "intercept prepare failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	if len(fold) == 0 {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "nothing to fold after prepare")
 		return CompactionNoop, nil
 	}
 	if req.mustFree || trigger != CompactionTriggerManual {
 		if err := a.validateSafeSummaryRequest(fold, instructions, req.slim); err != nil {
-			a.emitCompactionAborted(trigger)
+			a.emitCompactionAborted(trigger, "unsafe summary request: "+err.Error())
 			return CompactionNoop, err
 		}
 	}
@@ -546,14 +632,14 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	res, tele, err := a.summarizeFold(ctx, trigger, fold, instructions, sourceTokens, inputMode, req)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "summarize failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	summary, err := a.interceptCompactionComplete(ctx, res.Text)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "intercept complete failed: "+err.Error())
 		return CompactionNoop, err
 	}
 
@@ -567,7 +653,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	projMsgs, spliced, projTokens, err := a.preparePinnedCheckpointCandidate(trigger, projMsgs, canonical, covered, sourceTokens, &tele)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "pinned checkpoint failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	viewOutputHash := providerVisibleFingerprint(modelInputMessages(spliced))
@@ -579,12 +665,18 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
 	})
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "commit failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(fold), Summary: summary,
 	}})
+	// Persist to memory and the session sidecar (up-front path) so a mid-run
+	// switch-away still re-opens with the result.
+	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary}
+	a.setLastCompaction(rec)
+	writeCompactionSidecar(sidecarPath, "record", rec)
+	sidecarSettled = true
 	return CompactionInstalled, nil
 }
 
@@ -676,6 +768,12 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force, splitActive bool)
 		} else {
 			start = active
 		}
+		// A shrink to the active-turn start must not leave a one-message fold:
+		// that pays a summarizer round-trip and rewrites the cache prefix with
+		// no context reduction. Report "no fold" instead.
+		if start-head < minCompactMessages {
+			return head, start, false
+		}
 	}
 	return head, start, start > head
 }
@@ -694,13 +792,13 @@ func (a *Agent) partitionFoldForProjectionAt(region []provider.Message, offset, 
 		if m.LocalOnly || IsPinnedContextRevision(m) {
 			continue
 		}
+		fold = append(fold, m)
 		if isSessionContextMessage(m) {
 			if offset+i == latestContext {
 				kept = append(kept, m)
 			}
 			continue
 		}
-		fold = append(fold, m)
 		if IsUserAuthoredTurnMessage(m) {
 			retention.Dropped++
 		}

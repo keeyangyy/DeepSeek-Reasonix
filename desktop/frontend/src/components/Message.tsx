@@ -600,14 +600,13 @@ export function TurnActions({
   const actionDisabledReason = (scope: string): string => {
     if (rewindDisabled || actionPending) return t("rewind.disabledRunning");
     if (!checkpoint) return t("rewind.disabledNoCheckpoint");
-    if ((scope === "fork" || scope === "fork-worktree" || scope === "summ-from" || scope === "conversation") && !checkpoint.canConversation) {
+    if ((scope === "fork" || scope === "fork-worktree" || scope === "conversation") && !checkpoint.canConversation) {
       return t("rewind.disabledNoBoundary");
     }
     if (scope === "summ-from" && isLastTurn) {
       return t("rewind.disabledNoLater");
     }
     if (scope === "summ-upto") {
-      if (!checkpoint.canConversation) return t("rewind.disabledNoBoundary");
       if ((turn ?? 0) <= 0) return t("rewind.disabledNoEarlier");
     }
     if (scope === "code" && !checkpoint.canCode) return t("rewind.disabledNoCode");

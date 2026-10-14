@@ -79,7 +79,10 @@ func (c *Controller) forkNamedReady(turn int, name string, switchToFork bool, ki
 	if err := sess.SaveIfAbsent(newPath); err != nil {
 		return "", c.rewindFail(err)
 	}
-	if _, err := sess.CopyValidContextProjection(parentPath, newPath); err != nil {
+	// A fork cut inside the parent's covered region trims the inherited
+	// projection to the fork boundary; dropping it would replay the whole
+	// canonical history (see InheritContextProjectionForFork).
+	if _, err := sess.InheritContextProjectionForFork(parentPath, newPath, src); err != nil {
 		slog.Warn("controller: fork did not inherit context projection", "err", err)
 	}
 	forkPreview, forkTurns := agent.SessionPreviewFromMessages(forked)
