@@ -18,6 +18,9 @@ func saveMessages(t *testing.T, path string, messages ...provider.Message) {
 	if err := session.Save(path); err != nil {
 		t.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestReconcileAndSearchFTSWithoutStoredBody(t *testing.T) {
