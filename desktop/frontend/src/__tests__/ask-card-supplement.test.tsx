@@ -29,16 +29,16 @@ async function render(ask: WireAsk) {
   ));
 }
 
-function option(label: string): HTMLButtonElement {
+function action(label: string): HTMLButtonElement {
   const button = [...document.querySelectorAll<HTMLButtonElement>(".prompt-action")]
     .find((item) => item.textContent?.includes(label));
   assert.ok(button, `option ${label} exists`);
   return button;
 }
 
-function input(label: string): HTMLInputElement {
-  const field = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
-  assert.ok(field, `input ${label} exists`);
+function entry(): HTMLInputElement {
+  const field = document.querySelector<HTMLInputElement>(".ask-shelf__entry-group input");
+  assert.ok(field, "the shared entry input exists");
   return field;
 }
 
@@ -52,9 +52,10 @@ function setText(field: HTMLInputElement, value: string) {
 const confirm = () => document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")!;
 const back = () => document.querySelector<HTMLButtonElement>(".ask-shelf__pager-button")!;
 const progress = () => document.querySelector(".ask-shelf__header-text--progress")?.textContent ?? "";
+const click = async (button: HTMLButtonElement) => act(async () => button.click());
 
-// Single choice waits for confirmation; its note survives Back and is sent
-// after the option as a separate Selected value.
+// One shared input is sent with a normal option as a prefixed answer item, and
+// a single-select choice still advances immediately.
 await render({
   id: "ask-note-single",
   questions: [
@@ -62,99 +63,83 @@ await render({
     { id: "later", prompt: "Next", options: [{ label: "Done" }] },
   ],
 });
-await act(async () => option("A").click());
-assert.equal(progress(), "Question 1/2", "single choice remains on the current question for its optional note");
-await act(async () => setText(input("Additional note for A"), "  because  "));
-await act(async () => confirm().click());
-assert.equal(progress(), "Question 2/2", "Confirm advances after a single choice and note");
-await act(async () => back().click());
-assert.equal(input("Additional note for A").value, "  because  ", "Back restores the per-choice note draft");
-await act(async () => confirm().click());
-await act(async () => option("Done").click());
-await act(async () => confirm().click());
+await act(async () => setText(entry(), "  because  "));
+await click(action("A"));
+assert.equal(progress(), "Question 2/2", "single choice advances immediately after carrying the note");
+await click(back());
+assert.equal(entry().value, "  because  ", "Back restores the shared input draft");
+await click(action("A"));
+await click(action("Done"));
 assert.deepEqual(submitted.at(-1), [
-  { questionId: "single", selected: ["A", "because"] },
+  { questionId: "single", selected: ["A", "补充：because"] },
   { questionId: "later", selected: ["Done"] },
 ]);
-console.log("  PASS  single-select note, explicit advance, trim, and Back restoration");
+console.log("  PASS  shared supplement is prefixed and single-select advances immediately");
 
-// Each checked multi-select choice owns an independent optional note.
+// Multi-select keeps its existing explicit-confirm flow; one supplement applies
+// once to the whole group, rather than creating one input per selected option.
 await render({
   id: "ask-note-multi",
   questions: [{ id: "multi", prompt: "Pick any", multi: true, options: [{ label: "Red" }, { label: "Blue" }] }],
 });
 assert.equal(confirm().disabled, true, "an empty multi-select is not answered");
-await act(async () => option("Red").click());
-await act(async () => option("Blue").click());
-await act(async () => setText(input("Additional note for Red"), "warm"));
-await act(async () => setText(input("Additional note for Blue"), "cool"));
-await act(async () => confirm().click());
-assert.deepEqual(submitted.at(-1), [{ questionId: "multi", selected: ["Red", "warm", "Blue", "cool"] }]);
-console.log("  PASS  multiple selections each carry their own note");
+await click(action("Red"));
+await click(action("Blue"));
+assert.equal(document.querySelectorAll(".ask-shelf__entry-group input").length, 1, "multi-select still has only one input");
+await act(async () => setText(entry(), "warm"));
+await click(confirm());
+assert.deepEqual(submitted.at(-1), [{ questionId: "multi", selected: ["Red", "Blue", "补充：warm"] }]);
+console.log("  PASS  multi-select choices and one shared supplement submit together");
 
-// Notes cannot answer a question without a selected option.
+// Other is an option: for single-select, its current text is submitted directly;
+// an empty click shows a prompt and leaves the same input ready for typing.
 await render({
-  id: "ask-note-only",
-  questions: [{ id: "multi", prompt: "Pick any", multi: true, options: [{ label: "Only" }] }],
-});
-assert.equal(confirm().disabled, true, "a note cannot be entered without selecting a choice");
-await act(async () => option("Only").click());
-await act(async () => setText(input("Additional note for Only"), "note only"));
-await act(async () => option("Only").click());
-assert.equal(confirm().disabled, true, "deselecting the option leaves the note insufficient to answer");
-assert.equal(submitted.at(-1)?.[0]?.questionId, "multi", "note-only state has not submitted another answer");
-console.log("  PASS  a supplement alone does not count as an answer");
-
-// Custom answer remains an alternative, excluding both selected options and notes.
-await render({
-  id: "ask-note-custom",
+  id: "ask-other-single",
   questions: [{ id: "choice", prompt: "Choose or write", options: [{ label: "Suggested" }] }],
 });
-await act(async () => option("Suggested").click());
-await act(async () => setText(input("Additional note for Suggested"), "ignored note"));
-await act(async () => document.querySelector<HTMLElement>(".ask-shelf__custom-row")!.click());
-await act(async () => setText(input("Other answer"), "custom answer"));
-await act(async () => confirm().click());
-assert.deepEqual(submitted.at(-1), [{ questionId: "choice", selected: ["custom answer"] }]);
-console.log("  PASS  custom answer replaces options and their notes");
+const beforeEmptyOther = submitted.length;
+await click(action("Other"));
+assert.equal(submitted.length, beforeEmptyOther, "empty Other does not submit");
+assert.ok(document.querySelector('[role="alert"]')?.textContent, "empty Other explains that an answer is required");
+await act(async () => setText(entry(), "my own answer"));
+const beforeOtherSubmit = submitted.length;
+await click(action("Other"));
+assert.equal(submitted.length, beforeOtherSubmit + 1, "choosing Other submits the current input");
+assert.deepEqual(submitted.at(-1), [{ questionId: "choice", selected: ["my own answer"] }]);
+console.log("  PASS  Other submits the shared input and validates empty input");
 
+// In multi-select, Other remains an alternative answer that uses the normal
+// explicit confirm action instead of submitting from a row click.
 await render({
-  id: "ask-note-custom-ime",
-  questions: [{ id: "choice", prompt: "Write", options: [{ label: "Suggested" }] }],
+  id: "ask-other-multi",
+  questions: [{ id: "choice", prompt: "Pick or write", multi: true, options: [{ label: "Suggested" }] }],
 });
-await act(async () => document.querySelector<HTMLElement>(".ask-shelf__custom-row")!.click());
-const customInput = input("Other answer");
-await act(async () => setText(customInput, "custom confirmed by Enter"));
-const beforeCustomIME = submitted.length;
-await act(async () => customInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
-  key: "Enter", bubbles: true, cancelable: true, isComposing: true,
-})));
-assert.equal(submitted.length, beforeCustomIME, "IME Enter does not submit a custom answer");
-await act(async () => customInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
-  key: "Enter", bubbles: true, cancelable: true,
-})));
-assert.equal(submitted.length, beforeCustomIME + 1, "ordinary Enter submits a custom answer");
-console.log("  PASS  custom-answer Enter also respects IME composition");
+await act(async () => setText(entry(), "custom multi answer"));
+const beforeMultiOther = submitted.length;
+await click(action("Other"));
+assert.equal(submitted.length, beforeMultiOther, "multi-select Other preserves explicit confirmation");
+await click(confirm());
+assert.deepEqual(submitted.at(-1), [{ questionId: "choice", selected: ["custom multi answer"] }]);
+console.log("  PASS  multi-select Other uses the existing confirm flow");
 
-// Enter confirms the selected answer, while Enter used by an active IME does not.
+// Enter confirms a selected answer, while Enter used by an active IME does not.
 await render({
   id: "ask-note-ime",
   questions: [{ id: "choice", prompt: "Choose", options: [{ label: "Yes" }] }],
 });
-await act(async () => option("Yes").click());
-const noteInput = input("Additional note for Yes");
-await act(async () => setText(noteInput, "confirmed by Enter"));
-await act(async () => noteInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+await act(async () => setText(entry(), "confirmed by Enter"));
+const input = entry();
+await act(async () => input.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
   key: "Enter", bubbles: true, cancelable: true, isComposing: true,
 })));
-assert.equal(submitted.at(-1)?.[0]?.questionId, "choice", "IME Enter has not submitted the new Ask");
+assert.equal(submitted.at(-1)?.[0]?.questionId, "choice", "IME Enter does not submit");
 const beforeEnter = submitted.length;
-await act(async () => noteInput.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+await act(async () => input.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
   key: "Enter", bubbles: true, cancelable: true,
 })));
-assert.equal(submitted.length, beforeEnter + 1, "ordinary Enter confirms the answer");
-assert.deepEqual(submitted.at(-1), [{ questionId: "choice", selected: ["Yes", "confirmed by Enter"] }]);
-console.log("  PASS  Enter confirms and IME Enter does not submit");
+assert.equal(submitted.length, beforeEnter + 1, "ordinary Enter confirms the highlighted answer");
+assert.deepEqual(submitted.at(-1), [{ questionId: "choice", selected: ["Yes", "补充：confirmed by Enter"] }]);
+console.log("  PASS  shared input Enter confirms and respects IME composition");
 
 await act(async () => root.unmount());
 dom.window.close();

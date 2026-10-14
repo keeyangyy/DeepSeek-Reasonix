@@ -386,16 +386,16 @@ await act(async () => {
   const dialog = document.querySelector(".prompt-shelf--ask");
   ok(Boolean(dialog), "ask card renders");
   ok(dialog?.textContent?.includes("Deploy now?") === true, "ask prompt renders");
+	failAnswer = true;
 	await act(async () => {
-		[...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "yes")?.click();
+		[...document.querySelectorAll<HTMLButtonElement>(".prompt-shelf--ask .prompt-action")].find((b) => b.textContent?.includes("yes"))?.click();
 		await flush();
 	});
-	ok(!tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "selecting an option keeps the ask open until explicit submit");
-	failAnswer = true; await act(async () => {
-		[...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Submit")?.click();
-		await flush();
-	});
-	ok(Boolean(document.querySelector(".prompt-shelf--ask")) && document.body.textContent?.includes("remote answer failed") === true && document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.disabled === false, "a failed remote Ask answer preserves the card, surfaces the error, and re-enables retry"); failAnswer = false; await act(async () => { document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.click(); await flush(); }); ok(tape.filter((entry) => entry.startsWith("answer:tab-remote-1:ask-7:")).length === 2 && !document.querySelector(".prompt-shelf--ask"), "a successful remote Ask retry resubmits the complete answer and clears the card");
+	ok(tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "single-select submits immediately to the remote session");
+	ok(Boolean(document.querySelector(".prompt-shelf--ask")) && document.body.textContent?.includes("remote answer failed") === true && document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.disabled === false, "a failed immediate remote Ask answer preserves the card, surfaces the error, and re-enables retry");
+	failAnswer = false;
+	await act(async () => { document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.click(); await flush(); });
+	ok(tape.filter((entry) => entry.startsWith("answer:tab-remote-1:ask-7:")).length === 2 && !document.querySelector(".prompt-shelf--ask"), "a successful remote Ask retry resubmits the complete answer and clears the card");
 }
 
 await act(async () => {
@@ -403,11 +403,12 @@ await act(async () => {
   await flush();
 });
 await act(async () => {
-  document.querySelector<HTMLElement>(".ask-shelf__custom-row")?.click();
+  [...document.querySelectorAll<HTMLButtonElement>(".prompt-shelf--ask .prompt-action")]
+    .find((button) => button.textContent?.includes("Other"))?.click();
   await flush();
 });
 await act(async () => {
-  const input = document.querySelector<HTMLInputElement>(".ask-shelf__custom");
+  const input = document.querySelector<HTMLInputElement>(".ask-shelf__entry-group input");
   if (input) {
     const propsKey = Object.keys(input).find((key) => key.startsWith("__reactProps")); const props = propsKey ? (input as unknown as Record<string, { onChange?: (event: { target: { value: string } }) => void }>)[propsKey] : undefined;
     props?.onChange?.({ target: { value: "canary" } });

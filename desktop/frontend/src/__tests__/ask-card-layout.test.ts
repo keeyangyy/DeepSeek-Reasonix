@@ -160,8 +160,9 @@ console.log("\nask card layout");
   const secondary = footer.querySelector(".decision-confirm-bar__secondary") as HTMLButtonElement | null;
   ok(Boolean(secondary?.textContent?.trim()), "Ask skip is a quiet footer action");
   const optionButtons = [...document.querySelectorAll(".prompt-shelf__actions .prompt-action")] as HTMLElement[];
-  // options + custom; skip is a secondary footer action
-  eq(optionButtons.length, 2, "ask renders only selectable options; custom answer is an always-visible input row");
+  // Options + Other; the single shared input is below the decision rows.
+  eq(optionButtons.length, 3, "Ask renders supplied options and an Other option");
+  ok(optionButtons.some((button) => button.textContent?.includes("Other")), "Other is rendered as a selectable decision row");
   ok(
     optionButtons[0]?.textContent?.includes("Reuse the archive flow") === true,
     "option descriptions render inline on each decision row",
@@ -253,9 +254,8 @@ console.log("\nask card layout");
     await flushTimers(200);
   });
   eq(document.querySelector(".prompt-action__description-toggle"), null, "short selected descriptions do not show a redundant disclosure");
-  eq(answers.length, 0, "single-select click stages the choice without submitting the final answer");
-  await clickConfirm();
-  eq(answers.length, 1, "confirm submits the selected single-select answer");
+  eq(answers.length, 1, "single-select click submits the answer immediately");
+  eq(answers.length, 1, "single-select click submits only once");
   eq(answers[0]?.[0]?.selected?.[0], "Minimal repair", "submitted answer matches the selected option");
   await act(async () => {
     root.unmount();
@@ -485,7 +485,7 @@ console.log("\nask card layout");
   });
   dom.window.close();
 }
-// Custom answer drafts survive switching to another option and back.
+// One shared input switches from supplement text to a custom answer when Other is selected.
 {
   const dom = installDom();
   const rootEl = document.getElementById("root");
@@ -512,31 +512,20 @@ console.log("\nask card layout");
     await flushTimers();
   });
   const actions = [...document.querySelectorAll<HTMLButtonElement>(".prompt-action")];
-  await act(async () => {
-    actions[1]?.click();
-    await flushTimers();
-  });
-  const input = document.querySelector<HTMLInputElement>(".ask-shelf__custom");
-  if (!input) throw new Error("custom input did not open");
+  const input = document.querySelector<HTMLInputElement>(".ask-shelf__entry-group input");
+  if (!input) throw new Error("shared input did not render");
   await act(async () => {
     const propsKey = Object.keys(input).find((key) => key.startsWith("__reactProps"));
     const props = propsKey ? (input as unknown as Record<string, { onChange?: (event: { target: { value: string } }) => void }>)[propsKey] : undefined;
     props?.onChange?.({ target: { value: "Keep this draft" } });
     await flushTimers();
   });
-  eq(input.value, "Keep this draft", "custom input accepts a draft");
+  eq(input.value, "Keep this draft", "shared input accepts supplement text before selecting an option");
   await act(async () => {
-    document.querySelector<HTMLButtonElement>(".prompt-action")?.click();
+    actions[1]?.click(); // Other reuses the same text as a custom answer.
     await flushTimers();
   });
-  eq(document.querySelector<HTMLInputElement>(".ask-shelf__custom")?.value, "", "selecting an option clears the visible custom draft without removing the input row");
-  await act(async () => {
-    document.querySelector<HTMLElement>(".ask-shelf__custom-row")?.click();
-    await flushTimers();
-  });
-  eq(document.querySelector<HTMLInputElement>(".ask-shelf__custom")?.value, "Keep this draft", "reopening custom restores the draft");
-  await clickConfirm();
-  eq(answers[0]?.[0]?.selected?.[0], "Keep this draft", "custom mode submits the restored draft");
+  eq(answers[0]?.[0]?.selected?.[0], "Keep this draft", "Other submits the shared input as a custom answer");
   await act(async () => { root.unmount(); });
   dom.window.close();
 }
@@ -635,9 +624,7 @@ console.log("\nask card layout");
       .find((button) => button.textContent?.includes("First A"))?.click();
     await flushTimers();
   });
-  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("1/2"), true, "single choice stays on question 1 until confirmed");
-  await clickConfirm();
-  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "Confirm advances to question 2");
+  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "single choice advances immediately to question 2");
   await act(async () => {
     document.querySelector<HTMLButtonElement>(".ask-shelf__pager-button")?.click();
     await flushTimers();
@@ -648,15 +635,12 @@ console.log("\nask card layout");
       .find((button) => button.textContent?.includes("First B"))?.click();
     await flushTimers();
   });
-  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("1/2"), true, "replacement choice remains staged until confirmed");
-  await clickConfirm();
-  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "previous question accepts a replacement choice");
+  eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "replacement choice advances immediately");
   await act(async () => {
     [...document.querySelectorAll<HTMLButtonElement>(".prompt-action")]
       .find((button) => button.textContent?.includes("Second B"))?.click();
     await flushTimers();
   });
-  await clickConfirm();
   eq(attempts, 1, "failed final submit is attempted exactly once");
   eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "failed final submit stays on question 2");
   eq(document.querySelector(".ask-shelf__crumbs")?.textContent?.includes("First B"), true, "failed final submit preserves the revised first answer");
@@ -752,6 +736,7 @@ console.log("\nask card layout");
     id: "ask-session-draft",
     questions: [{ id: "q1", prompt: "Choose one", options: [{ label: "Keep" }, { label: "Change" }] }],
   };
+  const getEntry = () => document.querySelector<HTMLInputElement>(".ask-shelf__entry-group input")!;
   const render = async (draftScope = "tab-a") => {
     await act(async () => {
       root.render(React.createElement(LocaleProvider, null,
@@ -762,8 +747,10 @@ console.log("\nask card layout");
   };
   await render();
   await act(async () => {
-    [...document.querySelectorAll<HTMLButtonElement>(".prompt-action")]
-      .find((button) => button.textContent?.includes("Change"))?.click();
+    const input = getEntry();
+    const propsKey = Object.keys(input).find((key) => key.startsWith("__reactProps"));
+    const props = propsKey ? (input as unknown as Record<string, { onChange?: (event: { target: { value: string } }) => void }>)[propsKey] : undefined;
+    props?.onChange?.({ target: { value: "Draft note" } });
     [...document.querySelectorAll<HTMLButtonElement>(".prompt-shelf__header-button")]
       .find((button) => button.getAttribute("aria-label") === "Collapse" || button.getAttribute("aria-label") === "收起")?.click();
     await flushTimers();
@@ -776,7 +763,7 @@ console.log("\nask card layout");
     ));
     await flushTimers();
   });
-  ok(![...document.querySelectorAll<HTMLElement>(".prompt-action")].some((button) => button.getAttribute("aria-selected") === "true" && button.textContent?.includes("Change")), "Ask drafts do not cross tab scopes");
+  eq(getEntry().value, "", "Ask drafts do not cross tab scopes");
   await act(async () => { otherRoot.unmount(); });
   const remountRoot = createRoot(rootEl);
   await act(async () => {
@@ -786,8 +773,7 @@ console.log("\nask card layout");
     await flushTimers();
   });
   ok(!document.querySelector(".prompt-shelf__card--collapsed"), "a remounted Ask starts expanded like harness");
-  ok([...document.querySelectorAll<HTMLElement>(".prompt-action")]
-    .some((button) => button.getAttribute("aria-selected") === "true" && button.textContent?.includes("Change")), "Ask answer draft restores within the tab scope");
+  eq(getEntry().value, "Draft note", "Ask shared input draft restores within the tab scope");
   await act(async () => { remountRoot.unmount(); });
   dom.window.close();
 }
