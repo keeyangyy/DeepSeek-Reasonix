@@ -1587,7 +1587,7 @@ func (c *Config) SaveTo(path string) error {
 	if scope == RenderScopeProject {
 		return c.saveProjectIncrementalResolved(path, resolved)
 	}
-	return writeConfigFileResolved(resolved, RenderTOMLForScope(c, scope), configFilePerm(path))
+	return c.saveScopedConfig(path, resolved, scope)
 }
 
 func (c *Config) SaveToScope(path string, scope RenderScope) error {
@@ -1610,7 +1610,7 @@ func (c *Config) SaveToScope(path string, scope RenderScope) error {
 	if err != nil {
 		return err
 	}
-	return writeConfigFileResolved(resolved, RenderTOMLForScope(c, scope), configFilePerm(path))
+	return c.saveScopedConfig(path, resolved, scope)
 }
 
 func (c *Config) saveProjectIncrementalResolved(logicalPath, resolvedPath string) error {
