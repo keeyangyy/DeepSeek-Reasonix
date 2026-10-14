@@ -115,6 +115,30 @@ console.log("\ntool data archiving on tool_result");
   eq(after[0].output, undefined, "output dropped after result");
 }
 
+// ── Test 4b: Collapsed capability subjects survive tool-data archiving ──
+{
+  let s = initialState;
+  const capabilityId = "mcp-tool:obsidian/search_notes";
+  s = reducer(s, { type: "event", e: { kind: "turn_started" } });
+  s = reducer(s, { type: "event", e: {
+    kind: "tool_dispatch",
+    tool: {
+      id: "capability-1",
+      name: "use_capability",
+      args: JSON.stringify({ action: "call" }),
+      capabilityId,
+      readOnly: true,
+    },
+  } });
+  s = reducer(s, { type: "event", e: {
+    kind: "tool_result",
+    tool: { id: "capability-1", name: "use_capability", capabilityId, readOnly: true, output: "ok" },
+  } });
+  const item = toolItems(s).find((tool) => tool.id === "capability-1");
+  ok(item?.dataArchived === true, "completed capability data is archived");
+  eq(item?.subject, capabilityId, "collapsed capability subject remains on archived item");
+}
+
 // ── Test 5: Total string size reduction in a long session ──
 {
   const TOOL_COUNT = 500;

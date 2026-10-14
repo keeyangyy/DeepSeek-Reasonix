@@ -328,7 +328,7 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
   const displayOutput = isWebSearch || toolOutputDuplicatesError(effectiveOutput, item.error) ? undefined : effectiveOutput;
   const previewDiff = item.fileDiff?.diff ? item.fileDiff : undefined;
   const diffs = previewDiff || archivedWithoutFullData ? [] : diffsFor(item.name, effectiveArgs);
-  const subject = fullData ? subjectOf(item.name, effectiveArgs) : item.subject || subjectOf(item.name, effectiveArgs);
+  const subject = fullData ? subjectOf(item.name, effectiveArgs, item.capabilityId) : item.subject || subjectOf(item.name, effectiveArgs, item.capabilityId);
   const shellName = isShellCard ? shellDisplayName(execution) : (displayName ?? item.name);
   const shellSummary = execution && item.status !== "running" ? shellSettledSummary(t, execution, item.durationMs) : "";
   const verificationLabel = shellVerificationLabel(t, execution?.verification);
