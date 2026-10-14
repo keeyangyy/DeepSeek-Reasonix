@@ -94,6 +94,13 @@ jobs:
           VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
+          # Accept the fork's stable vX.Y.Z and pre-release vX.Y.Z-beta.N shapes.
+          # The shape is checked here so a typo fails before a tag exists rather
+          # than after: the tag is pushed and removing it is disruptive.
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+            echo "::error::version must be X.Y.Z or X.Y.Z-beta.N, got: $VERSION" >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then
