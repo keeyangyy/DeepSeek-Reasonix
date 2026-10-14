@@ -123,8 +123,7 @@ func TestSubmitSlashSubagentRunsIsolatedAndPersistsDistilledAnswer(t *testing.T)
 		},
 		SkillProfile: func(skill.Skill) *event.Profile { return &event.Profile{Model: "test/model", Effort: "high"} },
 	})
-	defer c.Close()
-
+	defer closeControllerQuiet(t, c, dir)
 	c.SubmitDisplay("/helper inspect auth", "/helper inspect auth")
 	gotEvents := waitForTurnEvents(t, events)
 	if calls != 1 || gotSkill.Name != "helper" || !strings.Contains(gotTask, "inspect auth") {

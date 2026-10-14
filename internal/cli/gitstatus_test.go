@@ -107,7 +107,9 @@ func TestLoadGitStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Slow CI runners occasionally exceed 2s on the real `git status`
+	// subprocess under load; widen the bound well past actual cost.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	status, err := loadGitStatus(ctx, filepath.Join(root, "subdir"))
 	if err != nil {
