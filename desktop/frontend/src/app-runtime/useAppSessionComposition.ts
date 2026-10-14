@@ -408,7 +408,7 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
     },
   });
   const {
-    rewindState, rewindCommitting, rewindSignal, setRewindStateForTab,
+    rewindState, rewindCommitting, rewindSignal, consumeRewindSignal, setRewindStateForTab,
     handleSessionRevertCommitted, handleMessageAction, handleUndoRewind, handleEditPrompt,
   } = sessionUndoCommands;
   const clearSubmissionUndo = useCommittedCommand((tab: string) => setRewindStateForTab(tab, null));
@@ -704,7 +704,7 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
       handleInitialRemoteHosts, handleInitialRemoteStatuses,
     },
     sessionUndo: {
-      rewindState, rewindCommitting, rewindSignal, handleSessionRevertCommitted, handleMessageAction, handleUndoRewind, handleEditPrompt,
+      rewindState, rewindCommitting, rewindSignal, consumeRewindSignal, handleSessionRevertCommitted, handleMessageAction, handleUndoRewind, handleEditPrompt,
     },
     todoPanel: { showTodos, scopedTodoBatch, todos, dismissTodos, handleTodoContinue },
     delivery: { handleDeliveryContinue },
