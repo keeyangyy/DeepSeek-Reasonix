@@ -47,6 +47,9 @@ func saveHistorySliceSession(t *testing.T, dir, name string, msgs []provider.Mes
 	if err := sess.Save(path); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("save branch meta: %v", err)
+	}
 	return sess, path
 }
 
@@ -695,14 +698,11 @@ func TestHistorySliceColdTabSizeGuard(t *testing.T) {
 	_, path := saveHistorySliceSession(t, dir, "cold-size.jsonl", msgs)
 	tab.SessionPath = path
 	// Model a pre-WAL checkpoint. Once a native event log exists it is the
-	// canonical transcript, so direct edits to the compatibility JSONL anchor
-	// must not supersede it.
+	// canonical transcript, so direct JSONL anchor edits must not supersede it.
 	removeHistorySliceNativeState(t, path)
 
 	// Append a message line directly to the .jsonl: the index TranscriptSize
-	// no longer matches the file size and must be treated as stale — the page
-	// must come from a rescan and include the appended message, not corrupt
-	// offset slicing.
+	// no longer matches the file, so the page must come from a rescan.
 	extra, err := json.Marshal(historySliceAssistant(5, "appended-externally"))
 	if err != nil {
 		t.Fatal(err)

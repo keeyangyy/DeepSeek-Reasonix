@@ -46,6 +46,9 @@ func TestSessionWithFreshSystemPromptPreservesLoadedRewriteBaseline(t *testing.T
 	if err := s.Save(path); err != nil {
 		t.Fatalf("Save base: %v", err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta base: %v", err)
+	}
 
 	loaded, err := agent.LoadSession(path)
 	if err != nil {
@@ -291,6 +294,9 @@ func TestResumeWithFreshSystemPromptPreservesLoadedRewriteBaseline(t *testing.T)
 	if err := s.Save(path); err != nil {
 		t.Fatalf("Save base: %v", err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta base: %v", err)
+	}
 
 	loaded, err := agent.LoadSession(path)
 	if err != nil {
@@ -340,6 +346,9 @@ func TestResumeWithFreshSystemPromptRejectsStaleCarriedHistoryBaseline(t *testin
 	current.Add(provider.Message{Role: provider.RoleAssistant, Content: "disk two"})
 	if err := current.Save(path); err != nil {
 		t.Fatalf("Save current: %v", err)
+	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta current: %v", err)
 	}
 
 	stale := []provider.Message{
