@@ -104,6 +104,11 @@ function cachedCompactions<T extends AnchorRowLike>(
 
 // Insert cards before their anchor user row (Nth from the end), keeping cache
 // order within one anchor; cards without a usable anchor append at the end.
+// Exception: usersAfter === 0 (the card sat at the stream end when compaction
+// finished and no user row followed) means every rebuilt history row is
+// post-compaction content — the card belongs BEFORE that history (top), not
+// after it. Rebuilds that load older pages above keep working via the anchor
+// refresh on user append.
 function insertCompactionsAtAnchors<T extends AnchorRowLike>(
   nextItems: T[],
   cards: readonly CompactionCacheEntry<T>[],
@@ -113,10 +118,12 @@ function insertCompactionsAtAnchors<T extends AnchorRowLike>(
     0,
   );
   const byAnchor = new Map<number, CompactionCacheEntry<T>[]>();
+  const head: T[] = [];
   const tail: T[] = [];
   for (const entry of cards) {
     if (entry.usersAfter <= 0 || entry.usersAfter > userCount) {
-      tail.push(entry.card);
+      if (entry.usersAfter === 0) head.push(entry.card);
+      else tail.push(entry.card);
       continue;
     }
     const bucket = byAnchor.get(entry.usersAfter);
@@ -152,7 +159,7 @@ function insertCompactionsAtAnchors<T extends AnchorRowLike>(
   }
   out.reverse();
   out.push(...tail);
-  return out;
+  return head.length > 0 ? [...head, ...out] : out;
 }
 
 // preserveLiveCompactions carries the session's compaction cards (live event
