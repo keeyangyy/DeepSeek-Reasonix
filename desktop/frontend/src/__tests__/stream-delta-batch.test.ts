@@ -6,7 +6,7 @@
 // delivery would.
 
 import { initialState, reducer } from "../lib/useController";
-import { coalesceStreamDeltas } from "../lib/streamDeltaBatch";
+import { coalesceStreamDeltas, filterStaleStreamDeltas } from "../lib/streamDeltaBatch";
 import type { StreamDeltaEntry } from "../lib/streamDeltaBatch";
 import type { WireEvent } from "../lib/types";
 
@@ -43,6 +43,42 @@ const reasoning = (tabId: string, t: string): StreamDeltaEntry => ({ tabId, e: {
   eq(batches[0].segments[1].delta, "发现问题如下", "text run spans the other tab's interleave");
   eq(batches[0].segments[2].delta, "再想", "reasoning after text stays a separate segment");
   eq(batches[1].segments[0].delta, "other", "tab b keeps its own batch");
+}
+
+// --- deltas enqueued before a same-tab re-bind are dropped at flush ---
+// Regression: a reset/newSession landing between enqueue and the frame callback
+// used to flush the previous session's text/reasoning into the new transcript
+// (observed as older content rendered after newer content).
+{
+  const batch: StreamDeltaEntry[] = [
+    { tabId: "a", e: { kind: "text", text: "OLD-TEXT" } as WireEvent, sessionGeneration: 7 },
+    { tabId: "a", e: { kind: "text", text: "NEW-TEXT" } as WireEvent, sessionGeneration: 8 },
+  ];
+  const live = filterStaleStreamDeltas(batch, () => ({ sessionGeneration: 8 }));
+  eq(live.length, 1, "stale-generation delta dropped at flush");
+  eq(live[0].e.text, "NEW-TEXT", "current-generation delta kept");
+  eq(coalesceStreamDeltas(live)[0].segments[0].delta, "NEW-TEXT", "only the current generation reaches the reducer");
+}
+
+// --- a changed runtime epoch also invalidates the queued batch ---
+{
+  const batch: StreamDeltaEntry[] = [
+    { tabId: "a", e: { kind: "reasoning", text: "OLD" } as WireEvent, runtimeEpoch: "e1" },
+    { tabId: "a", e: { kind: "reasoning", text: "NEW" } as WireEvent, runtimeEpoch: "e2" },
+  ];
+  const live = filterStaleStreamDeltas(batch, () => ({ runtimeEpoch: "e2" }));
+  eq(live.length, 1, "stale-epoch delta dropped at flush");
+  eq(live[0].e.text, "NEW", "current-epoch delta kept");
+}
+
+// --- deltas without identity, and unresolvable tabs, keep their old behaviour ---
+{
+  const batch: StreamDeltaEntry[] = [
+    { tabId: "a", e: { kind: "text", text: "no-identity" } as WireEvent },
+    { tabId: "ghost", e: { kind: "text", text: "unregistered" } as WireEvent, sessionGeneration: 3 },
+  ];
+  const live = filterStaleStreamDeltas(batch, () => undefined);
+  eq(live.length, 2, "unrecorded identity and unknown tab both survive");
 }
 
 // --- legacy deltas carried in the reasoning field still coalesce ---
