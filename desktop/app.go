@@ -3708,11 +3708,12 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 	}
 	if loaded == nil {
 		var err error
-		loaded, err = loadResumableSession(sessionPath)
-		if err != nil {
+		if loaded, err = loadResumableSession(sessionPath); err != nil {
 			return err
 		}
 	}
+	// Wait out a still-starting detached copy before rebuilding this session.
+	a.awaitOwnedSessionRuntime(tab, sessionPath)
 	// Session rebinding is a candidate transaction. Keep the source controller,
 	// lease, runtime key, epoch, and profile live until the target controller has
 	// built, restored, validated, and acquired its own lease. The lifecycle
@@ -9422,10 +9423,10 @@ var (
 	// bind or archive begins; those callers must not surface a spurious
 	// "already open in another Reasonix window" error for ownership that is
 	// genuinely free once the short operation finishes. A lease held by another
-	// window or process stays held for its whole lifetime, so the bounded retry
-	// still fails fast there.
-	sessionLeaseContentionRetryInterval = 50 * time.Millisecond
-	sessionLeaseContentionRetryAttempts = 2
+	// window or process stays held for its whole lifetime and still fails fast;
+	// the window must only outlast a tab switch saving its tens-of-MB session.
+	sessionLeaseContentionRetryInterval = 100 * time.Millisecond
+	sessionLeaseContentionRetryAttempts = 20
 )
 
 // withSessionLeaseContentionRetry retries acquire while it fails with
