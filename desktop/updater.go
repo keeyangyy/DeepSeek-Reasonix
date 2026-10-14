@@ -68,28 +68,26 @@ type requiredDesktopAsset struct {
 }
 
 var (
+	// This fork publishes the Windows line only, so the required-asset table is
+	// narrowed to the single artifact we ship. validateDesktopManifest walks
+	// this table and rejects the whole manifest when an entry is missing, so
+	// keeping stale macOS/Linux rows would reject our own manifests.
 	requiredDesktopUpdaterAssets = []requiredDesktopAsset{
-		{group: "platforms", key: "darwin-arm64", filename: "Reasonix-darwin-arm64.zip"},
-		{group: "platforms", key: "darwin-amd64", filename: "Reasonix-darwin-amd64.zip"},
 		{group: "platforms", key: "windows-amd64", filename: "Reasonix-windows-amd64-installer.exe"},
-		{group: "platforms", key: "windows-arm64", filename: "Reasonix-windows-arm64-installer.exe"},
-		{group: "platforms", key: "linux-amd64", filename: "Reasonix-linux-amd64.tar.gz"},
-		{group: "native_packages", key: "linux-amd64", filename: "Reasonix-linux-amd64.deb"},
 	}
-	requiredDesktopDownloadAssets = []requiredDesktopAsset{
-		{group: "downloads", key: "Reasonix-darwin-universal.dmg", filename: "Reasonix-darwin-universal.dmg"},
-		{group: "downloads", key: "Reasonix-windows-amd64.zip", filename: "Reasonix-windows-amd64.zip"},
-	}
+	// Manifests published by this line omit the downloads group entirely, which
+	// keeps validateDesktopManifest on its legacy (updater-assets-only) path.
+	requiredDesktopDownloadAssets = []requiredDesktopAsset{}
 )
 
-// githubManifestFallback is the stable channel's last-resort manifest source.
-// dl.reasonix.io and crash.reasonix.io share one Cloudflare zone, so bot
-// protection that 403s a user's egress IP takes out both first-party endpoints
-// at once (#6005); GitHub is separate infrastructure. Stable desktop releases
-// own the repo-wide latest badge and publish latest.json directly, while
-// The unified official Release carries the desktop manifest as a final fallback
-// when both first-party endpoints are unavailable.
-const githubManifestFallback = "https://github.com/esengine/DeepSeek-Reasonix/releases/latest/download/latest.json"
+// githubManifestFallback is this fork's sole manifest source. Upstream's
+// first-party endpoints now serve Electron manifests whose install_layout this
+// Wails line cannot accept, and upstream's repository-wide /releases/latest no
+// longer carries a desktop manifest, so neither is usable. The anchor is a
+// fixed tag whose release content each of our releases overwrites in place,
+// which keeps the updater pointing at this line instead of whichever fork line
+// (studio, legacy 1.39) published most recently.
+const githubManifestFallback = "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/wails-latest/latest.json"
 
 func normalizeUpdateChannel(ch string) string {
 	return config.NormalizeDesktopUpdateChannel(ch)
@@ -113,12 +111,11 @@ func runningUpdateChannel() string {
 }
 
 // manifestEndpoints returns the manifest URLs for the selected update channel,
-// in the order fetchManifest tries them.
+// in the order fetchManifest tries them. This fork runs no first-party gateway,
+// so the release anchor is the single source.
 func manifestEndpoints(selected string) []string {
 	_ = selected
 	return []string{
-		r2Base + "/latest/latest.json",
-		releaseGatewayBase + "/stable/latest.json",
 		githubManifestFallback,
 	}
 }
@@ -306,10 +303,13 @@ func desktopAssetBases(selected, version string, allowLegacyPreview bool) []stri
 	_ = selected
 	_ = allowLegacyPreview
 	tag := desktopReleaseTag(selected, version)
+	// r2Base stays a recognized base so upstream-shaped URLs remain parseable,
+	// but this fork publishes its artifacts on its own GitHub releases under
+	// both the desktop-<version> and v<version> tags.
 	return []string{
 		fmt.Sprintf("%s/%s/", r2Base, tag),
-		fmt.Sprintf("https://github.com/esengine/DeepSeek-Reasonix/releases/download/%s/", tag),
-		fmt.Sprintf("https://github.com/esengine/DeepSeek-Reasonix/releases/download/%s/", version),
+		fmt.Sprintf("https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/%s/", tag),
+		fmt.Sprintf("https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/%s/", version),
 	}
 }
 
