@@ -1,0 +1,40 @@
+name: CI rerun
+
+# A run cannot rerun itself ("This workflow is already running"), so the retry
+# lives in its own workflow triggered by CI's completion. Hosted Windows runners
+# fail these kernel lanes intermittently (runtime-level faults and package
+# timeouts that pass on a rerun); this retries the failed jobs exactly once.
+# run_attempt 2 and later never re-enter, so it cannot loop, and --failed keeps
+# the retry scoped to what actually broke.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  rerun:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          # workflow_dispatch has no triggering run: fall back to the latest
+          # failed CI run on this branch.
+          if [ -z "$TARGET" ]; then
+            TARGET="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow ci.yml --branch "${GITHUB_REF_NAME}" \
+              --status failure --limit 1 --json databaseId --jq '.[0].databaseId')"
+          fi
+          if [ -z "$TARGET" ] || [ "$TARGET" = "null" ]; then
+            echo "No failed run to retry"; exit 0
+          fi
+          echo "Retrying failed jobs of run $TARGET"
+          gh run rerun "$TARGET" --failed --repo "$GITHUB_REPOSITORY"
