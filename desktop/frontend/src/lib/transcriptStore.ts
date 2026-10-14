@@ -76,6 +76,8 @@ export interface TranscriptProjection {
   revision: number;
   revisionKnown: boolean;
   digest: string;
+  /** In-flight turn's id (empty when none), for exact live↔history alignment. */
+  openTurnId?: string;
 }
 
 export interface LoadOlderResult extends TranscriptProjection {
@@ -95,6 +97,9 @@ export interface TranscriptContentChange {
 
 interface TranscriptRecord {
   entryId: string;
+  /** Stable message id (empty for legacy sessions). Used to drop a row whose
+   * entryId re-keyed across a rewrite but whose message is already resident. */
+  messageId: string;
   turn: number;
   order: number;
   message: HistoryMessage;
@@ -124,6 +129,8 @@ interface SessionTranscript {
   sessionPath: string;
   records: TranscriptRecord[];
   byId: Map<string, TranscriptRecord>;
+  /** non-empty messageId -> entryId (dedupe rows that re-keyed on rewind). */
+  byMessageId: Map<string, string>;
   /** toolCallId -> result record entryId (first record wins, like resultByID). */
   toolResultOwners: Map<string, string>;
   /** entryId -> projected items of that record ([] when consumed). */
@@ -147,6 +154,7 @@ interface SessionTranscript {
   revision: number;
   revisionKnown: boolean;
   digest: string;
+  openTurnId: string;
   generation: number;
   bodyBytes: number;
   olderInFlight: boolean;
@@ -202,6 +210,7 @@ function recordBytes(m: HistoryMessage): number {
 function entryToRecord(entry: HistoryEntry): TranscriptRecord {
   return {
     entryId: entry.entryId,
+    messageId: entry.messageId ?? entry.message.id ?? "",
     turn: entry.turn,
     order: entry.order,
     message: entry.message,
@@ -431,6 +440,7 @@ export class TranscriptStore {
       sessionPath,
       records: [],
       byId: new Map(),
+      byMessageId: new Map(),
       toolResultOwners: new Map(),
       contributions: new Map(),
       consumed: new Set(),
@@ -447,6 +457,7 @@ export class TranscriptStore {
       revision: 0,
       revisionKnown: false,
       digest: "",
+      openTurnId: "",
       generation: 0,
       bodyBytes: 0,
       olderInFlight: false,
@@ -547,6 +558,7 @@ export class TranscriptStore {
       revision: session.revision,
       revisionKnown: session.revisionKnown,
       digest: session.digest,
+      openTurnId: session.openTurnId || undefined,
     };
   }
 
@@ -646,6 +658,10 @@ export class TranscriptStore {
     const consumed = new Set<string>();
     session.records = records;
     session.byId = new Map(records.map((rec) => [rec.entryId, rec]));
+    session.byMessageId = new Map();
+    for (const rec of records) {
+      if (rec.messageId) session.byMessageId.set(rec.messageId, rec.entryId);
+    }
     session.toolResultOwners = view.toolResultOwners;
     session.contributions = new Map();
     session.consumed = consumed;
@@ -671,7 +687,13 @@ export class TranscriptStore {
     const fresh: TranscriptRecord[] = [];
     for (const entry of entries) {
       if (session.byId.has(entry.entryId)) continue; // contract guard: never duplicate
-      fresh.push(entryToRecord(entry));
+      const messageId = entry.messageId ?? entry.message.id ?? "";
+      // A rewrite (rewind) re-keys entryIds by position; the stable messageId
+      // still identifies a row that is already resident.
+      if (messageId && session.byMessageId.has(messageId)) continue;
+      const rec = entryToRecord(entry);
+      if (messageId) session.byMessageId.set(messageId, rec.entryId);
+      fresh.push(rec);
     }
     if (fresh.length === 0) return { items: [], removeIds: [] };
     const combined = [...fresh, ...session.records];
@@ -729,7 +751,13 @@ export class TranscriptStore {
     const fresh: TranscriptRecord[] = [];
     for (const entry of entries) {
       if (session.byId.has(entry.entryId)) continue;
-      fresh.push(entryToRecord(entry));
+      const messageId = entry.messageId ?? entry.message.id ?? "";
+      // A rewrite (rewind) re-keys entryIds by position; the stable messageId
+      // still identifies a row that is already resident.
+      if (messageId && session.byMessageId.has(messageId)) continue;
+      const rec = entryToRecord(entry);
+      if (messageId) session.byMessageId.set(messageId, rec.entryId);
+      fresh.push(rec);
     }
     if (fresh.length === 0) return [];
     const combined = [...session.records, ...fresh];
@@ -821,6 +849,7 @@ export class TranscriptStore {
     session.revision = slice.revision ?? 0;
     session.revisionKnown = sliceRevisionKnown(slice);
     session.digest = slice.digest ?? "";
+    session.openTurnId = slice.openTurnId ?? "";
     this.autoFetchRefs(session);
     this.enforceBudgets();
     if (this.sessions.get(key) !== session) return undefined; // evicted by the budget
@@ -870,6 +899,7 @@ export class TranscriptStore {
       session.revision = slice.revision ?? session.revision;
       session.revisionKnown = sliceRevisionKnown(slice);
       session.digest = slice.digest ?? session.digest;
+      session.openTurnId = slice.openTurnId ?? session.openTurnId;
       this.enforceBudgets();
       if (this.sessions.get(key) !== session) return undefined;
       const projection = { ...this.projectionOf(session), kind: "prepend" as const, prependItems: items, removeIds };
