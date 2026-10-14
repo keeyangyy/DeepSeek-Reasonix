@@ -44,6 +44,10 @@ export function ProcessFoldHeader({
   const countParts: string[] = [];
   if (toolCount > 0) countParts.push(t("transcript.toolCount", { n: toolCount }));
   if (thoughtCount > 0) countParts.push(t("transcript.thoughtCount", { n: thoughtCount }));
+  // Delegated work is the one thing a closed fold cannot be read from: nested
+  // sub-agent calls carry a parentId and never reach the fold body, so the
+  // header has to name them or a collapsed fold hides the delegation entirely.
+  if (segment.subagentCount > 0) countParts.push(t("transcript.subagentCount", { n: segment.subagentCount }));
   const label = segment.labelStyle === "counts"
     ? (countParts.length > 0 ? countParts.join(" · ") : t("transcript.processed"))
     : countParts.length > 0
