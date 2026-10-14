@@ -17,6 +17,7 @@ type AnswerMode = "option" | "custom";
 type AskDraft = {
   sel: Record<string, string[]>;
   custom: Record<string, string>;
+  supplement: Record<string, Record<string, string>>;
   answerMode: Record<string, AnswerMode>;
   active: number;
   selectedIndex: number;
@@ -24,7 +25,13 @@ type AskDraft = {
 
 function readAskDraft(key: string): AskDraft | undefined {
   const draft = askDrafts.get(key);
-  return draft ? { ...draft, sel: { ...draft.sel }, custom: { ...draft.custom }, answerMode: { ...draft.answerMode } } : undefined;
+  return draft ? {
+    ...draft,
+    sel: { ...draft.sel },
+    custom: { ...draft.custom },
+    supplement: { ...draft.supplement },
+    answerMode: { ...draft.answerMode },
+  } : undefined;
 }
 
 function clearAskDraft(key: string): void {
@@ -32,9 +39,8 @@ function clearAskDraft(key: string): void {
 }
 
 // AskCard renders the `ask` tool as a decision shelf near the composer. It
-// walks multi-question asks one at a time. Single-select choices advance to
-// the next question immediately; multi-select and custom answers wait for an
-// explicit confirm, and the final question still requires submission.
+// walks multi-question asks one at a time. Every choice waits for explicit
+// confirmation so optional per-choice notes can be entered before advancing.
 type AskCardProps = {
   ask: WireAsk;
   onAnswer: (id: string, answers: QuestionAnswer[]) => void | Promise<void>;
@@ -55,6 +61,7 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
   // Per-question state: selected option labels, and an optional typed answer.
   const [sel, setSel] = useState<Record<string, string[]>>(() => readAskDraft(draftKey)?.sel ?? {});
   const [custom, setCustom] = useState<Record<string, string>>(() => readAskDraft(draftKey)?.custom ?? {});
+  const [supplement, setSupplement] = useState<Record<string, Record<string, string>>>(() => readAskDraft(draftKey)?.supplement ?? {});
   const [answerMode, setAnswerMode] = useState<Record<string, AnswerMode>>(() => readAskDraft(draftKey)?.answerMode ?? {});
   const [customOpen, setCustomOpen] = useState(false);
   const [active, setActive] = useState(() => readAskDraft(draftKey)?.active ?? 0);
@@ -96,11 +103,18 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
 
   useEffect(() => {
     try {
-      askDrafts.set(draftKey, { sel: { ...sel }, custom: { ...custom }, answerMode: { ...answerMode }, active, selectedIndex });
+      askDrafts.set(draftKey, {
+        sel: { ...sel },
+        custom: { ...custom },
+        supplement: { ...supplement },
+        answerMode: { ...answerMode },
+        active,
+        selectedIndex,
+      });
     } catch {
       // Draft storage is best effort; the live pending ask remains authoritative.
     }
-  }, [active, answerMode, custom, draftKey, selectedIndex, sel]);
+  }, [active, answerMode, custom, draftKey, selectedIndex, sel, supplement]);
 
   useEffect(() => {
     setCustomOpen(false);
@@ -119,12 +133,16 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
   const answersFrom = (
     nextSel: Record<string, string[]> = sel,
     nextCustom: Record<string, string> = custom,
+    nextMode: Record<string, AnswerMode> = answerMode,
   ): QuestionAnswer[] =>
     questions.map((question) => ({
       questionId: question.id,
-      selected: answerMode[question.id] === "custom" && nextCustom[question.id]?.trim()
+      selected: nextMode[question.id] === "custom" && nextCustom[question.id]?.trim()
         ? [nextCustom[question.id].trim()]
-        : (nextSel[question.id] ?? []),
+        : (nextSel[question.id] ?? []).flatMap((label) => {
+          const note = supplement[question.id]?.[label]?.trim();
+          return note ? [label, note] : [label];
+        }),
     }));
 
   const answerLabel = (question: WireAskQuestion) => {
@@ -146,10 +164,10 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
       .catch(() => setSubmitting(false));
   };
 
-  const finishOrAdvance = (nextSel = sel, nextCustom = custom) => {
+  const finishOrAdvance = (nextSel = sel, nextCustom = custom, nextMode = answerMode) => {
     if (submitting) return;
     if (isLast) {
-      submitAction(() => Promise.resolve(onAnswer(ask.id, answersFrom(nextSel, nextCustom))).then(() => {
+      submitAction(() => Promise.resolve(onAnswer(ask.id, answersFrom(nextSel, nextCustom, nextMode))).then(() => {
         clearAskDraft(draftKey);
       }));
       return;
@@ -211,12 +229,11 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
       if (q.multi) {
         toggleOption(q, option.label);
       } else {
-        // Single-select follows harness behavior: choose and advance, while
-        // keeping the answer in the draft so Back can revise it.
+        // Keep the choice staged until explicit confirmation, allowing an
+        // optional note to be entered first.
         setAnswerMode((m) => ({ ...m, [q.id]: "option" }));
         setSel((s) => ({ ...s, [q.id]: [option.label] }));
         setCustomOpen(false);
-        if (active < questions.length - 1) setActive((i) => i + 1);
       }
     } else if (index === customRowIndex) {
       // Opening custom clears option picks for this question.
@@ -254,7 +271,8 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
         const nextCustom = { ...custom, [q.id]: "" };
         setSel(nextSel);
         setCustom(nextCustom);
-        finishOrAdvance(nextSel, nextCustom);
+        setAnswerMode((m) => ({ ...m, [q.id]: "option" }));
+        finishOrAdvance(nextSel, nextCustom, { ...answerMode, [q.id]: "option" });
         return;
       }
     }
@@ -358,22 +376,43 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
             const on = (sel[q.id] ?? []).includes(o.label);
             const cursor = selectedIndex === index;
             return (
-              <PromptAction
-                key={o.label}
-                actionId={`${instanceId}-row-${index}`}
-                keyLabel={q.options.length <= 9 ? String(index + 1) : ""}
-                label={o.label}
-                description={o.description}
-                descriptionId={`${instanceId}-description-${index}`}
-                descriptionDisclosure
-                onDescriptionOverflowChange={selectedIndex === index ? setDescriptionTruncated : undefined}
-                onClick={() => selectRow(index)}
-                // Single-select: cursor owns selection. Multi-select: selected
-                // means checked; active is the keyboard cursor only.
-                selected={q.multi ? on : cursor}
-                active={q.multi ? cursor : false}
-                disabled={submitting}
-              />
+              <div className="ask-shelf__option-group" key={o.label}>
+                <PromptAction
+                  actionId={`${instanceId}-row-${index}`}
+                  keyLabel={q.options.length <= 9 ? String(index + 1) : ""}
+                  label={o.label}
+                  description={o.description}
+                  descriptionId={`${instanceId}-description-${index}`}
+                  descriptionDisclosure
+                  onDescriptionOverflowChange={selectedIndex === index ? setDescriptionTruncated : undefined}
+                  onClick={() => selectRow(index)}
+                  // Single-select: cursor owns selection. Multi-select: selected
+                  // means checked; active is the keyboard cursor only.
+                  selected={q.multi ? on : cursor}
+                  active={q.multi ? cursor : false}
+                  disabled={submitting}
+                />
+                {on && (
+                  <input
+                    className="ask-shelf__supplement"
+                    aria-label={t("ask.supplementFor", { option: o.label })}
+                    placeholder={t("ask.supplementPlaceholder")}
+                    value={supplement[q.id]?.[o.label] ?? ""}
+                    disabled={submitting}
+                    onChange={(event) => setSupplement((current) => ({
+                      ...current,
+                      [q.id]: { ...current[q.id], [o.label]: event.target.value },
+                    }))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+                        event.preventDefault();
+                        confirmSelected();
+                      }
+                      event.stopPropagation();
+                    }}
+                  />
+                )}
+              </div>
             );
           })}
           <div
@@ -397,7 +436,7 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
               onFocus={() => setSelectedIndex(customRowIndex)}
               onChange={(e) => setTyped(q, e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && canConfirm()) {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && canConfirm()) {
                   e.preventDefault();
                   confirmSelected();
                 }
