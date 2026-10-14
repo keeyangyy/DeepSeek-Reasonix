@@ -71,7 +71,12 @@ var (
 )
 
 func contextLimitStatusOK(status int) bool {
-	return status == http.StatusBadRequest || status == http.StatusRequestEntityTooLarge || status == http.StatusUnprocessableEntity
+	switch status {
+	case http.StatusBadRequest, http.StatusRequestEntityTooLarge,
+		http.StatusUnprocessableEntity, http.StatusBadGateway:
+		return true
+	}
+	return false
 }
 
 func positiveToken(n int) bool { return n > 0 }
@@ -251,19 +256,25 @@ func ParseContextLimitError(apiErr *APIError) *ContextLimitError {
 }
 
 // isUnnumberedPromptTooLong matches provider overflow errors that carry no
-// token numbers at all. Canonical shape — Zhipu GLM 1261:
+// token numbers at all. Canonical shapes:
 //
-//	{"error":{"code":"1261","message":"Prompt exceeds max length"}}
+//	{"error":{"code":"1261","message":"Prompt exceeds max length"}}   (Zhipu GLM)
+//	"inference request is invalid"                                   (Sensenova, 400/502-wrapped)
 //
 // The message (or the whole body, when the JSON shape differs) is matched
-// case-insensitively; code 1261 is not matched directly so sibling GLM codes
-// that reuse the message stay covered and numeric codes never false-positive.
+// case-insensitively; numeric codes are never matched directly so sibling codes
+// that reuse the message stay covered. Recognising these matters: without a
+// match the failure is retried verbatim instead of triggering the clip-and-
+// retry recovery (measured: a 4.1MB summary request was resent unchanged three
+// times after consecutive 400s).
 func isUnnumberedPromptTooLong(message, body string) bool {
 	for _, s := range []string{message, body} {
 		if s == "" {
 			continue
 		}
-		if strings.Contains(strings.ToLower(s), "prompt exceeds max length") {
+		low := strings.ToLower(s)
+		if strings.Contains(low, "prompt exceeds max length") ||
+			strings.Contains(low, "inference request is invalid") {
 			return true
 		}
 	}
