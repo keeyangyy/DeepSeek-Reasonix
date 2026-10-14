@@ -24,7 +24,7 @@ func (a *Agent) summarizeTranscript(ctx context.Context, region []provider.Messa
 
 func (a *Agent) slimSummaryRequest(region []provider.Message, instructions string) provider.Request {
 	body := "Conversation transcript to compact:\n\n" + renderTranscript(modelInputMessages(region)) +
-		"\n\n" + a.compactionInstructionFor(region, instructions)
+		"\n\n" + compactionInstructionWithFocus(instructions)
 	return provider.Request{
 		Messages: []provider.Message{
 			{Role: provider.RoleSystem, Content: slimSummarySystemPrompt},
