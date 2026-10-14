@@ -85,12 +85,12 @@ func TestSnapshotRuleOnlyAppliesToContextBearingFolds(t *testing.T) {
 	snapshot := HostGeneratedUserMessage(sessioncontext.Build(sessioncontext.Sections{Workspace: "/work"}).Content)
 	a := &Agent{}
 	withContext := a.compactionInstructionFor([]provider.Message{snapshot, {Role: provider.RoleUser, Content: "hi"}}, "")
-	if !strings.Contains(withContext, "Never restate host-generated session-context snapshots") {
+	if !strings.Contains(withContext, strings.TrimSpace(compactionSnapshotRule)) {
 		t.Fatalf("context-bearing fold lost the snapshot rule: %q", withContext)
 	}
 	plain := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
 	withoutContext := a.compactionInstructionFor(plain, "")
-	if strings.Contains(withoutContext, "Never restate") {
+	if strings.Contains(withoutContext, strings.TrimSpace(compactionSnapshotRule)) {
 		t.Fatalf("context-free fold gained the snapshot rule: %q", withoutContext)
 	}
 	if withoutContext != compactionInstructionWithFocus("") {
