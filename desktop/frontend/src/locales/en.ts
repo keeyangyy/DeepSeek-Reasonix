@@ -3245,6 +3245,7 @@ export const en = {
   "subagent.strip.more": "+{n} more",
   "transcript.thoughtCount": "{n} thoughts",
   "transcript.subagentCount": "{n} sub-agents",
+  "transcript.askCount": "{n} Ask",
   "transcript.steer": "Mid-turn steer",
   "transcript.working": "Working",
   "transcript.workingDuration": "Working {duration}",

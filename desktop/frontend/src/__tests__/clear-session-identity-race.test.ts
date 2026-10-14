@@ -38,6 +38,8 @@ console.log("\nclear-session identity race");
 ok(hydrateIdentityCurrent("/a.jsonl", 1, "/a.jsonl", 1), "matching path+generation is current");
 ok(!hydrateIdentityCurrent("/a.jsonl", 1, "/b.jsonl", 2), "path drift after clear is rejected");
 ok(!hydrateIdentityCurrent("/a.jsonl", 1, "/a.jsonl", 2), "generation-only drift after clear is rejected");
+ok(!hydrateIdentityCurrent("/a.jsonl", undefined, "/a.jsonl", 1), "omitted zero generation cannot validate a later generation");
+ok(hydrateIdentityCurrent("/a.jsonl", undefined, "/a.jsonl", 0), "omitted generation matches the Wails zero value");
 ok(hydrateIdentityCurrent("", undefined, "/b.jsonl", 2), "empty load path does not false-reject");
 
 // ── deferred A hydrate vs clear→B (barrier interleaving) ───────────────────
@@ -86,6 +88,23 @@ ok(result.items.length === 0, "transcript remains empty after rejected late A");
 ok(live.sessionPath === "/sessions/b.jsonl", "live identity path stays B");
 ok(live.sessionGeneration === 2, "live identity generation stays B");
 
+// A delayed older page from a prior generation must not prepend at the same path.
+const olderPage = deferred<string[]>();
+const liveOlder: LiveMeta = { sessionPath: "/sessions/same.jsonl", sessionGeneration: 0, items: ["latest"] };
+const loadOlder = (async () => {
+  const loadPath = liveOlder.sessionPath;
+  const loadGeneration = liveOlder.sessionGeneration;
+  const page = await olderPage.promise;
+  if (!hydrateIdentityCurrent(loadPath, loadGeneration, liveOlder.sessionPath, liveOlder.sessionGeneration)) return false;
+  liveOlder.items = [...page, ...liveOlder.items];
+  return true;
+})();
+liveOlder.sessionGeneration = 1;
+liveOlder.items = ["latest generation one"];
+olderPage.resolve(["stale older page"]);
+ok(!(await loadOlder), "a delayed older page from generation zero is rejected at the same path");
+ok(liveOlder.items.join() === "latest generation one", "the generation-one transcript remains intact after the old page returns");
+
 // Source contract: clearSession still wires the real fence pieces.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const controller = readFileSync(join(root, "lib/useController.ts"), "utf8");
@@ -93,6 +112,9 @@ assert.match(controller, /hydrateIdentityCurrent\(/, "useController uses shared 
 assert.match(controller, /evictTab\(tabId\)/, "clearSession evicts TranscriptStore");
 assert.match(controller, /sessionGeneration:\s*cleared\.sessionGeneration/, "clear applies returned generation");
 assert.match(controller, /a\.sessionGeneration === b\.sessionGeneration/, "sameMeta compares generation");
+assert.match(controller, /existing\.sessionGeneration === normalizeSessionGeneration\(sessionGeneration\)/, "in-flight hydrates are isolated by generation");
+assert.match(controller, /hydrateIdentityCurrent\(sessionPath, sessionGeneration, current\.meta\?\.sessionPath, current\.meta\?\.sessionGeneration\)/, "history replay results are fenced by captured generation");
+assert.match(controller, /preserveSessionIdentity\(a\.meta, s\.meta\)/, "metadata-only refresh cannot erase generation");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

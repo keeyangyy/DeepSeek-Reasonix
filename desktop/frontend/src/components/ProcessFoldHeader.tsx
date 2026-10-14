@@ -40,6 +40,7 @@ export function ProcessFoldHeader({
   // Surface what the closed fold hides — a bare duration reads as pure timing
   // and users have no way to know process detail sits behind it.
   const toolCount = displayItems.reduce((n, it) => n + (it.kind === "tool" ? 1 : 0), 0);
+  const askCount = displayItems.reduce((n, it) => n + (it.kind === "tool" && it.name === "ask" ? 1 : 0), 0);
   const thoughtCount = displayItems.reduce((n, it) => n + (it.kind === "assistant" ? 1 : 0), 0);
   const countParts: string[] = [];
   if (toolCount > 0) countParts.push(t("transcript.toolCount", { n: toolCount }));
@@ -48,6 +49,7 @@ export function ProcessFoldHeader({
   // sub-agent calls carry a parentId and never reach the fold body, so the
   // header has to name them or a collapsed fold hides the delegation entirely.
   if (segment.subagentCount > 0) countParts.push(t("transcript.subagentCount", { n: segment.subagentCount }));
+  if (askCount > 0) countParts.push(t("transcript.askCount", { n: askCount }));
   const label = segment.labelStyle === "counts"
     ? (countParts.length > 0 ? countParts.join(" · ") : t("transcript.processed"))
     : countParts.length > 0
