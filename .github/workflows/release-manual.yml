@@ -113,7 +113,23 @@ jobs:
           if [ -n "$NOTES" ]; then
             gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --notes "$NOTES"
           else
-            gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --generate-notes
+            # Auto-summary of every change since the previous release tag
+            # (commits carry the detail; the notes give the overview).
+            PREV="$(git tag -l 'v[0-9]*' --sort=-version:refname | sed -n '2p' || true)"
+            if [ -z "$PREV" ]; then
+              RANGE=""
+              RANGE_NOTE="initial release"
+            else
+              RANGE="$PREV..HEAD"
+              RANGE_NOTE="$PREV → v$VERSION"
+            fi
+            {
+              echo "## 变更总览（$RANGE_NOTE）"
+              echo
+              git log "$RANGE" --no-merges --pretty=format:'- %s' 2>/dev/null || true
+              echo
+            } > /tmp/release-notes.md
+            gh release create "v$VERSION" --target main-v2 --title "$RELEASE_TITLE" --notes-file /tmp/release-notes.md
           fi
 
       - name: Dispatch Windows artifact pipeline
