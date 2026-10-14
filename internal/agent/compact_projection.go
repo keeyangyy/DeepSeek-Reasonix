@@ -259,11 +259,11 @@ func (a *Agent) compressVisibleRange(
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
 	prepared, reason, err := a.prepareVisibleCompression(ctx, trigger, plan.fold, instructions, inputMode)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "prepare failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	if reason != "" {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, reason)
 		result.Reason = reason
 		return result, nil
 	}
@@ -274,21 +274,21 @@ func (a *Agent) compressVisibleRange(
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "summary failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "intercept failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 
 	projection := buildVisibleCompressionProjection(snap.visible, plan, summary)
 	projection, pinnedCheckpoint, err := rebasePinnedContextProjection(projection, snap.canonical, len(snap.canonical))
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "pinned rebase failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	projectionTokens := a.estimatedVisibleRequestTokens(projection)
@@ -300,12 +300,12 @@ func (a *Agent) compressVisibleRange(
 		if pinnedCheckpoint {
 			result.Reason = "pinned-context-too-large: checkpoint prevents compaction from reducing context"
 			a.emitCompactionTelemetry(tele)
-			a.emitCompactionAborted(trigger)
+			a.emitCompactionAborted(trigger, result.Reason)
 			return result, nil
 		}
 		result.Reason = "compressed context would not be smaller"
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, result.Reason)
 		return result, nil
 	}
 
@@ -323,7 +323,7 @@ func (a *Agent) compressVisibleRange(
 			tele.Error = err.Error()
 			a.emitCompactionTelemetry(tele)
 		}
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "commit failed: "+err.Error())
 		return tool.CompressResult{}, err
 	}
 	a.emitCompactionTelemetry(tele)
@@ -596,7 +596,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	if req.mustFree || trigger != CompactionTriggerManual {
 		start = a.maximumSafeSummaryPrefixEnd(msgs, head, start, instructions)
 		if start <= head {
-			a.emitCompactionAborted(trigger)
+			a.emitCompactionAborted(trigger, "no balanced prefix leaves enough room for a summary response")
 			return CompactionNoop, fmt.Errorf("%w: no balanced prefix leaves enough room for a summary response", errCheckpointRejected)
 		}
 	}
@@ -605,23 +605,23 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	regionHadPinnedRevision := containsPinnedContextRevision(msgs[head:start])
 	kept, fold, retention := a.partitionFoldForProjectionAt(msgs[head:start], head, latestContext)
 	if len(fold) == 0 {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "nothing to fold in the selected range")
 		return CompactionNoop, nil
 	}
 	originalFoldHash := providerVisibleFingerprint(modelInputMessages(fold))
 	var err error
 	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "intercept prepare failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	if len(fold) == 0 {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "nothing to fold after prepare")
 		return CompactionNoop, nil
 	}
 	if req.mustFree || trigger != CompactionTriggerManual {
 		if err := a.validateSafeSummaryRequest(fold, instructions, req.slim); err != nil {
-			a.emitCompactionAborted(trigger)
+			a.emitCompactionAborted(trigger, "unsafe summary request: "+err.Error())
 			return CompactionNoop, err
 		}
 	}
@@ -632,14 +632,14 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	res, tele, err := a.summarizeFold(ctx, trigger, fold, instructions, sourceTokens, inputMode, req)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "summarize failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	summary, err := a.interceptCompactionComplete(ctx, res.Text)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "intercept complete failed: "+err.Error())
 		return CompactionNoop, err
 	}
 
@@ -653,7 +653,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	projMsgs, spliced, projTokens, err := a.preparePinnedCheckpointCandidate(trigger, projMsgs, canonical, covered, sourceTokens, &tele)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "pinned checkpoint failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	viewOutputHash := providerVisibleFingerprint(modelInputMessages(spliced))
@@ -665,7 +665,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
 	})
 	if err != nil {
-		a.emitCompactionAborted(trigger)
+		a.emitCompactionAborted(trigger, "commit failed: "+err.Error())
 		return CompactionNoop, err
 	}
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{

@@ -172,6 +172,6 @@ func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 	a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "compaction telemetry", Detail: detail})
 }
 
-func (a *Agent) emitCompactionAborted(trigger string) {
-	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{Trigger: trigger}})
+func (a *Agent) emitCompactionAborted(trigger, reason string) {
+	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{Trigger: trigger, Reason: reason}})
 }
