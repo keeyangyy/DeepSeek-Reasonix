@@ -206,7 +206,11 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 		// Prefix shape is captured once before sampling and frozen for the
 		// whole attempt lifecycle — stream retries must not rewrite session
 		// history mid-round, so the shape stays stable across body replays.
-		streamed := a.streamWithSamplingRecovery(ctx, step+1)
+		// The assistant id is minted before sampling so the live stream can
+		// carry it: the frontend then has this message's identity from the
+		// first delta onwards, and Session.Add keeps the same id.
+		msgID := NewMessageID()
+		streamed := a.streamWithSamplingRecovery(ctx, step+1, msgID)
 		text, reasoning, signature, calls, responsesItems, serverSearch, usage := streamed.text, streamed.reasoning, streamed.signature, streamed.calls, streamed.responsesItems, streamed.serverSearch, streamed.usage
 		partialCalls, err := streamed.partialCalls, streamed.err
 		cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage, contentReasons)
@@ -242,6 +246,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 		// with an explicit round-trip contract retain the raw provider text.
 		calls = a.withPreviewFileDiffs(ctx, calls)
 		a.sess.conversation.Add(provider.Message{
+			ID:                 msgID,
 			Role:               provider.RoleAssistant,
 			Content:            text,
 			ReasoningContent:   reasoning,
@@ -300,7 +305,7 @@ func (a *Agent) emitProtocolRetry(attempt int, hasFallback bool) {
 	})
 }
 
-func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error) {
+func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error, messageID string) {
 	if reason == "" && err != nil {
 		reason = provider.StreamInterruptReason(err)
 	}
@@ -308,6 +313,7 @@ func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, a
 		Kind: event.StreamAttempt,
 		StreamAttempt: event.StreamAttemptInfo{
 			ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts, Reason: reason,
+			MessageID: messageID,
 		},
 	})
 }

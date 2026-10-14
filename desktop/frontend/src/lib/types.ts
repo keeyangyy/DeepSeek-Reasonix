@@ -76,6 +76,8 @@ export interface WireStreamAttempt {
   max?: number;
   /** Fixed enum only: connection_reset | premature_eof | idle_timeout */
   reason?: string;
+  /** Id of the assistant message this attempt produces; absent on legacy events. */
+  messageID?: string;
 }
 export interface WireCompaction {
   trigger?: string; // "auto" | "manual"

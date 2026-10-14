@@ -271,6 +271,7 @@ export type SignatureItem = {
   surfaceKey?: string;
   generation?: number;
   status?: string;
+  messageID?: string;
 };
 
 export function itemSignature(item: SignatureItem): string {
@@ -519,6 +520,26 @@ export function pageCoveredLiveItemIds(
     if (remaining <= 0) continue;
     covered.set(signature, remaining - 1);
     out.push(item.id);
+  }
+  return out;
+}
+
+// The page row and the live row for one message carry the same messageID once
+// the backend mints it before sampling: where both sides have it the page owns
+// the row. Rows without an id (legacy, frontend-local) are never matched.
+export function messageIdCoveredLiveItemIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): string[] {
+  const pageIds = new Set<string>();
+  for (const item of pageItems) {
+    if (item.messageID) pageIds.add(item.messageID);
+  }
+  if (pageIds.size === 0) return [];
+  const out: string[] = [];
+  for (const item of liveItems) {
+    if (item.kind !== "assistant") continue;
+    if (item.messageID && pageIds.has(item.messageID)) out.push(item.id);
   }
   return out;
 }
