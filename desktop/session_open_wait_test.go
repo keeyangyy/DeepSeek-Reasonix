@@ -354,7 +354,10 @@ func TestRebindWaitDoesNotBlockOtherSessionSwitches(t *testing.T) {
 	}
 
 	prevTimeout := sessionOpenWaitTimeout
-	sessionOpenWaitTimeout = 3 * time.Second
+	// Generous cap: the waiter must still be parked when the other switch
+	// returns, so the cap only has to exceed any plausible switch time. The
+	// test releases the waiter explicitly below instead of waiting the cap out.
+	sessionOpenWaitTimeout = 10 * time.Second
 	t.Cleanup(func() { sessionOpenWaitTimeout = prevTimeout })
 
 	app := NewApp()
@@ -412,19 +415,34 @@ func TestRebindWaitDoesNotBlockOtherSessionSwitches(t *testing.T) {
 		}
 	})
 
+	blockedDone := make(chan struct{})
 	blocked := make(chan error, 1)
-	go func() { blocked <- app.rebindTabToLoadedSessionPath(tabA, waitTarget, loadedWait) }()
+	go func() {
+		defer close(blockedDone)
+		blocked <- app.rebindTabToLoadedSessionPath(tabA, waitTarget, loadedWait)
+	}()
 	time.Sleep(200 * time.Millisecond) // let tabA enter its bounded wait
 
 	started := time.Now()
 	otherErr := app.rebindTabToLoadedSessionPath(tabB, otherTarget, loadedOther)
 	elapsed := time.Since(started)
 	t.Logf("concurrent switch on the other tab: err=%v after %v", otherErr, elapsed)
-	// The waiting switch is capped at 3s in this test; a serialized (blocked)
-	// switch would take that long, so anything well under it proves no barrier.
-	if elapsed > 2*time.Second {
-		t.Fatalf("a waiting switch blocked another session switch for %v", elapsed)
+	// Assert the logical property, not a wall-clock budget: the other switch
+	// must complete while the waiter is still parked; a serialized (barrier)
+	// switch would block until the waiter finishes and fail here instead.
+	select {
+	case <-blockedDone:
+		t.Fatal("the other switch completed only after the waiting switch; a barrier serialized them")
+	default:
 	}
+
+	// Release the waiter so the test does not sit on the cap: dropping the
+	// detached entry ends its attachability wait on the next poll. Closing the
+	// controller is idempotent, so the cleanup below stays safe.
+	app.mu.Lock()
+	delete(app.detachedSessions, waitKey)
+	app.mu.Unlock()
+	stuckCtrl.Close()
 	waitErr := <-blocked
 	t.Logf("the waiting switch finished with: %v", waitErr)
 }
