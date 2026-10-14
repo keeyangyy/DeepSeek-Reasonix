@@ -772,8 +772,7 @@ func (a *App) restoreOrBuildTabs() {
 			} else {
 				tab = a.createTabEntryWithID("global", globalTabWorkspaceRoot(), entry.TopicID, id)
 			}
-			tab.model = entry.Model
-			tab.effort = cloneStringPtr(entry.Effort)
+			tab.model, tab.effort = entry.Model, sessionEffortFor(entry.SessionPath)
 			// The role entry seeds the quality floor: delivery (and legacy
 			// delivery labels) raise it; light folds to standard.
 			if entry.QualityFloor == control.QualityFloorDelivery {
@@ -3804,7 +3803,6 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 			a.runtimeAdmissionMu.Unlock()
 			return fmt.Errorf("failed to reattach detached session runtime")
 		}
-
 		if oldSink != nil {
 			oldSink.setBinding("", nil)
 			oldSink.clearContext()
@@ -3928,7 +3926,7 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 	tab.Ctrl = candidate.ctrl
 	tab.sink = candidate.sink
 	tab.SessionPath = sessionPath
-	tab.model = candidate.model
+	tab.model, tab.effort = candidate.model, effortPtr(profile.effort)
 	tab.Label = candidate.ctrl.Label()
 	applyNormalizedRuntimeToTabLocked(tab, candidate.runtime)
 	tab.Ready = true
@@ -4054,6 +4052,7 @@ func (a *App) reattachDetachedSessionRuntimeForRebind(
 	a.mu.Unlock()
 
 	a.replayPendingPromptsAfterRuntimeAttach(tab.ID, attachedSink, attachedCtrl, attachedEpoch)
+	a.alignEffortForReusedRuntime(tab, sessionPath)
 	return oldCtrl, oldSink, oldLease, oldHostKey, true
 }
 
@@ -4157,7 +4156,7 @@ func (a *App) buildSessionRebindCandidate(
 		Sink:                     a.desktopControllerSink(sink, cfg.Notifications),
 		WorkspaceRoot:            root,
 		SessionDir:               sessionDir,
-		EffortOverride:           cloneStringPtr(source.effort),
+		EffortOverride:           effortPtr(profile.effort),
 		SharedHost:               sharedHost,
 		MCPHostProfile:           plugin.HostProfileDesktopApps,
 		CleanupPendingReconciler: reconcileDesktopCleanupPending,

@@ -193,6 +193,7 @@ func (a *App) openForkedSessionTabWithWorkspace(sourceTab *WorkspaceTab, newPath
 	m.WorkspaceRoot = workspaceRoot
 	m.TopicID = topicID
 	m.TopicTitle = topicTitle
+	m.Effort = effortString(effort)
 	if err := agent.SaveBranchMeta(newPath, m); err != nil {
 		return forkedSessionTabOpen{}, err
 	}
