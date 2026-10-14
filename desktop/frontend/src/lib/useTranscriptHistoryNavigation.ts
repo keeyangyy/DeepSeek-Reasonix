@@ -36,7 +36,10 @@ export function useTranscriptHistoryNavigation({ kernel, requestOlder,
       refresh();
       return;
     }
-    if (loadingOlderHistory || running || current.attemptedPage === loadedByTurn) return;
+    // User-intent navigation must load its target even while the turn is
+    // streaming: the kernel's reader/tail intent keeps the viewport stable, and
+    // gating here left out-of-range jumps spinning forever (cf89a2c0).
+    if (loadingOlderHistory || current.attemptedPage === loadedByTurn) return;
     current.attemptedPage = loadedByTurn;
     void requestOlder(current.question.turn + 1, "question-jump").then((loadedPage) => {
       if (!navigation.owns(current)) return;

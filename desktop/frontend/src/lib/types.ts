@@ -64,6 +64,7 @@ export interface TurnEventReplayView {
   nextAfterSeq: number;
   hasMore: boolean;
   resetRequired: boolean;
+  notReady?: boolean; // backend starting: frontend waits, no failure counted
   transcriptRevision?: number;
   transcriptDigest?: string;
   runtimeEpoch?: string;

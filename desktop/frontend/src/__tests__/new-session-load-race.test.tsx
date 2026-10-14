@@ -171,6 +171,7 @@ window.go = {
   main: {
     App: {
       RegisterNavigationIntent: async () => {},
+      LatestCompactionForTab: async () => null,
       ListTabs: async () => {
         return [tabMeta({
           runtime: { phase: "ready", epoch: backendRuntimeEpoch },

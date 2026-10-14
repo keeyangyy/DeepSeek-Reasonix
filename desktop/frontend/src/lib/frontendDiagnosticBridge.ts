@@ -14,6 +14,13 @@ export function recordFrontendDiagnostic(source: string, type: string, fields: F
   sink?.(source, type, fields);
 }
 
+/** True while a recorder is attached. Guards field construction on probes whose
+ * payload costs more than a literal (row scans, string joins): inactive builds
+ * pay a single boolean per call site instead of building the payload. */
+export function frontendDiagnosticsActive(): boolean {
+  return sink !== undefined;
+}
+
 /** Register a lightweight producer that should publish its initial snapshot
  * whenever the opt-in recorder starts. The bridge stays inert when no recorder
  * is loaded, so stable builds pay only for this small Set and effect cleanup. */
