@@ -9987,7 +9987,8 @@ body > .mermaid-diagram--fullscreen {
   display: grid;
   gap: 6px;
 }
-.ask-shelf__custom {
+.ask-shelf__custom,
+.ask-shelf__supplement {
   min-width: 0;
   width: 100%;
   background: var(--bg);
@@ -9999,11 +10000,13 @@ body > .mermaid-diagram--fullscreen {
   padding: 6px 8px;
   box-sizing: border-box;
 }
-.ask-shelf__custom:focus {
+.ask-shelf__custom:focus,
+.ask-shelf__supplement:focus {
   border-color: var(--accent);
   outline: none;
 }
-.ask-shelf__custom::placeholder {
+.ask-shelf__custom::placeholder,
+.ask-shelf__supplement::placeholder {
   color: var(--fg-faint);
 }
 
@@ -10138,6 +10141,14 @@ body > .mermaid-diagram--fullscreen {
 .prompt-shelf--ask .prompt-shelf__meta { font-size: 15px; }
 .prompt-shelf--ask .prompt-shelf__actions { gap: 6px; padding: 0 0 8px; }
 .prompt-shelf--ask .prompt-action { min-height: 46px; border-radius: 12px; padding: 9px 14px; background: var(--bg-soft); }
+.prompt-shelf--ask .ask-shelf__option-group { display: grid; gap: 6px; }
+.prompt-shelf--ask .ask-shelf__supplement {
+  min-height: 34px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border-color: var(--border-soft);
+  font-size: 13px;
+}
 .prompt-shelf--ask .prompt-action:hover,
 .prompt-shelf--ask .prompt-action--active,
 .prompt-shelf--ask .prompt-action--selected { background: color-mix(in srgb, var(--accent) 15%, var(--bg-soft)); }
@@ -30803,6 +30814,8 @@ body > .mermaid-diagram--fullscreen {
   transition: opacity var(--dur-fast), transform var(--dur-fast);
 }
 
+.project-tree__topic--has-actions .project-tree__topic-side { flex: 0 0 70px; }
+
 .sidebar--workbench .project-tree__topic-time {
   min-width: 0;
   overflow: hidden;
@@ -30895,7 +30908,7 @@ body > .mermaid-diagram--fullscreen {
   z-index: var(--z-local-raised);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%) translateX(4px);
@@ -30940,16 +30953,16 @@ body > .mermaid-diagram--fullscreen {
 .sidebar--workbench .project-tree__topic-action-slot,
 .app--classic .project-tree__topic-action-slot {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
 }
 
 .sidebar--workbench .project-tree__topic-action,
 .app--classic .project-tree__topic-action {
   --wails-draggable: no-drag;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -31044,6 +31057,88 @@ body > .mermaid-diagram--fullscreen {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+/* ─── Sidebar light/dark quick switch ────────────────────────────────
+   Sits just above the utility row, sized to match it (32px tall, 6px gap)
+   so the two read as one group. The pill and its sliding thumb use
+   concentric radii (11px shell − 3px inset = 8px thumb) and one shared
+   hairline, with a soft gradient + top highlight on the thumb and a sunk
+   inner shadow on the track. The accent follows the theme. */
+.sidebar__theme-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  height: 32px;
+  margin-bottom: 6px;
+  padding: 3px;
+  border: 1px solid var(--sidebar-workbench-border, var(--border-soft));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--sidebar-hover) 55%, var(--sidebar-bg));
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+.sidebar__theme-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  border-radius: 8px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--accent) 19%, var(--bg-elev)),
+    color-mix(in srgb, var(--accent) 10%, var(--bg-elev)));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.22),
+    0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 12%, transparent);
+  transition: transform 0.26s cubic-bezier(0.34, 1.12, 0.5, 1);
+}
+
+.sidebar__theme-switch__thumb[data-state="dark"] {
+  transform: translateX(100%);
+}
+
+.sidebar__theme-switch__opt {
+  position: relative;
+  z-index: var(--z-local-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-faint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 560;
+  transition: color var(--dur-fast);
+}
+
+.sidebar__theme-switch__opt svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+}
+
+.sidebar__theme-switch__opt:hover {
+  color: var(--fg-dim);
+}
+
+.sidebar__theme-switch__opt.is-on {
+  color: var(--accent);
+  font-weight: 620;
+}
+
+.sidebar__theme-switch__opt.is-on svg {
+  stroke-width: 2.1;
+}
+
+.sidebar--collapsed .sidebar__theme-switch__opt span,
+.app--darwin .sidebar--collapsed .sidebar__theme-switch__opt span {
+  display: none;
 }
 
 .sidebar--workbench .sidebar__utility-row .tooltip-trigger {
@@ -36943,6 +37038,32 @@ body > .mermaid-diagram--fullscreen {
 .appearance-overview__segmented .set-seg__btn {
   flex: 1;
   min-width: 0;
+}
+.appearance-overview__schedule {
+  justify-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 424px;
+}
+.appearance-overview__schedule-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text, inherit);
+}
+.appearance-overview__schedule-field input[type="time"] {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg, transparent);
+  color: var(--text, inherit);
+}
+.appearance-overview__schedule-save {
+  font-size: 12px;
+  padding: 4px 12px;
 }
 .appearance-overview__select {
   justify-self: end;

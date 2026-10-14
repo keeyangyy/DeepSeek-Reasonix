@@ -8,10 +8,10 @@
 // theme (title bar, traffic lights, etc.) so the OS chrome matches the webview.
 
 import { baseCodeReadabilityStylesheet } from "./codeReadability";
+import { isDarkSchedule, nextScheduleTransition } from "./themeSchedule";
 
-export type Theme = "auto" | "light" | "dark";
-export type ResolvedTheme = Exclude<Theme, "auto">;
-
+export type Theme = "auto" | "light" | "dark" | "schedule";
+export type ResolvedTheme = Exclude<Theme, "auto" | "schedule">;
 export const THEME_STYLES = [
   "graphite",
   "aurora",
@@ -44,6 +44,58 @@ const BASE_CODE_READABILITY_STYLE_ID = "reasonix-base-code-readability";
 let currentTheme: Theme = DEFAULT_THEME;
 let currentThemeStyle: ThemeStyle = DEFAULT_THEME_STYLE;
 let autoThemeMediaQuery: MediaQueryList | null = null;
+// currentSchedule holds the dark-window bounds for schedule mode ("HH:MM").
+// Empty strings mean "not configured" and make schedule resolve like auto.
+let currentSchedule: { start: string; end: string } = { start: "", end: "" };
+let scheduleTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Session-scoped display override, driven by the sidebar quick switch. It
+// changes only what this window renders right now; persisted settings are left
+// untouched. It is meaningful only while the configured mode is automatic
+// (auto/schedule) — a fixed light/dark setting already determines the display,
+// and the automatic machinery clears the override whenever it recomputes.
+let themeOverride: ResolvedTheme | null = null;
+let lastResolvedTheme: ResolvedTheme | null = null;
+const themeListeners = new Set<() => void>();
+
+function effectiveOverride(theme: Theme): ResolvedTheme | null {
+  return theme === "auto" || theme === "schedule" ? themeOverride : null;
+}
+
+function notifyThemeListeners(): void {
+  for (const listener of [...themeListeners]) listener();
+}
+
+/** Subscribe to the resolved light/dark display changing. Returns an unsubscribe. */
+export function subscribeResolvedTheme(listener: () => void): () => void {
+  themeListeners.add(listener);
+  return () => { themeListeners.delete(listener); };
+}
+
+/** The active session override, or null when the display follows the setting. */
+export function getThemeOverride(): ResolvedTheme | null {
+  return effectiveOverride(currentTheme);
+}
+
+/**
+ * Set (or clear with null) the session display override and repaint. Returns
+ * false when the configured mode is not automatic, where an override has no
+ * effect and callers should write the setting instead.
+ */
+export function setThemeOverride(theme: ResolvedTheme | null): boolean {
+  if (currentTheme !== "auto" && currentTheme !== "schedule") return false;
+  if (themeOverride === theme) return true;
+  themeOverride = theme;
+  if (typeof document !== "undefined") applyTheme(currentTheme, currentThemeStyle, { persist: false, keepOverride: true });
+  return true;
+}
+
+/** Drop any session override so the display follows the configured mode again. */
+export function clearThemeOverride(): void {
+  if (themeOverride === null) return;
+  themeOverride = null;
+  if (typeof document !== "undefined") applyTheme(currentTheme, currentThemeStyle, { persist: false });
+}
 
 export function normalizeThemePreference(value: unknown): Theme {
   if (typeof value === "object" && value !== null) {
@@ -53,6 +105,8 @@ export function normalizeThemePreference(value: unknown): Theme {
   switch (value) {
     case "auto":
       return "auto";
+    case "schedule":
+      return "schedule";
     case "light":
     case "focus":
     case "forest":
@@ -75,9 +129,29 @@ export function getTheme(): Theme {
 }
 
 export function getResolvedTheme(theme: Theme = getTheme()): ResolvedTheme {
+  return effectiveOverride(theme) ?? resolveThemeIgnoringOverride(theme);
+}
+
+function resolveThemeIgnoringOverride(theme: Theme): ResolvedTheme {
   if (theme === "light" || theme === "dark") return theme;
+  if (theme === "schedule") {
+    // An unconfigured schedule falls back to the OS preference so enabling
+    // the mode without setting a window never forces a jarring colour.
+    if (currentSchedule.start && currentSchedule.end) {
+      return isDarkSchedule(currentSchedule.start, currentSchedule.end, new Date()) ? "dark" : "light";
+    }
+  }
   if (typeof window !== "undefined" && window.matchMedia?.(AUTO_THEME_MEDIA_QUERY).matches) return "light";
   return "dark";
+}
+
+// setThemeSchedule records the dark-window bounds ("HH:MM" each) used by
+// schedule mode and re-applies immediately when schedule is active.
+export function setThemeSchedule(start: string, end: string): void {
+  currentSchedule = { start, end };
+  if (currentTheme === "schedule" && typeof document !== "undefined") {
+    applyTheme(currentTheme, currentThemeStyle, { persist: false });
+  }
 }
 
 // Direction is orthogonal to theme, but keep this helper so callers that
@@ -102,14 +176,26 @@ export function normalizeThemeStyleForTheme(style: string | undefined, _theme?: 
   return LEGACY_STYLE_MAP[style] ?? DEFAULT_THEME_STYLE;
 }
 
-export function applyTheme(theme: Theme, style: ThemeStyle = getThemeStyle(theme), options: { persist?: boolean } = {}): void {
+export function applyTheme(theme: Theme, style: ThemeStyle = getThemeStyle(theme), options: { persist?: boolean; keepOverride?: boolean } = {}): void {
   if (typeof document === "undefined") return;
+  // Any repaint that did not come from the quick switch's own override update
+  // means the display is being decided again (settings load, schedule tick, OS
+  // scheme change, theme pack apply). Drop the session override so the window
+  // follows the configured mode from here on.
+  if (!options.keepOverride) themeOverride = null;
   ensureBaseCodeReadabilityStyle();
   const root = document.documentElement;
   root.removeAttribute("data-theme-mode");
   root.removeAttribute("data-theme-scheme");
-  if (theme === "auto") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", theme);
+  // schedule resolves to light/dark before touching the DOM: the stylesheet
+  // only understands the concrete values.
+  const resolved = getResolvedTheme(theme);
+  // auto normally drops data-theme so the stylesheet follows prefers-color-scheme;
+  // with a session override we must pin the attribute or the override is lost.
+  if (theme === "auto" && !effectiveOverride(theme)) root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", resolved);
+  const resolvedChanged = resolved !== lastResolvedTheme;
+  lastResolvedTheme = resolved;
 
   const nextStyle: ThemeStyle = isThemeStyle(style) ? style : DEFAULT_THEME_STYLE;
   currentTheme = theme;
@@ -122,15 +208,37 @@ export function applyTheme(theme: Theme, style: ThemeStyle = getThemeStyle(theme
     syncAutoThemeBackgroundListener(theme);
     if (theme === "auto") {
       runtime.WindowSetSystemDefaultTheme?.();
-    } else if (theme === "light") {
+    } else if (resolved === "light") {
       runtime.WindowSetLightTheme?.();
-    } else if (theme === "dark") {
+    } else {
       runtime.WindowSetDarkTheme?.();
     }
     syncNativeWindowBackground(theme);
   }
 
+  armScheduleTimer(theme);
   void options;
+  if (resolvedChanged) notifyThemeListeners();
+}
+
+// armScheduleTimer chains a timeout to the next dark/light transition while
+// schedule mode is active. Each tick re-arms the next one, so a long-running
+// app never drifts; any other theme mode clears the timer.
+function armScheduleTimer(theme: Theme): void {
+  if (scheduleTimer) {
+    clearTimeout(scheduleTimer);
+    scheduleTimer = null;
+  }
+  if (theme !== "schedule") return;
+  const next = nextScheduleTransition(currentSchedule.start, currentSchedule.end, new Date());
+  if (!next) return;
+  const delay = Math.max(0, next.at.getTime() - Date.now()) + 250; // small grace past the minute boundary
+  scheduleTimer = setTimeout(() => {
+    scheduleTimer = null;
+    if (currentTheme === "schedule") {
+      applyTheme(currentTheme, currentThemeStyle, { persist: false });
+    }
+  }, delay);
 }
 
 function ensureBaseCodeReadabilityStyle(): void {
@@ -166,8 +274,12 @@ function clearAutoThemeBackgroundListener(): void {
 }
 
 function syncAutoThemeBackground(): void {
-  if (currentTheme === "auto" && typeof window !== "undefined" && window.runtime) {
-    syncNativeWindowBackground("auto");
+  if (currentTheme === "auto") {
+    // In auto mode the OS light/dark switch *is* the automatic decision, so a
+    // session override made earlier by the quick switch gives way — the same way
+    // a schedule tick clears it. applyTheme recomputes the resolved theme.
+    applyTheme(currentTheme, currentThemeStyle, { persist: false });
+    if (typeof window !== "undefined" && window.runtime) syncNativeWindowBackground("auto");
   }
 }
 

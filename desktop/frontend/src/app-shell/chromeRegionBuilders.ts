@@ -46,6 +46,7 @@ export function buildSidebarRegionProps(input: {
     onToggleSearch: () => void;
     onToggle: () => void;
     onOpenTopic: SidebarRegionProps["projectTree"]["onOpenTopic"];
+    onSelectTheme: SidebarRegionProps["onSelectTheme"];
   };
 }): SidebarRegionProps {
   const { geometry, topics, commands } = input;
@@ -67,6 +68,7 @@ export function buildSidebarRegionProps(input: {
     onOpenSettings: commands.onOpenSettings,
     onToggleSearch: commands.onToggleSearch,
     onToggle: commands.onToggle,
+    onSelectTheme: commands.onSelectTheme,
     resize: {
       min: geometry.sidebarResizeMinWidth, max: SIDEBAR_MAX_WIDTH, value: geometry.sidebarRenderWidth,
       onPointerDown: geometry.startSidebarResize, onKeyDown: geometry.resizeSidebarWithKeyboard,

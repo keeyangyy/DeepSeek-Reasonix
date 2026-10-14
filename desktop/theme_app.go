@@ -158,10 +158,12 @@ func (a *App) GetThemeExperience() (ThemeExperienceView, error) {
 	themeMode, baseStyle := a.desktopAppearanceLocked()
 	_, themeWarnings := discoverPluginThemes()
 	view := ThemeExperienceView{
-		ThemeMode:      themeMode,
-		BaseStyle:      baseStyle,
-		EffectiveStyle: baseStyle,
-		Warnings:       themeWarnings,
+		ThemeMode:         themeMode,
+		BaseStyle:         baseStyle,
+		EffectiveStyle:    baseStyle,
+		ScheduleDarkStart: a.cfgDesktopThemeScheduleStart(),
+		ScheduleDarkEnd:   a.cfgDesktopThemeScheduleEnd(),
+		Warnings:          themeWarnings,
 	}
 	activeID := resolveActiveThemeID(st)
 	if st.ActiveThemeID != "" && activeID == "" {
@@ -382,6 +384,20 @@ func (a *App) desktopAppearanceLocked() (themeMode, baseStyle string) {
 func (a *App) desktopBaseStyleLocked() string {
 	_, style := a.desktopAppearanceLocked()
 	return style
+}
+
+// cfgDesktopThemeScheduleStart reads the persisted dark-window start for
+// theme=schedule ("HH:MM", "" when unconfigured).
+func (a *App) cfgDesktopThemeScheduleStart() string {
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	return cfg.DesktopThemeScheduleDarkStart()
+}
+
+// cfgDesktopThemeScheduleEnd reads the persisted dark-window end for
+// theme=schedule ("HH:MM", "" when unconfigured).
+func (a *App) cfgDesktopThemeScheduleEnd() string {
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	return cfg.DesktopThemeScheduleDarkEnd()
 }
 
 // SaveThemePack creates or updates a user theme from the editor payload.

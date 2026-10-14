@@ -9,8 +9,10 @@ type DesktopConfig struct {
 	Language                string   `toml:"language"`                   // auto|en|zh; empty/auto = browser/OS auto-detect
 	Currency                string   `toml:"currency"`                   // legacy display currency; migrated to [billing].display_currency
 	LayoutStyle             string   `toml:"layout_style"`               // workbench|creation; legacy classic is migrated on startup
-	Theme                   string   `toml:"theme"`                      // auto|dark|light; empty resolves to auto
+	Theme                   string   `toml:"theme"`                      // auto|dark|light|schedule; empty resolves to auto
 	ThemeStyle              string   `toml:"theme_style"`                // graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
+	ThemeScheduleDarkStart  string   `toml:"theme_schedule_dark_start"`  // "HH:MM" dark-window start for theme=schedule; empty = unconfigured
+	ThemeScheduleDarkEnd    string   `toml:"theme_schedule_dark_end"`    // "HH:MM" dark-window end for theme=schedule (may cross midnight)
 	TerminalTheme           string   `toml:"terminal_theme"`             // auto|dark|light; auto follows the desktop app theme
 	ExternalOpener          string   `toml:"external_opener"`            // preferred installed app used by the desktop Open control
 	CloseBehavior           string   `toml:"close_behavior"`             // quit|background; desktop window close behavior
