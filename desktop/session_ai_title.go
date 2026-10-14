@@ -62,6 +62,9 @@ func (a *App) AIRenameSession(topicID string) (string, error) {
 		}
 		return "", err
 	}
+	// The AI rename is an explicit rename of the topic's leading session: lift
+	// the new title into the topic layer so the sidebar reflects it immediately.
+	a.propagateSessionCustomTitleToTopic(validated, topicID)
 	return title, nil
 }
 
