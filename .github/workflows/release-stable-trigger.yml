@@ -17,6 +17,12 @@ permissions:
 jobs:
   relay:
     name: dispatch protected stable control plane
+    # Fork guard: this relay belongs to the upstream release pipeline. A fork
+    # publishes its own Windows builds (see release-windows.yml) and must not
+    # dispatch the upstream control plane, whose preflight requires the
+    # cli/npm/desktop tag set a fork never creates. Mirrors the same guard the
+    # upstream repo already uses in update-star-history.yml and the mirror job.
+    if: github.repository == 'esengine/DeepSeek-Reasonix'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch release-stable.yml on main-v2

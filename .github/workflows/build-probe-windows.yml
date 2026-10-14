@@ -1,0 +1,103 @@
+name: Build Windows test artifact
+
+# Diagnostics-enabled Windows build for the v1.38.* fork line.
+#
+# Why this is not build-windows.yml: the diagnostics recorder only exists in
+# test/preview/canary builds (`isFrontendDiagnosticsBuild` returns false for
+# "stable"), and the shippable artifact must stay on channel "stable". This
+# workflow pins channel=canary so the probes are reachable, and it never
+# publishes a release.
+#
+# MANUAL only. It produces a 14-day artifact you install by hand:
+#
+#   gh workflow run build-probe-windows.yml
+#   gh workflow run build-probe-windows.yml -f version=v1.38.20-test.1
+#
+# The version keeps three numeric segments before any "-" suffix
+# (desktop-build.sh strips the suffix for the NSIS VIProductVersion), so
+# v1.38.20-test.1 still builds an installer stamped 1.38.20.
+
+on:
+  push:
+    branches: [dev, 'test/**']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version stamped into the test build (e.g. v1.38.20-test.1)"
+        required: false
+        default: "v1.38.20-test.1"
+        type: string
+
+concurrency:
+  group: build-probe-windows
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 10
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: desktop/frontend/pnpm-lock.yaml
+
+      - name: Install Wails CLI
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          go install "github.com/wailsapp/wails/v2/cmd/wails@$(cat "$GITHUB_WORKSPACE/.wails-version")"
+
+      - name: Install NSIS
+        run: pwsh -NoProfile -File ../scripts/install-nsis.ps1
+
+      - name: Build diagnostics artifact
+        timeout-minutes: 40
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            case "$GITHUB_REF_NAME" in
+              dev) VERSION="v1.38.20-dev.${{ github.run_number }}" ;;
+              *)   VERSION="v1.38.20-test.${{ github.run_number }}" ;;
+            esac
+          fi
+          ../scripts/desktop-build.sh windows/amd64 "$VERSION" canary
+
+      - name: List produced artifacts
+        run: ls -la ../dist
+
+      - name: Upload portable archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: reasonix-windows-amd64-test-portable-${{ github.event.inputs.version || format('rn{0}', github.run_number) }}
+          path: dist/Reasonix-windows-amd64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: reasonix-windows-amd64-test-installer-${{ github.event.inputs.version || format('rn{0}', github.run_number) }}
+          path: dist/Reasonix-windows-amd64-installer.exe
+          if-no-files-found: error
+          retention-days: 14
