@@ -9987,7 +9987,8 @@ body > .mermaid-diagram--fullscreen {
   display: grid;
   gap: 6px;
 }
-.ask-shelf__custom {
+.ask-shelf__custom,
+.ask-shelf__supplement {
   min-width: 0;
   width: 100%;
   background: var(--bg);
@@ -9999,11 +10000,13 @@ body > .mermaid-diagram--fullscreen {
   padding: 6px 8px;
   box-sizing: border-box;
 }
-.ask-shelf__custom:focus {
+.ask-shelf__custom:focus,
+.ask-shelf__supplement:focus {
   border-color: var(--accent);
   outline: none;
 }
-.ask-shelf__custom::placeholder {
+.ask-shelf__custom::placeholder,
+.ask-shelf__supplement::placeholder {
   color: var(--fg-faint);
 }
 
@@ -10138,6 +10141,14 @@ body > .mermaid-diagram--fullscreen {
 .prompt-shelf--ask .prompt-shelf__meta { font-size: 15px; }
 .prompt-shelf--ask .prompt-shelf__actions { gap: 6px; padding: 0 0 8px; }
 .prompt-shelf--ask .prompt-action { min-height: 46px; border-radius: 12px; padding: 9px 14px; background: var(--bg-soft); }
+.prompt-shelf--ask .ask-shelf__option-group { display: grid; gap: 6px; }
+.prompt-shelf--ask .ask-shelf__supplement {
+  min-height: 34px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border-color: var(--border-soft);
+  font-size: 13px;
+}
 .prompt-shelf--ask .prompt-action:hover,
 .prompt-shelf--ask .prompt-action--active,
 .prompt-shelf--ask .prompt-action--selected { background: color-mix(in srgb, var(--accent) 15%, var(--bg-soft)); }
@@ -30803,6 +30814,8 @@ body > .mermaid-diagram--fullscreen {
   transition: opacity var(--dur-fast), transform var(--dur-fast);
 }
 
+.project-tree__topic--has-actions .project-tree__topic-side { flex: 0 0 70px; }
+
 .sidebar--workbench .project-tree__topic-time {
   min-width: 0;
   overflow: hidden;
@@ -30895,7 +30908,7 @@ body > .mermaid-diagram--fullscreen {
   z-index: var(--z-local-raised);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%) translateX(4px);
@@ -30940,16 +30953,16 @@ body > .mermaid-diagram--fullscreen {
 .sidebar--workbench .project-tree__topic-action-slot,
 .app--classic .project-tree__topic-action-slot {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
 }
 
 .sidebar--workbench .project-tree__topic-action,
 .app--classic .project-tree__topic-action {
   --wails-draggable: no-drag;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
