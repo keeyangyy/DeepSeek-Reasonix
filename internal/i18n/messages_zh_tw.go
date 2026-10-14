@@ -46,6 +46,7 @@ var ChineseTraditional = Messages{
 	ReadRestrictedStrategyFmt:        "read_file 已切換為受限策略：estimated_tokens=%d budget_tokens=%d",
 	ContextRecoveryAdjustBudget:      "已調整輸出預算以適配共享上下文視窗。",
 	ContextRecoveryCompacted:         "共享視窗溢位，已壓縮上下文並重試。",
+	AgentProjectionFallback:          "投影不可用，本次請求已改發完整正史。",
 	PlannerFallback:                  "規劃器失敗，本輪僅由主模型繼續。",
 	PlannerSafetyFallback:            "規劃器在安全邊界處停止且未給出最終計劃，本輪由主模型繼續。",
 	PlannerPlanAwaitingApproval:      "計劃已就緒，未經批准不會開始執行。",

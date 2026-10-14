@@ -473,16 +473,12 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 // projectionValid reports whether st can be reused for the current transcript
 // and provider/model lineage. Fail closed: missing CoveredPrefixHash or a blank
 // sidecar PromptCacheKey when the current lineage key is known forces rebuild.
-func projectionValid(st CompactionState, msgs []provider.Message, cacheKey string) bool {
-	if len(st.Projection.Messages) == 0 {
-		return false
-	}
-	// Current lineage known: stored key must match (legacy native suffix ok).
-	if cacheKey != "" {
-		if _, ok := lineageKeyCompatible(st.PromptCacheKey, cacheKey); !ok {
-			return false
-		}
-	}
+// projectionValid reports whether the bound projection can still be sent. Only the
+// transcript it covers decides that: the provider/model lineage is deliberately not
+// consulted, so a model or workspace switch keeps a summary that still matches the
+// history. A window too small for the fold is caught by the send-time size check,
+// not by dropping it here.
+func projectionValid(st CompactionState, msgs []provider.Message) bool {
 	return projectionContentValid(st, msgs)
 }
 
