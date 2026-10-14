@@ -1,0 +1,184 @@
+name: Release Windows
+
+# Tag-driven Windows release for the v1.38.* line.
+#
+# Scope: this fork ships Windows x64 only. The upstream pipeline
+# (release-stable.yml -> release-desktop.yml) publishes CLI + npm + a four
+# platform desktop matrix behind an approval gate and 11 SignPath/Apple/R2
+# secrets; none of that applies here, and release-stable-trigger.yml is guarded
+# off in this repository so upstream tags cannot dispatch it.
+#
+# Tag convention: v1.38.NN, where 1.38 is the upstream baseline the fork tracks
+# and NN is the fork's own increment. Three numeric segments are required: the
+# NSIS installer builds VIProductVersion from `${version}.0` (see
+# desktop/build/windows/installer/project.nsi), so a four-segment tag such as
+# v1.38.2.1 would produce an invalid five-segment version and fail the build.
+#
+#   git tag v1.38.21 && git push origin v1.38.21
+#
+# Produces a GitHub Release with the portable archive and the NSIS installer.
+
+on:
+  push:
+    tags:
+      # Glob, not regex: GitHub tag filters do not support '+'. Keep this wide
+      # and enforce the exact three-segment shape in the verify step below.
+      - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v1.38.21)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Validate tag shape and the branch it sits on
+        id: check
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag must be vMAJOR.MINOR.PATCH with numeric segments, got: $RELEASE_TAG" >&2
+            echo "::error::four-segment tags (e.g. v1.38.2.1) break the NSIS installer build" >&2
+            exit 1
+          fi
+          # Only a tag on this fork's own line may publish. The v[0-9]* glob
+          # above also matches the other lines' tags, and a tag on a commit no
+          # CI run here ever gated must never ship artifacts.
+          if ! git merge-base --is-ancestor HEAD origin/wails-mine; then
+            echo "::error::$RELEASE_TAG is not on origin/wails-mine" >&2
+            exit 1
+          fi
+          echo "version=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $RELEASE_TAG"
+
+  build:
+    needs: verify
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      version: ${{ needs.verify.outputs.version }}
+
+  release:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      # download-artifact reads the run's artifacts through the Actions API;
+      # an explicit permissions block turns every unlisted scope off.
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: reasonix-windows-amd64-${{ needs.verify.outputs.version }}
+          path: dist
+
+      - name: List artifacts
+        run: ls -la dist
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Strip the leading 'v' so assets carry the bare version like the
+          # upstream line (e.g. Reasonix-windows-amd64-installer-1.38.21.exe).
+          version="$(printf '%s' "$RELEASE_TAG" | sed 's/^v//')"
+          zip_asset="Reasonix-windows-amd64-${version}.zip"
+          exe_asset="Reasonix-windows-amd64-installer-${version}.exe"
+          mv dist/Reasonix-windows-amd64.zip "dist/${zip_asset}"
+          mv dist/Reasonix-windows-amd64-installer.exe "dist/${exe_asset}"
+          # release-manual.yml creates this release as a draft before the
+          # Windows build starts, so it is never public without its assets.
+          # Create it here too when this workflow is dispatched on its own.
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG absent; creating it as a draft."
+            gh release create "$RELEASE_TAG" --draft \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          else
+            echo "Release $RELEASE_TAG already exists; uploading/overwriting assets."
+          fi
+          # Drop the pre-versioned asset names from the first fork releases so
+          # re-running the same tag never leaves both old and new names behind.
+          gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64.zip --yes >/dev/null 2>&1 || true
+          gh release delete-asset "$RELEASE_TAG" Reasonix-windows-amd64-installer.exe --yes >/dev/null 2>&1 || true
+          gh release upload "$RELEASE_TAG" "dist/${zip_asset}" "dist/${exe_asset}" --clobber
+          # Publish only now that both assets are attached.
+          gh release edit "$RELEASE_TAG" --draft=false
+
+      - name: Publish the signed update manifest to the release anchor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.version }}
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version="$(printf '%s' "$RELEASE_TAG" | sed 's/^v//')"
+          # The desktop updater looks up a *versionless* filename
+          # (requiredDesktopUpdaterAssets in desktop/updater.go), while the
+          # human-facing asset above carries the version. Publish both names.
+          cp "dist/Reasonix-windows-amd64-installer-${version}.exe" dist/Reasonix-windows-amd64-installer.exe
+          # The manifest input directory must hold only the updater artifact:
+          # the website download (.zip) would add a downloads group to the
+          # manifest, and this line publishes no such group.
+          rm -rf manifest-input
+          mkdir -p manifest-input
+          cp dist/Reasonix-windows-amd64-installer.exe manifest-input/
+          ( cd desktop && go run ./cmd/sign sign ../dist/Reasonix-windows-amd64-installer.exe )
+          ( cd desktop && go run ./cmd/sign manifest ../manifest-input "$RELEASE_TAG" "$RELEASE_TAG" )
+          gh release upload "$RELEASE_TAG" \
+            dist/Reasonix-windows-amd64-installer.exe \
+            dist/Reasonix-windows-amd64-installer.exe.minisig \
+            --clobber
+          # The anchor is a fixed tag whose contents every release of this line
+          # overwrites, so the updater never follows the repository-wide latest
+          # badge -- which the studio and legacy 1.39 lines also claim.
+          if ! gh release view wails-latest >/dev/null 2>&1; then
+            gh release create wails-latest --latest=false \
+              --title "wails-mine update anchor" \
+              --notes "Update-check anchor for the wails-mine (1.38.x) line. latest.json here is overwritten by every release of that line; do not delete."
+          fi
+          gh release upload wails-latest manifest-input/latest.json --clobber
+
+      - name: Summarize release
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.version }}
+        run: |
+          {
+            echo "### Windows release $RELEASE_TAG"
+            echo ""
+            echo "| Asset | Size |"
+            echo "|---|---|"
+            for f in dist/*; do
+              echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
