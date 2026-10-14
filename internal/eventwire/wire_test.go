@@ -144,10 +144,10 @@ func TestToWireNoticeCarriesDecisionReceipt(t *testing.T) {
 		Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeDecisionReceipt,
 		Text: "Decision recorded: allow_once",
 		DecisionReceipt: &provider.DecisionReceipt{
-			ID: "approval-1", Kind: "tool", Tool: "write_file", Subject: "src/app.go", Outcome: "allow_once",
+			ID: "approval-1", OccurrenceID: "receipt-occurrence-1", Kind: "tool", Tool: "write_file", Subject: "src/app.go", Outcome: "allow_once",
 		},
 	})
-	if w.DecisionReceipt == nil || w.DecisionReceipt.ID != "approval-1" || w.DecisionReceipt.Outcome != "allow_once" {
+	if w.DecisionReceipt == nil || w.DecisionReceipt.ID != "approval-1" || w.DecisionReceipt.OccurrenceID != "receipt-occurrence-1" || w.DecisionReceipt.Outcome != "allow_once" {
 		t.Fatalf("wire receipt = %+v", w.DecisionReceipt)
 	}
 	b, err := json.Marshal(w)

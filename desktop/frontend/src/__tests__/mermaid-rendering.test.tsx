@@ -357,7 +357,7 @@ console.log("\nmermaid rendering");
     root.render(<MarkdownTextProbe text="start" streaming />);
     await flushTimers();
   });
-  eq(rootEl.textContent, "start", "streaming Markdown starts from the current text");
+  eq(rootEl.textContent, "", "an incomplete paragraph does not enter the parsed prefix");
 
   await act(async () => {
     root.render(<MarkdownTextProbe text="start middle" streaming />);
@@ -366,7 +366,7 @@ console.log("\nmermaid rendering");
     await new Promise((resolve) => setTimeout(resolve, 60));
   });
   eq(pendingFrame, undefined, "an in-progress block never schedules a parse commit");
-  eq(rootEl.textContent, "start", "the growing block rides the tail, not the parsed prefix");
+  eq(rootEl.textContent, "", "an in-progress paragraph stays uncommitted while text grows");
 
   await act(async () => {
     root.render(<MarkdownTextProbe text={"start middle end\n\nnext block"} streaming />);
@@ -464,7 +464,7 @@ console.log("\nmermaid rendering");
     root.render(<MarkdownTextProbe text={finalText} streaming={false} />);
     await flushTimers();
   });
-  eq(rootEl.textContent, streamed, "large Markdown keeps its committed content while finalization waits for idle");
+  eq(rootEl.textContent, "", "an unfinished long paragraph does not become a parsed prefix before finalization");
   ok(Boolean(pendingIdle), "large Markdown schedules one idle finalization callback");
 
   await act(async () => {

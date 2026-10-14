@@ -61,9 +61,13 @@ export const NO_LIVE: TranscriptLiveFlags = { hasAnswerText: false, hasReasoning
 
 // ── Turn partitioning ─────────────────────────────────────────────────────────
 
+type TurnOutsideItem = NoticeItem | AssistantItem | ExtensionItem | CompactionItem;
+
 export type TurnDisplayParts = {
   processItems: Item[];
-  outsideItems: Array<NoticeItem | AssistantItem | ExtensionItem | CompactionItem>;
+  outsideItems: TurnOutsideItem[];
+  /** Original item order, retained while process rows and visible rows are rendered separately. */
+  orderedItems: Item[];
 };
 
 function assistantHasVisibleAnswer(item: AssistantItem, live: TranscriptLiveFlags): boolean {
@@ -80,23 +84,27 @@ function assistantHasVisibleAnswer(item: AssistantItem, live: TranscriptLiveFlag
 //
 // The turn is returned as ordered segments so the conversation keeps its real
 // timeline: process that ran after an answer or steer opens a new segment
-// (and thus a new fold) instead of being pulled ahead of it. Warn notices and
-// delivery status cards stay visible but do not split the fold — a mid-turn
-// warning is not a conversational boundary, and a delivery pause must keep its
-// continue action reachable instead of collapsing with the process items.
+// (and thus a new fold) instead of being pulled ahead of it. Visible notices do
+// not split the fold, but their positions remain in orderedItems so the row
+// builder can keep them between process runs.
 export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveFlags = NO_LIVE): TurnDisplayParts[] {
   const segments: TurnDisplayParts[] = [];
-  let current: TurnDisplayParts = { processItems: [], outsideItems: [] };
+  let current: TurnDisplayParts = { processItems: [], outsideItems: [], orderedItems: [] };
   let currentHasConversation = false;
   const flushSegment = () => {
     if (current.processItems.length === 0 && current.outsideItems.length === 0) return;
     segments.push(current);
-    current = { processItems: [], outsideItems: [] };
+    current = { processItems: [], outsideItems: [], orderedItems: [] };
     currentHasConversation = false;
   };
   const pushProcess = (item: Item) => {
     if (currentHasConversation) flushSegment();
     current.processItems.push(item);
+    current.orderedItems.push(item);
+  };
+  const pushOutside = (item: TurnOutsideItem) => {
+    current.outsideItems.push(item);
+    current.orderedItems.push(item);
   };
   for (const item of items) {
     if (item.kind === "user") continue;
@@ -105,10 +113,10 @@ export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveF
         continue;
       }
       if (isSteerNoticeText(item.text)) {
-        current.outsideItems.push(item);
+        pushOutside(item);
         currentHasConversation = true;
       } else if (item.level === "warn" || item.variant === "delivery" || Boolean(item.action) || item.code === "search_sources_not_provided") {
-        current.outsideItems.push(item);
+        pushOutside(item);
       } else {
         pushProcess(item);
       }
@@ -118,7 +126,7 @@ export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveF
       // Extension cards carry their own actions and progress — keep them
       // visible like warnings instead of folding them into the process
       // collapse, but never treat them as a conversational boundary.
-      current.outsideItems.push(item);
+      pushOutside(item);
       continue;
     }
     if (item.kind === "compaction") {
@@ -127,7 +135,7 @@ export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveF
       // between turns is visible instead of hiding inside a collapsed
       // fold (idle turns fold closed and its rows are never mounted).
       // Never treat it as a conversational boundary either.
-      current.outsideItems.push(item);
+      pushOutside(item);
       continue;
     }
     if (item.kind !== "assistant") {
@@ -137,7 +145,7 @@ export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveF
     const hasReasoning = Boolean(item.reasoning || (live.id === item.id && live.hasReasoning));
     if (assistantHasVisibleAnswer(item, live)) {
       if (hasReasoning) pushProcess(assistantReasoningOnly(item));
-      current.outsideItems.push(item);
+      pushOutside(item);
       currentHasConversation = true;
       continue;
     }
@@ -173,6 +181,7 @@ export interface SegmentModel {
   key: string;
   processItems: Item[];
   outsideItems: TurnDisplayParts["outsideItems"];
+  orderedItems: TurnDisplayParts["orderedItems"];
   /** Items the fold body would render (parentId/todo/plan tools filtered out). */
   displayItems: Item[];
   /** Turn-level: the turn renders anything outside its folds. */
@@ -305,6 +314,7 @@ export function buildTurnModels(
         )}`,
         processItems: segment.processItems,
         outsideItems: segment.outsideItems,
+        orderedItems: segment.orderedItems,
         displayItems,
         hasOutsideContent: turnHasOutsideContent,
         foldActive: model.isActive || hasRunningWork,
@@ -563,6 +573,15 @@ export interface BuildRowsOptions {
   subcallsByParent?: ReadonlyMap<string, readonly ToolItem[]>;
 }
 
+function outsideItemRow(item: TurnOutsideItem): TranscriptRowWithLayout {
+  switch (item.kind) {
+    case "extension": return { kind: "extension", key: `x:${item.id}`, item, layoutVariant: "text-flow" };
+    case "compaction": return { kind: "compaction", key: `c:${item.id}`, item, layoutVariant: "static" };
+    case "notice": return { kind: "notice", key: `n:${item.id}`, item, layoutVariant: "text-flow" };
+    default: return { kind: "answer", key: `a:${item.id}`, item, layoutVariant: "text-flow" };
+  }
+}
+
 function numericRevision(value: string): number { return Number.parseInt(stableStringHash(value), 36) >>> 0; }
 
 /** Builds stable complete-turn units for windowing and logical anchoring. */
@@ -587,26 +606,31 @@ export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: 
       modelRows.push({ kind: "user", key: userRowKey(user.id), item: user, turn, layoutVariant: "text-flow" });
     }
     for (const segment of model.segments) {
-      if (segment.displayItems.length > 0) {
-        const defaultOpen = defaultFoldOpen(segment, foldExperience, options.processFoldPolicy ?? "follow-turn");
-        const open = options.folds.get(segment.key)?.open ?? defaultOpen;
-        modelRows.push({ kind: "process-header", key: `ph:${segment.key}`, segment, open, layoutVariant: "static" });
-        if (open) modelRows.push(...processBodyRows(segment, options.creationMode, renderExperience, subcallsByParent));
-      }
-      for (const item of segment.outsideItems) {
-        if (item.kind === "extension") {
-          modelRows.push({ kind: "extension", key: `x:${item.id}`, item, layoutVariant: "text-flow" });
-        } else if (item.kind === "compaction") {
-          // Compaction rows live outside the process fold so a compaction that
-          // lands between turns stays visible (the fold would otherwise be
-          // collapsed and its body rows never mounted).
-          modelRows.push({ kind: "compaction", key: `c:${item.id}`, item, layoutVariant: "static" });
-        } else if (item.kind === "notice") {
-          modelRows.push({ kind: "notice", key: `n:${item.id}`, item, layoutVariant: "text-flow" });
+      const defaultOpen = defaultFoldOpen(segment, foldExperience, options.processFoldPolicy ?? "follow-turn");
+      const open = options.folds.get(segment.key)?.open ?? defaultOpen;
+      const displayItems = new Set(segment.displayItems);
+      const outsideItems = new Set<Item>(segment.outsideItems);
+      let processRun: Item[] = [];
+      let headerAdded = false;
+      const flushProcessRun = () => {
+        const visible = processRun.filter((item) => displayItems.has(item));
+        processRun = [];
+        if (visible.length === 0) return;
+        if (!headerAdded) {
+          modelRows.push({ kind: "process-header", key: `ph:${segment.key}`, segment, open, layoutVariant: "static" });
+          headerAdded = true;
+        }
+        if (open) modelRows.push(...processBodyRows({ ...segment, displayItems: visible }, options.creationMode, renderExperience, subcallsByParent));
+      };
+      for (const item of segment.orderedItems) {
+        if (outsideItems.has(item)) {
+          flushProcessRun();
+          modelRows.push(outsideItemRow(item as TurnOutsideItem));
         } else {
-          modelRows.push({ kind: "answer", key: `a:${item.id}`, item, layoutVariant: "text-flow" });
+          processRun.push(item);
         }
       }
+      flushProcessRun();
     }
     // The active turn's actions appear only once it settles — mid-turn there is
     // nothing final to copy or rewind to. The row key follows the user item id

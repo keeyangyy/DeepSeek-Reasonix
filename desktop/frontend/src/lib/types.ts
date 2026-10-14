@@ -240,7 +240,7 @@ export interface WireGuardian {
 }
 
 export interface WireDecisionReceipt {
-  id: string;
+  id: string; occurrenceId?: string;
   kind: string;
   tool?: string;
   subject?: string;

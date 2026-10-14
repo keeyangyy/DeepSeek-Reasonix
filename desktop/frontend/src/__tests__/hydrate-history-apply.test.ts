@@ -8,6 +8,7 @@ import {
   duplicateLiveItemIds,
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
+  itemSignature,
   pageCoveredLiveItemIds,
   pageOverlapsLiveContent,
   sameSessionHydrateIdentity,
@@ -256,6 +257,17 @@ ok(
   ) === false,
   "unrelated text rows are not overlap",
 );
+
+{
+  const historyReceipt = { kind: "notice" as const, id: "history", level: "info" as const, code: "decision_receipt", text: "Decision recorded: answered", decisionReceipt: { id: "1", occurrenceId: "receipt-a", kind: "ask", subject: "Choose: A", outcome: "answered" } };
+  const nextReceipt = { ...historyReceipt, id: "live", decisionReceipt: { ...historyReceipt.decisionReceipt, occurrenceId: "receipt-b" } };
+  ok(itemSignature(historyReceipt) !== itemSignature(nextReceipt), "distinct Ask receipts do not share a signature");
+  ok(!pageOverlapsLiveContent([historyReceipt], [nextReceipt]), "same-title Ask receipts do not claim history overlap");
+  ok(pageCoveredLiveItemIds([historyReceipt], [nextReceipt]).length === 0, "a prior Ask receipt does not remove a distinct live one");
+  const replay = { ...historyReceipt, id: "replay" };
+  ok(itemSignature(historyReceipt) === itemSignature(replay), "the same receipt occurrence keeps its signature across IDs");
+  ok(pageCoveredLiveItemIds([historyReceipt], [replay]).join(",") === "replay", "history removes the same live receipt once");
+}
 
 // Page handoff: the page's in-flight turn must not co-mount with the rebuilt
 // live rows, the streaming pointer must follow the page row, and a live

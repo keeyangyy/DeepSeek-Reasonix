@@ -215,6 +215,45 @@ const keys = (rows: TranscriptRow[]) => rows.map((row) => row.key).join(",");
 
 {
   const models = buildTurnModels([
+    { kind: "user", id: "u-interleaved", text: "run the checks" },
+    { kind: "tool", id: "read-before-warning", name: "read_file", args: "{}", readOnly: true, status: "done" },
+    { kind: "notice", id: "mid-turn-warning", level: "warn", text: "permission needs attention" },
+    { kind: "tool", id: "read-after-warning", name: "read_file", args: "{}", readOnly: true, status: "done" },
+    { kind: "compaction", id: "mid-turn-compaction", pending: false, trigger: "manual", messages: 10, summary: "summary", archive: "" },
+    { kind: "phase", id: "phase-after-compaction", text: "resume checks" },
+    { kind: "assistant", id: "a-interleaved", text: "Done", reasoning: "", streaming: false },
+  ]);
+  const expanded = buildTranscriptRows(models, rowOptions(EMPTY_FOLDS, "expanded"));
+  const visibleOrder = expanded.flatMap((row) => {
+    if (row.kind === "tool" || row.kind === "tool-batch" || row.kind === "tool-group") {
+      return row.kind === "tool" ? [`tool:${row.item.id}`] : row.items.map((item) => `tool:${item.id}`);
+    }
+    if (row.kind === "notice") return [`notice:${row.item.id}`];
+    if (row.kind === "compaction") return [`compaction:${row.item.id}`];
+    if (row.kind === "phase") return [`phase:${row.item.id}`];
+    if (row.kind === "answer") return [`answer:${row.item.id}`];
+    return [];
+  });
+
+  eq(
+    visibleOrder.join(","),
+    "tool:read-before-warning,notice:mid-turn-warning,tool:read-after-warning,compaction:mid-turn-compaction,phase:phase-after-compaction,answer:a-interleaved",
+    "outside notices and lifecycle rows stay at their original positions between process runs",
+  );
+  eq(expanded.filter((row) => row.kind === "process-header").length, 1, "interleaved outside rows keep one process fold header");
+
+  const collapsed = buildTranscriptRows(models, rowOptions(EMPTY_FOLDS));
+  const visibleOutside = collapsed.flatMap((row) => {
+    if (row.kind === "notice") return [`notice:${row.item.id}`];
+    if (row.kind === "compaction") return [`compaction:${row.item.id}`];
+    if (row.kind === "answer") return [`answer:${row.item.id}`];
+    return [];
+  });
+  eq(visibleOutside.join(","), "notice:mid-turn-warning,compaction:mid-turn-compaction,answer:a-interleaved", "outside rows stay visible in source order while the process fold is collapsed");
+}
+
+{
+  const models = buildTurnModels([
     { kind: "user", id: "u-single-shell", text: "one command" },
     { kind: "tool", id: "only-shell", name: "bash", args: "{}", readOnly: false, status: "done" },
     { kind: "tool", id: "reader-a", name: "read_file", args: "{}", readOnly: true, status: "done" },

@@ -307,18 +307,19 @@ func toWireUsage(e event.Event) *Usage {
 
 // DecisionReceipt is the JSON form of a provider-excluded user decision.
 type DecisionReceipt struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
-	Tool    string `json:"tool,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Outcome string `json:"outcome"`
+	ID           string `json:"id"`
+	OccurrenceID string `json:"occurrenceId,omitempty"`
+	Kind         string `json:"kind"`
+	Tool         string `json:"tool,omitempty"`
+	Subject      string `json:"subject,omitempty"`
+	Outcome      string `json:"outcome"`
 }
 
 func ToWireDecisionReceipt(in *provider.DecisionReceipt) *DecisionReceipt {
 	if in == nil {
 		return nil
 	}
-	return &DecisionReceipt{ID: in.ID, Kind: in.Kind, Tool: in.Tool, Subject: in.Subject, Outcome: in.Outcome}
+	return &DecisionReceipt{ID: in.ID, OccurrenceID: in.OccurrenceID, Kind: in.Kind, Tool: in.Tool, Subject: in.Subject, Outcome: in.Outcome}
 }
 
 type FinalReadiness struct {
@@ -737,9 +738,8 @@ type ExtensionCard struct {
 	Actions  []ExtensionActionRef `json:"actions,omitempty"`
 }
 
-// ExtensionFormField is the JSON form of an event.ExtensionFormField. Default
-// travels as raw JSON: the remote schema has no "any" type, and the field is
-// already protocol-validated JSON on arrival.
+// ExtensionFormField carries event.ExtensionFormField on the Remote JSON wire.
+// Default stays json.RawMessage because the protocol has no "any" type.
 type ExtensionFormField struct {
 	Key      string          `json:"key"`
 	Label    string          `json:"label,omitempty"`

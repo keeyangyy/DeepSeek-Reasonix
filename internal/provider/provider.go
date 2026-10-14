@@ -142,15 +142,15 @@ type ToolExecution struct {
 	DurationMs     int64  `json:"durationMs,omitempty"`
 }
 
-// DecisionReceipt is durable, provider-excluded evidence of a user-ownedapproval decision.
-// Itintentionallycontains only bounded labels and theoutcome,
-// neverfree-formguidanceorprovider-visiblecontent.
+// DecisionReceipt is durable, provider-excluded evidence with bounded labels and outcome.
+// It excludes free-form guidance and provider-visible content.
 type DecisionReceipt struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
-	Tool    string `json:"tool,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Outcome string `json:"outcome"`
+	ID           string `json:"id"`
+	OccurrenceID string `json:"occurrenceId,omitempty"`
+	Kind         string `json:"kind"`
+	Tool         string `json:"tool,omitempty"`
+	Subject      string `json:"subject,omitempty"`
+	Outcome      string `json:"outcome"`
 }
 
 // MemoryCitation is local display metadata for memories that influenced anassistant turn.

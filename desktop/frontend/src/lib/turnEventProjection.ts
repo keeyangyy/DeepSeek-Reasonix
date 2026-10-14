@@ -27,6 +27,7 @@ export class TurnEventProjector {
   private readonly pendingRepairByTab = new Map<string, { afterSeq: number; runtimeEpoch?: string }>();
   private readonly gapQueueByTab = new Map<string, WireEvent[]>();
   private readonly epochByTab = new Map<string, string>();
+  private readonly sessionGenerationByTab = new Map<string, number>();
   private readonly generationByTab = new Map<string, number>();
   private readonly latestByTab = new Map<string, number>();
   private readonly repairCooldownUntilByTab = new Map<string, number>();
@@ -44,10 +45,15 @@ export class TurnEventProjector {
   unbindReplayStart(handler: ReplayStartHandler) { if (this.replayStartHandler === handler) this.replayStartHandler = undefined; }
 
   release(tabId: string) {
+    this.resetProjection(tabId, true);
+    this.sessionGenerationByTab.delete(tabId);
+  }
+
+  private resetProjection(tabId: string, clearEpoch: boolean) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
     this.sequenceByTab.delete(tabId);
     this.gapQueueByTab.delete(tabId);
-    this.epochByTab.delete(tabId);
+    if (clearEpoch) this.epochByTab.delete(tabId);
     this.latestByTab.delete(tabId);
     this.projectingReplayByTab.delete(tabId);
     this.pendingRepairByTab.delete(tabId);
@@ -86,15 +92,17 @@ export class TurnEventProjector {
     this.repairByTab.delete(tabId);
   }
 
-  observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean, turnId?: string) {
-    if (runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId)) {
-      this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
-      this.epochByTab.set(tabId, runtimeEpoch);
-      this.sequenceByTab.delete(tabId);
-      this.gapQueueByTab.delete(tabId);
-      this.pendingRepairByTab.delete(tabId);
-      this.repairByTab.delete(tabId);
-    }
+  observeRuntime(tabId: string, runtimeEpoch: string | undefined, latest: number, replayAfter: number | undefined, active: boolean, turnId?: string, sessionGeneration?: number) {
+    const currentSessionGeneration = sessionGeneration ?? 0;
+    const previousSessionGeneration = this.sessionGenerationByTab.get(tabId);
+    // The runtime epoch can outlive a session rebind, while each session's
+    // durable event ledger has its own sequence space. Go omits generation 0
+    // from TabMeta, so treat a missing first snapshot as generation 0.
+    const sessionChanged = previousSessionGeneration !== undefined && currentSessionGeneration !== previousSessionGeneration;
+    const epochChanged = Boolean(runtimeEpoch && runtimeEpoch !== this.epochByTab.get(tabId));
+    if (sessionChanged || epochChanged) this.resetProjection(tabId, epochChanged);
+    this.sessionGenerationByTab.set(tabId, currentSessionGeneration);
+    if (runtimeEpoch) this.epochByTab.set(tabId, runtimeEpoch);
     if (latest > (this.latestByTab.get(tabId) ?? 0)) this.latestByTab.set(tabId, latest);
     let projected = this.sequenceByTab.get(tabId);
     const initializing = projected === undefined;

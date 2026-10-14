@@ -39,11 +39,12 @@ func TestRecordPlannerDisplayEventKeepsNoticeDetail(t *testing.T) {
 func TestCancelledDisplaySidecarReplaysStructuredDecisionReceipt(t *testing.T) {
 	const userContent = "run the build"
 	receipt := &provider.DecisionReceipt{
-		ID:      "approval-1",
-		Kind:    "tool",
-		Tool:    "bash",
-		Subject: "npm run build",
-		Outcome: "allow_once",
+		ID:           "approval-1",
+		OccurrenceID: "receipt-occurrence-1",
+		Kind:         "tool",
+		Tool:         "bash",
+		Subject:      "npm run build",
+		Outcome:      "allow_once",
 	}
 	tab := &WorkspaceTab{}
 	tab.recordDisplayEvent(event.Event{
@@ -80,7 +81,7 @@ func TestCancelledDisplaySidecarReplaysStructuredDecisionReceipt(t *testing.T) {
 	if got.Code != event.NoticeCodeDecisionReceipt || got.DecisionReceipt == nil {
 		t.Fatalf("structured decision receipt missing after reload: %+v", got)
 	}
-	if got.DecisionReceipt.ID != receipt.ID || got.DecisionReceipt.Tool != receipt.Tool || got.DecisionReceipt.Subject != receipt.Subject || got.DecisionReceipt.Outcome != receipt.Outcome {
+	if got.DecisionReceipt.ID != receipt.ID || got.DecisionReceipt.OccurrenceID != receipt.OccurrenceID || got.DecisionReceipt.Tool != receipt.Tool || got.DecisionReceipt.Subject != receipt.Subject || got.DecisionReceipt.Outcome != receipt.Outcome {
 		t.Fatalf("replayed receipt = %+v, want %+v", got.DecisionReceipt, receipt)
 	}
 	for i, message := range visible {

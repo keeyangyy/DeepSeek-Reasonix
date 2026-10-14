@@ -122,4 +122,145 @@ assert.equal(
   "a stale seq=1 event cannot reset a ledger cursor whose sequence is defined to be monotonic",
 );
 
+const sessionReplay: TurnEventReplayView = {
+  events: [
+    {
+      turnId: "turn-new-session",
+      seq: 1,
+      status: "in_progress",
+      event: { kind: "turn_started", turnId: "turn-new-session", status: "in_progress" },
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 2,
+      status: "in_progress",
+      event: { kind: "tool_dispatch", turnId: "turn-new-session", tool: { id: "call-ask", name: "ask", readOnly: false } },
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 3,
+      status: "in_progress",
+      event: { kind: "ask_request", turnId: "turn-new-session", ask: { id: "prompt-ask", questions: [] } } as never,
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 4,
+      status: "in_progress",
+      event: { kind: "prompt_answered", turnId: "turn-new-session", itemId: "prompt-ask", status: "in_progress" },
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 5,
+      status: "in_progress",
+      event: {
+        kind: "notice",
+        turnId: "turn-new-session",
+        code: "decision_receipt",
+        level: "info",
+        text: "Decision recorded: answered",
+        decisionReceipt: { id: "prompt-ask", occurrenceId: "receipt-ask", kind: "ask", outcome: "answered" },
+      },
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 6,
+      status: "in_progress",
+      event: { kind: "tool_result", turnId: "turn-new-session", tool: { id: "call-ask", name: "ask", readOnly: false, output: "answer" } },
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 7,
+      status: "in_progress",
+      event: { kind: "reasoning", turnId: "turn-new-session", reasoning: "用户选择结束测试。收尾：" },
+    },
+    {
+      turnId: "turn-new-session",
+      seq: 8,
+      status: "in_progress",
+      event: { kind: "message", turnId: "turn-new-session", text: "", reasoning: "用户选择结束测试。收尾：" },
+    },
+  ],
+  floorSeq: 1,
+  latestSeq: 8,
+  nextAfterSeq: 8,
+  hasMore: false,
+  resetRequired: false,
+  runtimeEpoch: "epoch-stable",
+};
+binding.TurnEventsForTab = async (_tabId, afterSeq) => {
+  assert.equal(afterSeq, 0, "a new session generation replays from its own cursor");
+  return sessionReplay;
+};
+let reboundState = {
+  ...initialState,
+  items: [
+    { kind: "user", id: "u-current", text: "test ask replay" } as const,
+    { kind: "assistant", id: "a:turn-new-session:0", text: "", reasoning: "用户选择结束测试。收尾：", streaming: false } as const,
+  ],
+  activeTurnId: "turn-new-session",
+  currentAssistant: "a:turn-new-session:0",
+  assistantSegmentOrdinal: 1,
+  turnActive: true,
+  running: true,
+} as ReturnType<typeof reducer>;
+const reboundProjector = new TurnEventProjector();
+reboundProjector.bind((event) => { reboundState = reducer(reboundState, { type: "event", e: event } as never); });
+reboundProjector.bindReplayStart((_tabId, turnId) => {
+  reboundState = reducer(reboundState, { type: "replay_turn_rebuild", turnId } as never);
+});
+reboundProjector.observeRuntime("reused-tab", "epoch-stable", 80, 80, false, undefined, 4);
+reboundProjector.observeRuntime("reused-tab", "epoch-stable", 8, 0, true, "turn-new-session", 5);
+for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+const askIndex = reboundState.items.findIndex((item) => item.kind === "tool" && item.id === "call-ask");
+const receiptIndex = reboundState.items.findIndex((item) => item.kind === "notice" && item.decisionReceipt?.occurrenceId === "receipt-ask");
+const thoughtIndex = reboundState.items.findIndex((item) => item.kind === "assistant" && item.reasoning.includes("用户选择结束测试。收尾："));
+assert.ok(
+  askIndex >= 0 && receiptIndex >= 0 && thoughtIndex >= 0,
+  `the session rebind replays the Ask call, receipt, and following thought (${JSON.stringify(reboundState.items.map((item) => ({ kind: item.kind, id: item.id, name: item.kind === "tool" ? item.name : undefined })))})`,
+);
+assert.ok(askIndex < receiptIndex && receiptIndex < thoughtIndex, "distinct prompt and tool IDs still preserve Ask-before-thought order");
+assert.equal(
+  reboundProjector.acceptLive("reused-tab", { kind: "text", seq: 9, runtimeEpoch: "epoch-stable", sessionGeneration: 5 }, "epoch-stable"),
+  true,
+  "new-session live events continue after the rehydrated prefix",
+);
+
+let zeroToOneReplayAfter: number | undefined;
+const zeroToOneEvents: number[] = [];
+const zeroToOneProjector = new TurnEventProjector();
+zeroToOneProjector.bind((event) => zeroToOneEvents.push(event.seq ?? 0));
+binding.TurnEventsForTab = async (_tabId, afterSeq) => {
+  zeroToOneReplayAfter = afterSeq;
+  return sessionReplay;
+};
+zeroToOneProjector.observeRuntime("zero-to-one-tab", "epoch-stable", 80, 80, false);
+zeroToOneProjector.observeRuntime("zero-to-one-tab", "epoch-stable", 8, 0, true, "turn-new-session", 1);
+for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+assert.equal(zeroToOneReplayAfter, 0, "an omitted generation-zero snapshot resets before generation one replays");
+assert.deepEqual(zeroToOneEvents, [1, 2, 3, 4, 5, 6, 7, 8], "generation zero to one replays its lower sequence range");
+
+let resolveOldSessionReplay!: (view: TurnEventReplayView) => void;
+let sessionReplayRequests = 0;
+binding.TurnEventsForTab = async () => {
+  sessionReplayRequests += 1;
+  if (sessionReplayRequests === 1) return new Promise<TurnEventReplayView>((resolve) => { resolveOldSessionReplay = resolve; });
+  return sessionReplay;
+};
+const sessionFencedEvents: string[] = [];
+const sessionFencedProjector = new TurnEventProjector();
+sessionFencedProjector.bind((event) => sessionFencedEvents.push(`${event.turnId}:${event.seq}`));
+sessionFencedProjector.observeRuntime("session-fence-tab", "epoch-stable", 8, 0, true, "turn-old-session", 10);
+sessionFencedProjector.observeRuntime("session-fence-tab", "epoch-stable", 8, 0, true, "turn-new-session", 11);
+for (let attempt = 0; attempt < 20; attempt += 1) await Promise.resolve();
+resolveOldSessionReplay({
+  ...sessionReplay,
+  events: [{ turnId: "turn-old-session", seq: 1, status: "in_progress", event: { kind: "text", turnId: "turn-old-session", text: "stale" } }],
+  floorSeq: 1,
+  latestSeq: 1,
+  nextAfterSeq: 1,
+});
+for (let attempt = 0; attempt < 40; attempt += 1) await Promise.resolve();
+assert.ok(sessionFencedEvents.length > 0, "the new session replay is projected");
+assert.ok(sessionFencedEvents.every((event) => !event.startsWith("turn-old-session:")), "a replay from the prior session generation is discarded");
+
 console.log("turn event projection reset tests passed");
