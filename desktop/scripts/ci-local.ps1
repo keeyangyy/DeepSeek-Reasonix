@@ -22,8 +22,8 @@ function Invoke-Step($name, [scriptblock]$body, [string]$dir) {
 # 改动文件：优先与远端主线比；在 main-v2 上则退化为最近提交
 $changed = @(git diff --name-only origin/main-v2...HEAD 2>$null)
 if ($changed.Count -eq 0) { $changed = @(git diff --name-only HEAD~1 2>$null) }
-$changedGo = @($changed | Where-Object { $_ -like "*.go" })
-$changedFe = @($changed | Where-Object { $_ -like "desktop/frontend/*" } | ForEach-Object { $_ -replace "^desktop/frontend/", "" })
+$changedGo = @($changed | Where-Object { $_ -like "*.go" -and (Test-Path $_) })
+$changedFe = @($changed | Where-Object { $_ -like "desktop/frontend/*" -and (Test-Path $_) } | ForEach-Object { $_ -replace "^desktop/frontend/", "" })
 
 Invoke-Step "gofmt（改动 Go）" {
   if ($changedGo.Count -gt 0) { gofmt -l $changedGo } else { $global:LASTEXITCODE = 0; Write-Host "  无 Go 改动" }
@@ -46,7 +46,12 @@ if (-not $Fast) {
 }
 if (-not $Fast) {
   Invoke-Step "eslint（改动前端）" {
-    if ($changedFe.Count -gt 0) { pnpm exec eslint $changedFe } else { $global:LASTEXITCODE = 0; Write-Host "  无前端改动" }
+    if ($changedFe.Count -gt 0) {
+      foreach ($f in $changedFe) {
+        pnpm exec eslint $f
+        if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 1; break }
+      }
+    } else { $global:LASTEXITCODE = 0; Write-Host "  无前端改动" }
   } "desktop/frontend"
   Invoke-Step "bundle 预算" { node scripts/check-bundle-budget.mjs } "desktop/frontend"
 }
