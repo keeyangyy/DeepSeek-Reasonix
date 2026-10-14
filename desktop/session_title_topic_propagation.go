@@ -163,10 +163,10 @@ func (a *App) commitAutoTopicTitle(sessionPath, topicID, title string) {
 	}
 }
 
-// sessionCustomTitleForLabel returns the session's canonical custom title for
-// sidebar labels: BranchMeta.CustomTitle first, then the legacy titles map.
-// Empty when the session has no explicit name, so callers can fall back to
-// the file-name label.
+// sessionCustomTitleForLabel returns the session's canonical title for sidebar
+// labels: CustomTitle first, then a real TopicTitle (the placeholder is not a
+// name), then the legacy titles map. Empty when nothing names the session, so
+// callers fall back to the preview and then the file name.
 func sessionCustomTitleForLabel(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -174,6 +174,9 @@ func sessionCustomTitleForLabel(path string) string {
 	}
 	if meta, ok, err := agent.LoadBranchMeta(path); err == nil && ok {
 		if title := strings.TrimSpace(meta.CustomTitle); title != "" {
+			return title
+		}
+		if title := strings.TrimSpace(meta.TopicTitle); title != "" && !isDefaultTopicTitle(title) {
 			return title
 		}
 	}

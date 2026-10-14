@@ -385,6 +385,9 @@ func (c *Catalog) reconcileRoot(ctx context.Context, root Root) error {
 		if !root.Archive && !agent.IsVisibleSession(path) {
 			continue
 		}
+		if agent.IsForeignSession(path) {
+			continue
+		}
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)

@@ -12,6 +12,7 @@ import (
 	"reasonix/internal/ablation"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
+	"reasonix/internal/sessioncontext"
 )
 
 // Compaction is a low-frequency cache-reset point: the prompt grows append-only
@@ -71,7 +72,7 @@ Problems hit and how they were resolved (or not), so the same dead ends are not 
 ## Pending & next step
 What is still in progress or unstarted, and the single most concrete next action to take.
 
-Rules: be terse — bullet points and fragments, not prose. Preserve identifiers, paths, and numbers exactly. Merge valid facts from any existing <compaction-summary> and remove facts superseded by later messages. Do NOT invent anything not present in the messages; if something is unknown, leave it out rather than guessing. Output only the structured Markdown briefing. Do not call tools. Do not output reasoning.`
+Rules: be terse — bullet points and fragments, not prose. Preserve identifiers, paths, and numbers exactly. Merge valid facts from any existing <compaction-summary> and remove facts superseded by later messages. The summary may end with a "## Folded work index" section whose lines start "- #n"; those lines are host-written addresses, not facts: do not merge, rewrite, renumber, or cite them, and do not copy the section into your output. Do NOT invent anything not present in the messages; if something is unknown, leave it out rather than guessing. Output only the structured Markdown briefing. Do not call tools. Do not output reasoning.`
 
 // compactTrigger is the sole automatic context-maintenance boundary. Output
 // budgets are intentionally absent: they are clipped against the final request
@@ -133,9 +134,28 @@ func (a *Agent) recentTailBudget() int {
 // tokens to justify the summarization API call. It returns false when the
 // region is too small for the savings to outweigh the extra round-trip cost
 // and latency of calling the summarizer.
+//
+// A host-appended folded-work index is stripped first: the index carries no
+// new prose for a summary to save, and counting it would let a region that
+// is only an old digest plus its index pass the threshold — re-folding that
+// buys nothing while the tokens it reclaims are the index itself.
 func foldEconomics(region []provider.Message) bool {
 	const minFoldTokens = 400
-	return estimateMessagesTokens(region) >= minFoldTokens
+	return estimateMessagesTokens(stripFoldIndexes(region)) >= minFoldTokens
+}
+
+// stripFoldIndexes removes the folded-work index section from summary
+// messages, leaving every other message untouched.
+func stripFoldIndexes(fold []provider.Message) []provider.Message {
+	out := make([]provider.Message, len(fold))
+	for i, m := range fold {
+		if isCompactionSummary(m) {
+			prose, _ := splitFoldIndex(m.Content)
+			m.Content = strings.TrimRight(prose, "\n")
+		}
+		out[i] = m
+	}
+	return out
 }
 
 func estimateMessagesTokens(msgs []provider.Message) int {
@@ -197,11 +217,11 @@ func (a *Agent) SummarizeUpTo(ctx context.Context, toIdx int) error {
 func (a *Agent) summarizeAtProjectionBoundary(ctx context.Context, canonicalIndex int, direction string) error {
 	snap := a.snapshotExplicitCompression()
 	if canonicalIndex < 0 || canonicalIndex >= len(snap.canonical) {
-		return nil
+		return fmt.Errorf("context compression unavailable: selected turn is outside the conversation")
 	}
 	anchor := snap.canonical[canonicalIndex]
 	if !compressAnchorCandidate(anchor) {
-		return nil
+		return fmt.Errorf("context compression unavailable: selected position is not a compressible user turn")
 	}
 	visibleIndex := -1
 	for i, msg := range snap.visible {
@@ -382,6 +402,31 @@ func compactionInstructionWithFocus(instructions string) string {
 	return instruction
 }
 
+// compactionSnapshotRule is appended only when the fold actually carries a
+// host session-context snapshot; the summarizer must not restate it.
+const compactionSnapshotRule = "\n\nSkip every message wrapped in <session-context> tags: that " +
+	"host-generated snapshot, its section-lengths manifest, and its preamble are re-injected on every " +
+	"turn. Do not copy their contents, not even in summary form - restating them would freeze stale state."
+
+// carriesSessionContext reports whether a fold replays a host session-context
+// snapshot. Matching on content keeps the check valid after provenance stripping.
+func carriesSessionContext(region []provider.Message) bool {
+	for _, m := range region {
+		if m.Role == provider.RoleUser && sessioncontext.IsContent(m.Content) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Agent) compactionInstructionFor(region []provider.Message, instructions string) string {
+	instruction := compactionInstructionWithFocus(instructions)
+	if carriesSessionContext(region) {
+		instruction += compactionSnapshotRule
+	}
+	return instruction
+}
+
 // summaryRequest builds the exact cache-aligned request shape used by
 // summarize. Keeping planning and execution on this shared builder prevents a
 // supposedly safe overflow fold from being rejected only after it is selected.
@@ -394,7 +439,7 @@ func (a *Agent) summaryRequest(region []provider.Message, instructions string) p
 		}
 	}
 	messages := a.normalizeModelRequestMessages(prefix)
-	messages = append(messages, HostGeneratedUserMessage(compactionInstructionWithFocus(instructions)))
+	messages = append(messages, HostGeneratedUserMessage(a.compactionInstructionFor(prefix, instructions)))
 	var schemas []provider.ToolSchema
 	if a.svc.tools != nil {
 		schemas = a.providerToolSchemas()
