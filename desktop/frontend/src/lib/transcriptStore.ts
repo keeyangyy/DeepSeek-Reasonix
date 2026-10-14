@@ -36,6 +36,7 @@ import { TranscriptMarkdownCache, type ParsedMarkdownValue } from "./transcriptM
 export type { ParsedMarkdownValue } from "./transcriptMarkdownCache";
 import { historySearchAndAnswer } from "./searchTranscript";
 import { fileDiffFromWire, summarizeFileDiff } from "./tools";
+import { assertNoDuplicateItems } from "./hydrateHistoryApply";
 import {
   historyToolError,
   isReadOnlyTool,
@@ -770,6 +771,7 @@ export class TranscriptStore {
     } else {
       session.itemsCache = [...session.itemsCache, ...appendedItems];
     }
+    assertNoDuplicateItems(appendedItems, "appendEntries");
     return appendedItems;
   }
 
@@ -822,7 +824,9 @@ export class TranscriptStore {
     this.autoFetchRefs(session);
     this.enforceBudgets();
     if (this.sessions.get(key) !== session) return undefined; // evicted by the budget
-    return this.projectionOf(session);
+    const projection = this.projectionOf(session);
+    assertNoDuplicateItems(projection.items, "loadLatest");
+    return projection;
   }
 
   /**
@@ -868,7 +872,9 @@ export class TranscriptStore {
       session.digest = slice.digest ?? session.digest;
       this.enforceBudgets();
       if (this.sessions.get(key) !== session) return undefined;
-      return { ...this.projectionOf(session), kind: "prepend", prependItems: items, removeIds };
+      const projection = { ...this.projectionOf(session), kind: "prepend" as const, prependItems: items, removeIds };
+      assertNoDuplicateItems(projection.items, "loadOlder");
+      return projection;
     } finally {
       session.olderInFlight = false;
     }
