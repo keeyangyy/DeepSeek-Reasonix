@@ -1,7 +1,9 @@
 package remote
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -29,6 +31,15 @@ func TestResolveJumpHostsUsesConfiguredAliasesAndSSHConfig(t *testing.T) {
 		Name: "second", Host: "10.0.0.9", User: "ops",
 		PasswordEnv: "SECOND_PASSWORD", ProxyJump: "ignored-nested-hop",
 	}}
+	// A deterministic stand-in for `ssh -G`: the real client exits 1 on hosts
+	// that resolve no HOME-based config (hosted runners), which would make this
+	// an environment check; the whole ResolveHost→applySSHConfig path still runs.
+	sshCfg.resolveOpenSSH = func(_ context.Context, _ string, alias string) ([]byte, error) {
+		if alias != "bastion" {
+			return nil, exec.ErrNotFound
+		}
+		return []byte("hostname 10.0.0.8\nuser jump-user\nport 2202\nidentityfile ~/.ssh/jump_key\n"), nil
+	}
 	hops, err := ResolveJumpHosts(cfg, []string{"bastion", "second"}, sshCfg)
 	if err != nil {
 		t.Fatal(err)

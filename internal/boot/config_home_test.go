@@ -31,9 +31,19 @@ func isolateConfigHome(t *testing.T) string {
 	return dir
 }
 
+// The process history catalog indexes asynchronously. On a loaded CI runner the
+// initial open can take tens of seconds, so both the readiness wait and the
+// close handshake need headroom well above a developer machine's timing: a
+// close that still times out means the background open never observed its
+// cancellation, which is a real defect rather than a slow runner.
+const (
+	bootTestCatalogReadyTimeout = 90 * time.Second
+	bootTestCatalogCloseTimeout = 60 * time.Second
+)
+
 func closeBootTestHistoryCatalog(t *testing.T) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), bootTestCatalogCloseTimeout)
 	defer cancel()
 	if err := history.CloseSharedCatalog(ctx); err != nil {
 		t.Fatalf("close shared history catalog: %v", err)
@@ -65,7 +75,7 @@ func waitForBootTestHistoryIndex(t *testing.T, ready <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-ready:
-	case <-time.After(30 * time.Second):
+	case <-time.After(bootTestCatalogReadyTimeout):
 		t.Fatal("timed out waiting for history catalog to index the saved fixture")
 	}
 }
