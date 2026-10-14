@@ -419,6 +419,9 @@ func TestTrashTopicPreservesDivergedExistingTrash(t *testing.T) {
 	if err := existing.SaveSnapshot(existingTrashPath); err != nil {
 		t.Fatalf("write existing trash: %v", err)
 	}
+	if err := agent.SaveBranchMeta(existingTrashPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta existing trash: %v", err)
+	}
 
 	app := NewApp()
 	if err := app.TrashTopic(topicID); err != nil {

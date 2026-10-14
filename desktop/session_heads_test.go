@@ -75,6 +75,9 @@ func newSchemaTwoTabFixture(t *testing.T) schemaTwoTabFixture {
 	if err := session.Save(path); err != nil {
 		t.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatal(err)
+	}
 	ag := agent.New(nil, nil, session, agent.Options{}, event.Discard)
 	ctrl := control.New(control.Options{Executor: ag, Runner: ag, Sink: event.Discard, SessionDir: dir, SessionPath: path, WorkspaceRoot: root, Label: "test"})
 	app := NewApp()

@@ -19,6 +19,9 @@ func TestDesktopBranchTransitionMovesLeaseAndTabAtomically(t *testing.T) {
 	if err := sess.SaveIfAbsent(originalPath); err != nil {
 		t.Fatal(err)
 	}
+	if err := agent.SaveBranchMeta(originalPath, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatal(err)
+	}
 	ag := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
 	app := &App{
 		ctx:              context.Background(),

@@ -143,9 +143,7 @@ func TestHistoryMessagesExpandedRawSupportsSidecarAndPreviousClients(t *testing.
 	const rendered = "<capability-route version=\"1\">\nuse review\n</capability-route>\n\n" + expanded
 	msgs := []provider.Message{{Role: provider.RoleUser, Content: rendered, RawContent: expanded}}
 
-	// Previous desktop releases use RawContent as their replay source. Keeping
-	// the expanded markers there lets them reconstruct the same inline card
-	// instead of rendering an opaque label with no accessible payload.
+	// Older releases use RawContent as replay; expanded markers keep the card reconstructable.
 	previousReplay := agent.UserMessageText(msgs[0])
 	if !strings.Contains(previousReplay, "--- Begin "+label+" ---") || !strings.Contains(previousReplay, "--- End "+label+" ---") {
 		t.Fatalf("previous-client replay lost pasted payload markers: %q", previousReplay)
@@ -919,7 +917,6 @@ func TestPreviewSessionMessagesLoadsWithoutResuming(t *testing.T) {
 	if err := session.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-
 	got, err := previewSessionMessages(dir, path)
 	if err != nil {
 		t.Fatalf("previewSessionMessages: %v", err)
@@ -974,7 +971,6 @@ func TestPreviewSessionMessagesUpgradesContentOnlyExpandedPaste(t *testing.T) {
 	if err := session.Save(path); err != nil {
 		t.Fatalf("Save content-only session: %v", err)
 	}
-
 	got, err := previewSessionMessages(dir, path)
 	if err != nil {
 		t.Fatalf("previewSessionMessages: %v", err)
@@ -1039,7 +1035,6 @@ func TestPreviewSessionMessagesRestoresAppendEventUserTime(t *testing.T) {
 	if err := session.SaveSnapshot(path); err != nil {
 		t.Fatalf("SaveSnapshot second: %v", err)
 	}
-
 	got, err := previewSessionMessages(dir, path)
 	if err != nil {
 		t.Fatalf("previewSessionMessages: %v", err)
@@ -1898,5 +1893,8 @@ func writeHistoryTestSession(t *testing.T, path, prompt string) {
 	session.Add(provider.Message{Role: provider.RoleUser, Content: prompt})
 	if err := session.Save(path); err != nil {
 		t.Fatalf("Save %s: %v", path, err)
+	}
+	if err := agent.SaveBranchMeta(path, agent.BranchMeta{Scope: "global"}); err != nil {
+		t.Fatalf("SaveBranchMeta %s: %v", path, err)
 	}
 }
