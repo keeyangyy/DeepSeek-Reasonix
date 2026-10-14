@@ -2831,18 +2831,15 @@ func (a *App) ensureBlankTab(scope, workspaceRoot string) (TabMeta, error) {
 		return enrichTabMeta(meta), nil
 	}
 
-	// New blank sessions start from global defaults for model and approval
-	// posture, keeping execution-local settings (effort/floor/MCP) from the
-	// active tab without letting it override global defaults (#4019).
+	// Effort is session state: a blank session starts at auto instead of
+	// inheriting the level of the visible conversation.
 	inheritedModel := defaultModel
-	var inheritedEffort *string
 	inheritedFloor := tabQualityFloor(workspaceRoot, a.activeTabLocked().qualityFloorSafe())
 	inheritedMode := tabModeFromAxes(false, defaultToolApprovalMode == control.ToolApprovalYolo)
 	inheritedToolApprovalMode := defaultToolApprovalMode
 	inheritedDisabledMCP := map[string]ServerView{}
 	var inheritedMCPOrder []string
 	if active := a.activeTabLocked(); active != nil {
-		inheritedEffort = cloneStringPtr(active.effort)
 		inheritedDisabledMCP = cloneServerViewMap(active.disabledMCP)
 		inheritedMCPOrder = append([]string(nil), active.mcpOrder...)
 	}
@@ -2868,7 +2865,6 @@ func (a *App) ensureBlankTab(scope, workspaceRoot string) (TabMeta, error) {
 			TopicTitle:       topicTitle,
 			topicTitleSource: loadTopicTitleSource(topicTitleRoot(scope, workspaceRoot), topicID),
 			model:            inheritedModel,
-			effort:           inheritedEffort,
 			qualityFloor:     inheritedFloor,
 			mode:             inheritedMode,
 			toolApprovalMode: inheritedToolApprovalMode,
@@ -2920,7 +2916,6 @@ func (a *App) ensureBlankTab(scope, workspaceRoot string) (TabMeta, error) {
 		TopicTitle:       topicTitleForTab(scope, workspaceRoot, topicID),
 		topicTitleSource: topicTitleSourceAuto,
 		model:            inheritedModel,
-		effort:           inheritedEffort,
 		qualityFloor:     inheritedFloor,
 		mode:             inheritedMode,
 		toolApprovalMode: inheritedToolApprovalMode,
@@ -7915,6 +7910,7 @@ func tabSessionMetaPathForSession(runtimeDir, sessionDir, sessionPath string) st
 type tabSessionProfile struct {
 	tokenMode, qualityFloor, mode string
 	toolApprovalMode, goal        string
+	effort                        string
 }
 
 func defaultTabSessionProfile() tabSessionProfile {
@@ -7945,6 +7941,7 @@ func tabSessionProfileFromMeta(sessionPath string, meta agent.BranchMeta) tabSes
 	if profile.toolApprovalMode == control.ToolApprovalAsk && tabModeHasAutoApproveTools(meta.Mode) {
 		profile.toolApprovalMode = control.ToolApprovalYolo
 	}
+	profile.effort = strings.TrimSpace(meta.Effort)
 	profile.goal = runningTabSessionGoal(sessionPath, meta.Goal)
 	return profile
 }
@@ -7969,6 +7966,7 @@ func applyTabSessionProfile(tab *WorkspaceTab, profile tabSessionProfile) {
 	}
 	tab.mode = tabModeFromAxes(tabModeHasPlan(tab.mode), tab.toolApprovalMode == control.ToolApprovalYolo)
 	tab.goal = strings.TrimSpace(profile.goal)
+	tab.effort = effortPtr(profile.effort)
 }
 
 func persistedTabGoal(tab *WorkspaceTab) string {
@@ -8058,6 +8056,7 @@ func (a *App) persistTabSessionPath(tab *WorkspaceTab, path string) {
 	}
 	_ = a.saveTabSessionMeta(tab, path)
 	a.rememberTabSessionPath(tab, path)
+	recordTabSessionEffort(a, tab, path)
 }
 
 func (a *App) knownSessionDirs() []string {
