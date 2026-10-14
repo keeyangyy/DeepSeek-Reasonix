@@ -89,6 +89,9 @@ export function AppearanceOverview({
   theme,
   themeStyle,
   terminalTheme,
+  scheduleStart,
+  scheduleEnd,
+  onThemeSchedule,
   conversationWidth,
   textSize,
   showDisplayZoom,
@@ -111,6 +114,9 @@ export function AppearanceOverview({
   theme: Theme;
   themeStyle: ThemeStyle;
   terminalTheme: TerminalThemePreference;
+  scheduleStart: string;
+  scheduleEnd: string;
+  onThemeSchedule: (start: string, end: string) => void;
   conversationWidth: ConversationWidth;
   textSize: TextSize;
   showDisplayZoom: boolean;
@@ -264,6 +270,9 @@ export function AppearanceOverview({
     }
   };
 
+  const [scheduleDraftStart, setScheduleDraftStart] = useState(scheduleStart);
+  const [scheduleDraftEnd, setScheduleDraftEnd] = useState(scheduleEnd);
+
   if (view === "gallery" && experience) {
     return (
       <ThemeGallery
@@ -352,7 +361,7 @@ export function AppearanceOverview({
             role="radiogroup"
             aria-labelledby="appearance-theme-mode-label"
           >
-            {(["auto", "light", "dark"] as Theme[]).map((opt) => (
+            {(["auto", "light", "dark", "schedule"] as Theme[]).map((opt) => (
               <button
                 key={opt}
                 type="button"
@@ -361,10 +370,47 @@ export function AppearanceOverview({
                 className={`set-seg__btn${theme === opt ? " set-seg__btn--on" : ""}`}
                 onClick={() => void handleThemeMode(opt)}
               >
-                {opt === "auto" ? t("settings.themeAuto") : opt === "light" ? t("settings.themeLight") : t("settings.themeDark")}
+                {opt === "auto"
+                  ? t("settings.themeAuto")
+                  : opt === "light"
+                    ? t("settings.themeLight")
+                    : opt === "dark"
+                      ? t("settings.themeDark")
+                      : t("settings.themeSchedule")}
               </button>
             ))}
           </SettingsOptions>
+          {theme === "schedule" ? (
+            <div className="appearance-overview__schedule">
+              <label className="appearance-overview__schedule-field">
+                {t("settings.themeScheduleDarkFrom")}
+                <input
+                  type="time"
+                  value={scheduleDraftStart}
+                  onChange={(event) => setScheduleDraftStart(event.target.value)}
+                />
+              </label>
+              <label className="appearance-overview__schedule-field">
+                {t("settings.themeScheduleDarkTo")}
+                <input
+                  type="time"
+                  value={scheduleDraftEnd}
+                  onChange={(event) => setScheduleDraftEnd(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn appearance-overview__schedule-save"
+                disabled={scheduleDraftStart === scheduleStart && scheduleDraftEnd === scheduleEnd}
+                onClick={() => {
+                  onThemeSchedule(scheduleDraftStart, scheduleDraftEnd);
+                  showToast(t("settings.themeScheduleSaved"), "info");
+                }}
+              >
+                {t("common.save")}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="appearance-overview__row">

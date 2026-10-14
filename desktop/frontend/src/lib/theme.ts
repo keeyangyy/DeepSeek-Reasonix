@@ -8,9 +8,10 @@
 // theme (title bar, traffic lights, etc.) so the OS chrome matches the webview.
 
 import { baseCodeReadabilityStylesheet } from "./codeReadability";
+import { isDarkSchedule, nextScheduleTransition } from "./themeSchedule";
 
-export type Theme = "auto" | "light" | "dark";
-export type ResolvedTheme = Exclude<Theme, "auto">;
+export type Theme = "auto" | "light" | "dark" | "schedule";
+export type ResolvedTheme = Exclude<Theme, "auto" | "schedule">;
 
 export const THEME_STYLES = [
   "graphite",
@@ -44,6 +45,10 @@ const BASE_CODE_READABILITY_STYLE_ID = "reasonix-base-code-readability";
 let currentTheme: Theme = DEFAULT_THEME;
 let currentThemeStyle: ThemeStyle = DEFAULT_THEME_STYLE;
 let autoThemeMediaQuery: MediaQueryList | null = null;
+// currentSchedule holds the dark-window bounds for schedule mode ("HH:MM").
+// Empty strings mean "not configured" and make schedule resolve like auto.
+let currentSchedule: { start: string; end: string } = { start: "", end: "" };
+let scheduleTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function normalizeThemePreference(value: unknown): Theme {
   if (typeof value === "object" && value !== null) {
@@ -53,6 +58,8 @@ export function normalizeThemePreference(value: unknown): Theme {
   switch (value) {
     case "auto":
       return "auto";
+    case "schedule":
+      return "schedule";
     case "light":
     case "focus":
     case "forest":
@@ -76,8 +83,24 @@ export function getTheme(): Theme {
 
 export function getResolvedTheme(theme: Theme = getTheme()): ResolvedTheme {
   if (theme === "light" || theme === "dark") return theme;
+  if (theme === "schedule") {
+    // An unconfigured schedule falls back to the OS preference so enabling
+    // the mode without setting a window never forces a jarring colour.
+    if (currentSchedule.start && currentSchedule.end) {
+      return isDarkSchedule(currentSchedule.start, currentSchedule.end, new Date()) ? "dark" : "light";
+    }
+  }
   if (typeof window !== "undefined" && window.matchMedia?.(AUTO_THEME_MEDIA_QUERY).matches) return "light";
   return "dark";
+}
+
+// setThemeSchedule records the dark-window bounds ("HH:MM" each) used by
+// schedule mode and re-applies immediately when schedule is active.
+export function setThemeSchedule(start: string, end: string): void {
+  currentSchedule = { start, end };
+  if (currentTheme === "schedule" && typeof document !== "undefined") {
+    applyTheme(currentTheme, currentThemeStyle, { persist: false });
+  }
 }
 
 // Direction is orthogonal to theme, but keep this helper so callers that
@@ -108,8 +131,11 @@ export function applyTheme(theme: Theme, style: ThemeStyle = getThemeStyle(theme
   const root = document.documentElement;
   root.removeAttribute("data-theme-mode");
   root.removeAttribute("data-theme-scheme");
+  // schedule resolves to light/dark before touching the DOM: the stylesheet
+  // only understands the concrete values.
+  const resolved = getResolvedTheme(theme);
   if (theme === "auto") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", theme);
+  else root.setAttribute("data-theme", resolved);
 
   const nextStyle: ThemeStyle = isThemeStyle(style) ? style : DEFAULT_THEME_STYLE;
   currentTheme = theme;
@@ -122,15 +148,36 @@ export function applyTheme(theme: Theme, style: ThemeStyle = getThemeStyle(theme
     syncAutoThemeBackgroundListener(theme);
     if (theme === "auto") {
       runtime.WindowSetSystemDefaultTheme?.();
-    } else if (theme === "light") {
+    } else if (resolved === "light") {
       runtime.WindowSetLightTheme?.();
-    } else if (theme === "dark") {
+    } else {
       runtime.WindowSetDarkTheme?.();
     }
     syncNativeWindowBackground(theme);
   }
 
+  armScheduleTimer(theme);
   void options;
+}
+
+// armScheduleTimer chains a timeout to the next dark/light transition while
+// schedule mode is active. Each tick re-arms the next one, so a long-running
+// app never drifts; any other theme mode clears the timer.
+function armScheduleTimer(theme: Theme): void {
+  if (scheduleTimer) {
+    clearTimeout(scheduleTimer);
+    scheduleTimer = null;
+  }
+  if (theme !== "schedule") return;
+  const next = nextScheduleTransition(currentSchedule.start, currentSchedule.end, new Date());
+  if (!next) return;
+  const delay = Math.max(0, next.at.getTime() - Date.now()) + 250; // small grace past the minute boundary
+  scheduleTimer = setTimeout(() => {
+    scheduleTimer = null;
+    if (currentTheme === "schedule") {
+      applyTheme(currentTheme, currentThemeStyle, { persist: false });
+    }
+  }, delay);
 }
 
 function ensureBaseCodeReadabilityStyle(): void {

@@ -14,7 +14,7 @@ import {
   themePackKind,
   type ThemePackView,
 } from "./themePack";
-import { applyTheme, isThemeStyle, type Theme, type ThemeStyle } from "./theme";
+import { applyTheme, isThemeStyle, setThemeSchedule, type Theme, type ThemeStyle } from "./theme";
 
 export type ThemeExperienceView = {
   themeMode: Theme | string;
@@ -22,6 +22,9 @@ export type ThemeExperienceView = {
   effectiveStyle: ThemeStyle | string;
   activeThemeId?: string;
   activePack?: ThemePackView | null;
+  /** Dark-window bounds ("HH:MM") for schedule mode; empty = unconfigured. */
+  scheduleStart?: string;
+  scheduleEnd?: string;
   /** Non-fatal plugin theme discovery issues (invalid files skipped). */
   warnings?: string[];
 };
@@ -113,7 +116,9 @@ export async function loadThemeExperience(): Promise<ThemeExperienceView> {
 }
 
 function normalizeExperience(view: ThemeExperienceView): ThemeExperienceView {
-  const themeMode = view.themeMode === "light" || view.themeMode === "dark" || view.themeMode === "auto" ? view.themeMode : "auto";
+  const themeMode = view.themeMode === "light" || view.themeMode === "dark" || view.themeMode === "auto" || view.themeMode === "schedule"
+    ? view.themeMode
+    : "auto";
   const baseStyle = isThemeStyle(view.baseStyle) ? view.baseStyle : "graphite";
   const effectiveStyle = isThemeStyle(view.effectiveStyle) ? view.effectiveStyle : baseStyle;
   return {
@@ -122,15 +127,20 @@ function normalizeExperience(view: ThemeExperienceView): ThemeExperienceView {
     effectiveStyle,
     activeThemeId: view.activeThemeId || undefined,
     activePack: view.activePack ?? null,
+    scheduleStart: typeof view.scheduleStart === "string" ? view.scheduleStart : undefined,
+    scheduleEnd: typeof view.scheduleEnd === "string" ? view.scheduleEnd : undefined,
     warnings: Array.isArray(view.warnings) ? view.warnings.filter((w): w is string => typeof w === "string" && w.trim().length > 0) : undefined,
   };
 }
 
 /** Apply a loaded experience to the live DOM (no network). */
 export function applyExperienceToDOM(view: ThemeExperienceView): void {
-  const theme = (view.themeMode === "light" || view.themeMode === "dark" || view.themeMode === "auto" ? view.themeMode : "auto") as Theme;
+  const theme = (view.themeMode === "light" || view.themeMode === "dark" || view.themeMode === "auto" || view.themeMode === "schedule"
+    ? view.themeMode
+    : "auto") as Theme;
   const base = (isThemeStyle(view.baseStyle) ? view.baseStyle : "graphite") as ThemeStyle;
   setBaseAppearance(theme, base);
+  setThemeSchedule(view.scheduleStart ?? "", view.scheduleEnd ?? "");
   if (!view.activePack) {
     clearThemePack();
     applyTheme(theme, base, { persist: false });

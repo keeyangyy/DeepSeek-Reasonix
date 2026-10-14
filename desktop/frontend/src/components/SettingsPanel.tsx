@@ -372,6 +372,11 @@ export function SettingsPanel({
                       theme={theme}
                       themeStyle={themeStyle}
                       terminalTheme={terminalTheme}
+                      scheduleStart={s?.desktopThemeScheduleDarkStart ?? ""}
+                      scheduleEnd={s?.desktopThemeScheduleDarkEnd ?? ""}
+                      onThemeSchedule={(start, end) => {
+                        void apply(() => app.SetDesktopThemeSchedule(start, end));
+                      }}
                       conversationWidth={conversationWidth}
                       textSize={textSize}
                       showDisplayZoom={desktopPlatform === "windows"}
