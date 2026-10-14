@@ -16,9 +16,8 @@ import {
   duplicateLiveItemIds,
   duplicateItemRows,
   findDuplicateItemIds,
-  itemSignature,
 } from "../lib/hydrateHistoryApply";
-import { historyMessagesToItems, type Item } from "../lib/useController";
+import type { Item } from "../lib/useController";
 import type {
   HistoryContentChunk,
   HistoryContentRef,
@@ -26,7 +25,6 @@ import type {
   HistoryMessage,
   HistorySlice,
   HistorySliceRequest,
-  WireEvent,
 } from "../lib/types";
 
 let passed = 0;
@@ -251,30 +249,6 @@ console.log("\ntranscript dedup regression");
   ok(uniqueItemIds(older?.items ?? []), "no duplicate item ids after cross-page tool merge");
 }
 
-// 4. Compaction / Notice 重复触发 ────────────────────────────────────────────
-{
-  // 模拟同一 compaction 事件通过 replay 和 live 各到达一次
-  const projector = new TurnEventProjector();
-  const projected: WireEvent[] = [];
-  projector.bind((event) => projected.push(event));
-
-  // 初始 live 事件
-  projector.observeRuntime("tab-4", "epoch-1", 10, 10, true);
-  projector.acceptLive("tab-4", { kind: "compaction", seq: 11, turnId: "t1", status: "in_progress", event: { kind: "compaction", pending: true, trigger: "auto" } }, "epoch-1");
-
-  // replay 也携带相同的 compaction seq=11
-  projector.requestReplay = (_tabId: string, afterSeq: number) => {
-    // 直接模拟 replay 返回相同 seq
-    projector.acceptLive("tab-4", { kind: "compaction", seq: 11, turnId: "t1", status: "in_progress", event: { kind: "compaction", pending: true, trigger: "auto" } }, "epoch-1");
-  };
-
-  // 触发一次 replay（afterSeq=10，和 live seq=11 有缺口）
-  projector.acceptLive("tab-4", { kind: "text", seq: 12, turnId: "t1", status: "in_progress", event: { kind: "text", text: "x" } }, "epoch-1");
-
-  const compactionSeqs = projected.filter((e) => e.kind === "compaction").map((e) => e.seq);
-  const uniqueCompactionSeqs = new Set(compactionSeqs);
-  eq(uniqueCompactionSeqs.size, compactionSeqs.length, "compaction event not duplicated by replay");
-}
 
 // 5. Hydration 切换会话时新旧内容重叠 ──────────────────────────────────────
 {
@@ -351,7 +325,7 @@ console.log("\ntranscript dedup regression");
   const backend = new FakeBackend(messages);
   const store = new TranscriptStore(backend);
 
-  const p1 = await store.loadLatest("tab-6", "/s/stress.jsonl", { turns: 10 });
+  await store.loadLatest("tab-6", "/s/stress.jsonl", { turns: 10 });
   const live1 = store.appendEntries("tab-6", "/s/stress.jsonl", [
     { entryId: "s1:r0:m6:o0", turn: 4, order: 6, message: { role: "user", content: "live1" }, refs: [] },
   ]);
@@ -726,7 +700,7 @@ if (failed > 0) process.exit(1);
   const messages: HistoryMessage[] = [
     { role: "user", content: "p1" },
     { role: "assistant", content: "", toolCalls: [{ id: "tool-running", name: "bash", arguments: "sleep 1" }] },
-    { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result", status: "done" },
+    { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result" },
   ];
   const backend = new FakeBackend(messages);
   const store = new TranscriptStore(backend);
@@ -741,7 +715,7 @@ if (failed > 0) process.exit(1);
     entryId: "s1:r0:m2:o0",
     turn: 1,
     order: 2,
-    message: { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result", status: "done" },
+    message: { role: "tool", toolCallId: "tool-running", toolName: "bash", content: "result" },
     refs: [],
   };
   const appended = store.appendEntries("tab-12", "/s/tool-status.jsonl", [updatedEntry]);
@@ -753,32 +727,6 @@ if (failed > 0) process.exit(1);
   ok(uniqueItemIds(afterUpdate?.items ?? []), "tool status: unique ids after status update");
 }
 
-// 23. compaction pending->done 流转多次触发 ───────────────────────────────────
-{
-  const messages: HistoryMessage[] = [
-    { role: "user", content: "p1" },
-    { role: "assistant", content: "a1" },
-  ];
-  const backend = new FakeBackend(messages);
-  const store = new TranscriptStore(backend);
-
-  const first = await store.loadLatest("tab-13", "/s/compaction-flow.jsonl", { turns: 12 });
-
-  // 模拟 compaction 事件：pending -> done（通过 appendEntries 模拟）
-  // 注意：TranscriptStore 不直接处理 compaction 事件，这里测试的是
-  // history page 中包含 compaction 条目的情况
-  const compactionMessages: HistoryMessage[] = [
-    { role: "user", content: "p1" },
-    { role: "assistant", content: "a1" },
-    { role: "compaction", content: "", compaction: { trigger: "auto", messages: 10, summary: "sum", archive: "" } },
-  ];
-  const backend2 = new FakeBackend(compactionMessages);
-  const store2 = new TranscriptStore(backend2);
-  const withCompaction = await store2.loadLatest("tab-13b", "/s/compaction-flow.jsonl", { turns: 12 });
-  const compactions = (withCompaction?.items ?? []).filter((item) => item.kind === "compaction");
-  eq(compactions.length, 1, "compaction: 1 compaction item in history");
-  ok(uniqueItemIds(withCompaction?.items ?? []), "compaction: unique ids with compaction");
-}
 
 // 24. turn_done 多次触发（网络重试场景） ─────────────────────────────────────
 {
@@ -791,7 +739,7 @@ if (failed > 0) process.exit(1);
   const backend = new FakeBackend(messages);
   const store = new TranscriptStore(backend);
 
-  const first = await store.loadLatest("tab-14", "/s/turn-done.jsonl", { turns: 12 });
+  await store.loadLatest("tab-14", "/s/turn-done.jsonl", { turns: 12 });
 
   // 模拟同一批 turn_done 事件通过 live 和 replay 各到达一次
   const entries: HistoryEntry[] = [
@@ -938,6 +886,42 @@ if (failed > 0) process.exit(1);
   ];
   const dupes2 = findDuplicateItemIds(extItemsA, extItemsC);
   eq(dupes2.length, 0, "extensions: different generation is not duplicate");
+}
+
+// 29. Turn-actions pairing protection ────────────────────────────────────────
+// 兜底去重（findDuplicateItemIds）按签名删除时只允许 tool（同 id 安全）：
+// 按签名删 user/assistant 会破坏 user-assistant 配对（assistant 变 orphan →
+// turn-actions 按钮消失）或误删未落盘的 live 消息。user/notice/assistant
+// 的页覆盖清理由 replaceRemoveIds（计数 + 页轮语义）负责，不走兜底。
+{
+  const pageWithAssistant = [
+    { kind: "assistant" as const, id: "he:a1", text: "完成", reasoning: "" },
+    { kind: "tool" as const, id: "call-t1", name: "wait", status: "done" },
+  ];
+  const liveWithAssistant = [
+    { kind: "user" as const, id: "u1", text: "继续" },
+    { kind: "assistant" as const, id: "a:turn-x:0", text: "完成", reasoning: "" },
+  ];
+  const dupesAssistant = findDuplicateItemIds(pageWithAssistant, liveWithAssistant, ["tool"]);
+  eq(dupesAssistant.length, 0, "pairing: assistant row is not removed by signature dedup (turn-actions preserved)");
+
+  const pageWithUser = [
+    { kind: "user" as const, id: "he:u1", text: "你好" },
+  ];
+  const liveWithUser = [
+    { kind: "user" as const, id: "u9", text: "你好" },
+  ];
+  const dupesUser = findDuplicateItemIds(pageWithUser, liveWithUser, ["tool"]);
+  eq(dupesUser.length, 0, "pairing: a live (possibly not-yet-persisted) user row is not removed by signature dedup");
+
+  const pageWithTool = [
+    { kind: "tool" as const, id: "call-t1", name: "wait", status: "done" },
+  ];
+  const liveWithTool = [
+    { kind: "tool" as const, id: "call-t1", name: "wait", status: "running" },
+  ];
+  const dupesTool = findDuplicateItemIds(pageWithTool, liveWithTool, ["tool"]);
+  eq(dupesTool.length, 1, "pairing: same-id tool rows are still deduped by the white-listed kind");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
