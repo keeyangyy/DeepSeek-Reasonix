@@ -9,6 +9,7 @@
 | `bash` | false | 执行 shell 命令并返回 stdout/stderr。构建、测试、git、包管理器等使用它；读写查找文件优先使用专用工具。 |
 | `bash_output` | true | 读取后台 `bash` 或 `task` job 自上次读取后的新增输出和状态。 |
 | `code_index` | true | 轻量内置代码符号索引；优先使用 `lsp_*` 或代码图 MCP，缺失时用它兜底。 |
+| `context_budget` | true | 查询距本对话自动压缩还有多少上下文余量。在投入可能读不完输出的大任务（宽泛搜索、大文件、长构建日志）之前调用，以便收窄命令而不是耗尽窗口才发现过大。`tokens_remaining` 计向压缩触发点而非物理窗口，因为折叠才是你还能提前应对的事件。 |
 | `complete_step` | true | 用证据记录已批准计划中一个步骤的完成情况。 |
 | `compress` | true | 压缩当前模型可见对话中选定的范围，不删除可见历史。仅在用户明确要求压缩上下文时使用；锚点必须是某条真实用户消息中唯一、精确的原文片段。 |
 | `delete_range` | false | 用精确 start/end 文本锚点删除文件中的连续范围。 |
@@ -22,6 +23,7 @@
 | `multi_edit` | false | 对单个文件原子应用多个编辑。 |
 | `notebook_edit` | false | 编辑 Jupyter notebook 的单个 cell。 |
 | `read_file` | true | 按可分页的行号格式读取文本文件。无依赖的读取应同轮下发。 |
+| `recall` | true | 取回折叠掉的对话：按压缩摘要里"Folded work index"列出的 #n 位置读取，或在索引行没提到所需内容时按关键词搜索整个折叠区。能用重新读文件解决的优先重读——当前副本胜过折叠副本。每次压缩共享一个预算，超预算整条拒绝、不截断。 |
 | `todo_write` | true | 记录并替换当前工作的结构化任务列表。 |
 | `view_image` | true | 按路径读取本地 PNG、JPEG、GIF 或 WebP，通过结构化图片通道交给视觉模型。最大 3 MiB、4000 万像素，沿用读取权限。 |
 | `wait` | true | 等待后台 job 完成并返回最终输出。 |

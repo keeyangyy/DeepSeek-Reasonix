@@ -64,6 +64,9 @@ func inheritContextProjectionForFork(parentPath, targetPath string, parent, fork
 			st.LastReceipt = &updated
 		}
 	}
+	// The fork is a new session life: it inherits the parent's folded context
+	// but starts with an unspent recall budget of its own.
+	st.Recall = RecallLedger{Generation: st.Generation}
 	if err := SaveCompactionState(targetPath, st); err != nil {
 		return false, err
 	}
