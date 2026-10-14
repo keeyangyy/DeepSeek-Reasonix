@@ -156,6 +156,8 @@ func (s *turnEventSink) persistAndPublish(e event.Event) error {
 	if e.RecoveryCheckpoint {
 		return s.c.checkpointToolTranscript()
 	}
+	// ReplayOnly prompt re-emissions bypass the ledger entirely (handled in
+	// EmitChecked, the only durable admission path).
 	ledger := s.c.turnEventLedger()
 	if ledger == nil {
 		s.publishInner(e)
@@ -231,6 +233,13 @@ func (s *turnEventDurableSink) Emit(e event.Event) {
 
 func (s *turnEventDurableSink) EmitChecked(e event.Event) error {
 	if s == nil || s.owner == nil {
+		return nil
+	}
+	if e.ReplayOnly {
+		// Prompt replay re-emission: each duplicate used to land as a fresh
+		// ledger row (observed 5× for one pending ask); the gate is rebuilt
+		// from the ReplayPendingPrompts RPC, so publish without appending.
+		s.owner.publishInner(e)
 		return nil
 	}
 	err := s.owner.persistAndPublish(e)

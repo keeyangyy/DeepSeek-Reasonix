@@ -166,6 +166,9 @@ func (c *Catalog) indexSessionPath(ctx context.Context, target DirectoryTarget, 
 		}
 		return err
 	}
+	if agent.IsForeignSession(path) {
+		return nil
+	}
 	meta, ok, err := agent.LoadBranchMeta(path)
 	if err != nil {
 		return err
