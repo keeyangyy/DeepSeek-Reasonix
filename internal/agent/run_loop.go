@@ -196,19 +196,13 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 		if !a.sess.haveLastPrefixShape {
 			prevPrefixShape = prefixShape
 		}
-		// Drain reasons queued since the previous capture (compaction,
-		// snip/prune, rewind, guardian merge) so CompareShape can attribute
-		// any prefix change to the operation that actually caused it, instead
-		// of a generic rewrite signal that also fires on local-only metadata
-		// edits.
+		// Drain reasons queued since the previous capture so CompareShape can
+		// attribute a prefix change to the operation that actually caused it.
 		contentReasons := a.sess.conversation.DrainContentRewriteReasons()
 
 		// Prefix shape is captured once before sampling and frozen for the
 		// whole attempt lifecycle — stream retries must not rewrite session
 		// history mid-round, so the shape stays stable across body replays.
-		// The assistant id is minted before sampling so the live stream can
-		// carry it: the frontend then has this message's identity from the
-		// first delta onwards, and Session.Add keeps the same id.
 		msgID := NewMessageID()
 		streamed := a.streamWithSamplingRecovery(ctx, step+1, msgID)
 		text, reasoning, signature, calls, responsesItems, serverSearch, usage := streamed.text, streamed.reasoning, streamed.signature, streamed.calls, streamed.responsesItems, streamed.serverSearch, streamed.usage

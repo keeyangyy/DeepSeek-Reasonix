@@ -180,13 +180,11 @@ const (
 // StreamAttemptInfo carries host-local bookkeeping for one sampling attempt.
 // Reason is a fixed enum (connection_reset | premature_eof | idle_timeout).
 type StreamAttemptInfo struct {
-	ID      string
-	Action  StreamAttemptAction
-	Attempt int // 1-based attempt number
-	Max     int // total attempts including the first (typically 6)
-	Reason  string
-	// MessageID is the id of the assistant message this attempt is producing,
-	// minted before sampling so live rows and persisted rows share one identity.
+	ID        string
+	Action    StreamAttemptAction
+	Attempt   int // 1-based attempt number
+	Max       int // total attempts including the first (typically 6)
+	Reason    string
 	MessageID string
 }
 
@@ -208,8 +206,7 @@ const (
 // NoticeAudience separates a notice's recipient from its severity. The empty
 // default preserves the existing contract: ordinary notices are eligible for
 // every frontend. Operator notices describe local runtime maintenance and must
-// not be forwarded as end-user chat messages. Local frontends and diagnostics
-// remain free to surface or quietly record them under their own policy.
+// not be forwarded as end-user chat messages.
 type NoticeAudience string
 
 const (

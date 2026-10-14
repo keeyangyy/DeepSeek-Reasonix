@@ -76,7 +76,6 @@ export interface WireStreamAttempt {
   max?: number;
   /** Fixed enum only: connection_reset | premature_eof | idle_timeout */
   reason?: string;
-  /** Id of the assistant message this attempt produces; absent on legacy events. */
   messageID?: string;
 }
 export interface WireCompaction {
@@ -299,8 +298,6 @@ export interface WireMCPInteraction {
 }
 
 // Extension UI surfaces (stage 8a) — structured-only documents published by
-// extension sidecars through the host UI hub. Exactly one sub-struct is set,
-// selected by `kind`.
 export interface WireExtensionStatus {
   label: string;
   detail?: string;
