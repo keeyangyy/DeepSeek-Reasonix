@@ -95,6 +95,7 @@ try {
     return {
       labelRight: label?.getBoundingClientRect().right ?? 0,
       actionsLeft: actions?.getBoundingClientRect().left ?? 0,
+      sideWidth: row.querySelector(".project-tree__topic-side")?.getBoundingClientRect().width ?? 0,
       actionGap: actions ? getComputedStyle(actions).gap : "",
       buttonWidths: buttons.map((button) => button.getBoundingClientRect().width),
       reservedSpace: row.querySelector(".project-tree__topic-main") ? getComputedStyle(row.querySelector(".project-tree__topic-main")).paddingRight : "",
@@ -103,7 +104,8 @@ try {
   assert.ok(tree.labelRight <= tree.actionsLeft, "topic text is clipped before the action buttons begin");
   assert.deepEqual(tree.buttonWidths, [22, 22, 22]);
   assert.equal(tree.actionGap, "2px");
-  assert.equal(tree.reservedSpace, "82px");
+  assert.equal(tree.sideWidth, 70, "the timestamp side owns the same width as the three action buttons");
+  assert.equal(tree.reservedSpace, "12px");
   pass("project topic labels stop before the compact three-button action group");
 
   const classicTree = await page.evaluate(() => {
@@ -116,13 +118,15 @@ try {
     const label = row.querySelector(".project-tree__topic-label");
     const actions = row.querySelector(".project-tree__topic-actions");
     const main = row.querySelector(".project-tree__topic-main");
-    const result = { labelRight: label.getBoundingClientRect().right, actionsLeft: actions.getBoundingClientRect().left, reservedSpace: getComputedStyle(main).paddingRight };
+    const side = row.querySelector(".project-tree__topic-side");
+    const result = { labelRight: label.getBoundingClientRect().right, actionsLeft: actions.getBoundingClientRect().left, sideWidth: side.getBoundingClientRect().width, reservedSpace: getComputedStyle(main).paddingRight };
     classic.remove();
     return result;
   });
   assert.ok(classicTree.labelRight <= classicTree.actionsLeft, "classic topic text is clipped before the action buttons begin");
-  assert.equal(classicTree.reservedSpace, "82px");
-  pass("classic project topic rows reserve the same action width");
+  assert.equal(classicTree.sideWidth, 70, "classic timestamp side shares the action width");
+  assert.equal(classicTree.reservedSpace, "9px");
+  pass("classic project topic rows share the timestamp and action slot");
 } finally {
   await browser?.close();
   await server.close();

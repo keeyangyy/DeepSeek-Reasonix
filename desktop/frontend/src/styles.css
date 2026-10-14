@@ -24896,14 +24896,6 @@ body > .mermaid-diagram--fullscreen {
   text-align: left;
 }
 
-.sidebar--workbench .project-tree__topic--has-actions .project-tree__topic-main {
-  padding-right: 82px !important;
-}
-
-.app--classic .project-tree__topic--has-actions .project-tree__topic-main {
-  padding-right: 82px !important;
-}
-
 .project-tree__topic--has-meta .project-tree__topic-main {
   min-height: 48px;
   padding-top: 7px;
