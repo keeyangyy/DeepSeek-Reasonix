@@ -112,6 +112,7 @@ window.runtime = {
 window.go = {
   main: {
     App: {
+      LatestCompactionForTab: async () => null,
       ListTabs: async () => [tab],
       MetaForTab: async () => meta,
       ContextUsageForTab: async () => ({ used: 0, window: 100, sessionTokens: 0 }),
