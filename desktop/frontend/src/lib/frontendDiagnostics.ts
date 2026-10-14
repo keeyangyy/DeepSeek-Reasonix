@@ -207,7 +207,7 @@ const NUMBER_FIELDS = [
   "width", "height", "x", "y", "deltaX", "deltaY", "targetTop", "listHeight", "durationMs", "scrollTop", "scrollHeight",
   "clientHeight", "bottomDistance", "mountedRows", "totalRows", "firstVisibleIndex", "firstVisibleTop",
   "rowIndex", "estimatedSize", "previousSize", "measuredSize", "sizeDelta", "relativeError", "disclosureCount", "contentRevision", "tabCount", "patchCount", "button", "modifiers", "intent",
-  "sequence", "generation", "surfaceGeneration", "ownershipEpoch", "geometryRevision", "transactionId", "footerHeight", "viewport", "mounted", "total", "reverseDisplacement", "extentDelta", "stableFrames", "direction",
+  "sequence", "generation", "surfaceGeneration", "ownershipEpoch", "geometryRevision", "transactionId", "footerHeight", "viewport", "mounted", "total", "reverseDisplacement", "extentDelta", "stableFrames", "direction", "afterSeq",
   "workspaceSessions", "visibleSessions", "hiddenSessions", "hiddenByFilter", "hiddenByCollapsed", "hiddenByTruncation", "runtimeSessions", "runtimeOnlySessions", "recoveryOnlySessions", "recoveryCopySessions", "recoveryCopies", "runningSessions", "unreadSessions", "pinnedSessions", "activeSessions", "activeVisibleSessions", "folderCount", "expandedFolders", "showAllFolders", "catalogRevision", "catalogIndexed", "catalogTotal", "repairPending", "treeRevision", "organizationRevision", "unloadedSessions", "deltaWorkspaceSessions", "deltaVisibleSessions", "deltaHiddenSessions", "deltaRecoveryCopies", "deltaRuntimeOnlySessions",
 ] as const;
 const BOOLEAN_FIELDS = [
@@ -216,7 +216,7 @@ const BOOLEAN_FIELDS = [
 ] as const;
 const STRING_FIELDS = [
   "source", "eventSource", "action", "target", "targetRole", "targetTag", "keyClass", "pointerType", "inputType", "visibility", "phase",
-  "reason", "rejectedReason", "result", "status", "mode", "previousMode", "owner", "writeKind", "rowKind", "layoutVersion", "layoutVariant", "estimateSource", "foldState", "state", "errorName", "errorCode",
+  "reason", "rejectedReason", "result", "status", "mode", "previousMode", "owner", "writeKind", "rowKind", "layoutVersion", "layoutVariant", "estimateSource", "foldState", "state", "errorName", "errorCode", "error",
   "directoryState", "changeReason", "outcome", "trigger", "scope", "variant", "timeFilter",
 ] as const;
 const GEOMETRY_SOURCES = new Set([
