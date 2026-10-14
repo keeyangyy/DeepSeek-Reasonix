@@ -1,9 +1,40 @@
 import type { WireEvent } from "./types";
 import type { LiveStream } from "./useController";
 
+// A delta's tab identity at enqueue time. A same-tab reset / newSession /
+// switch re-binds the tab to another session, and a frame callback that flushes
+// afterwards would otherwise splice the previous session's text/reasoning into
+// the new transcript (the "older content after newer content" report).
 export interface StreamDeltaEntry {
   tabId: string;
   e: WireEvent;
+  sessionGeneration?: number;
+  runtimeEpoch?: string;
+}
+
+export interface StreamDeltaTabIdentity {
+  sessionGeneration?: number;
+  runtimeEpoch?: string;
+}
+
+// filterStaleStreamDeltas drops entries whose tab no longer carries the identity
+// they were enqueued against. Entries without a recorded identity keep their
+// existing behaviour, and an unresolvable tab is left untouched so a tab that
+// has not registered yet cannot lose its live stream.
+export function filterStaleStreamDeltas(
+  batch: StreamDeltaEntry[],
+  resolve: (tabId: string) => StreamDeltaTabIdentity | undefined,
+): StreamDeltaEntry[] {
+  if (!batch.some((entry) => entry.sessionGeneration !== undefined || entry.runtimeEpoch !== undefined)) return batch;
+  return batch.filter((entry) => {
+    const current = resolve(entry.tabId);
+    if (!current) return true;
+    if (entry.sessionGeneration !== undefined && current.sessionGeneration !== undefined &&
+      current.sessionGeneration !== entry.sessionGeneration) return false;
+    if (entry.runtimeEpoch !== undefined && current.runtimeEpoch !== undefined &&
+      current.runtimeEpoch !== entry.runtimeEpoch) return false;
+    return true;
+  });
 }
 
 // StreamSegment is one run of consecutive same-kind deltas within a frame.

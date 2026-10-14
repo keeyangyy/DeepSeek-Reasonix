@@ -8,6 +8,7 @@
 
 import {
   buildTranscriptRows,
+  buildTranscriptRowBlocks,
   buildTurnModels,
   defaultFoldOpen,
   estimateTranscriptRowSize,
@@ -16,6 +17,9 @@ import {
   historyEntryIdForItemId,
   historyEntryIdForRow,
   reconcileFoldEntries,
+  exceedsTranscriptRenderVolumeBudget,
+  transcriptRenderVolume,
+  NO_LIVE,
   EMPTY_FOLDS,
   type FoldMap,
   type TranscriptRow,
@@ -46,6 +50,57 @@ function eq<T>(actual: T, expected: T, label: string) {
 }
 
 console.log("\ntranscript virtual row model");
+
+{
+  const manyAnswers: Item[] = [];
+  for (let turn = 0; turn < 12; turn += 1) {
+    manyAnswers.push({ kind: "user", id: `volume-u-${turn}`, text: "question" });
+    for (let answer = 0; answer < 29; answer += 1) {
+      manyAnswers.push({ kind: "assistant", id: `volume-a-${turn}-${answer}`, text: "answer", reasoning: "", streaming: false });
+    }
+  }
+  const models = buildTurnModels(manyAnswers);
+  const volume = transcriptRenderVolume(models);
+  eq(models.length, 12, "the render-volume count uses turn models as block owners");
+  eq(volume.assistantMarkdownItems, 348, "the 12-block mixed-session scale counts non-empty outside Markdown");
+  eq(volume.maxAssistantMarkdownItemsPerBlock, 29, "the per-block budget catches dense single turns");
+  ok(exceedsTranscriptRenderVolumeBudget(volume), "the measured 350-answer scale exceeds the auto-window budget");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 12, maxAssistantMarkdownItemsPerBlock: 49, processDisplayItems: 4 }),
+    "a dense single block crosses the per-block budget without a large total");
+  ok(!exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 64, maxAssistantMarkdownItemsPerBlock: 48, processDisplayItems: 384 }),
+    "the exact budget boundary stays in full mode");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 65, maxAssistantMarkdownItemsPerBlock: 48, processDisplayItems: 384 }),
+    "the first answer above the total budget triggers windowing");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 64, maxAssistantMarkdownItemsPerBlock: 49, processDisplayItems: 384 }),
+    "the first dense block above its budget triggers windowing");
+  ok(exceedsTranscriptRenderVolumeBudget({ assistantMarkdownItems: 64, maxAssistantMarkdownItemsPerBlock: 48, processDisplayItems: 385 }),
+    "process display items provide a separate conservative budget dimension");
+  const foldable = buildTurnModels([
+    { kind: "user", id: "volume-fold-u", text: "question" },
+    { kind: "assistant", id: "volume-fold-a", text: "answer", reasoning: "thought", streaming: false },
+    { kind: "tool", id: "volume-fold-t", name: "bash", args: "{}", status: "done", readOnly: false },
+  ]);
+  const foldKey = foldable[0]?.segments[0]?.key ?? "";
+  const beforeFold = transcriptRenderVolume(foldable);
+  buildTranscriptRows(foldable, { folds: foldMapWithToggle(EMPTY_FOLDS, foldKey, false), foldPreference: "expanded", hasOlderHistory: false, creationMode: false, turnForUser: () => 1 });
+  buildTranscriptRows(foldable, { folds: foldMapWithToggle(EMPTY_FOLDS, foldKey, true), foldPreference: "expanded", hasOlderHistory: false, creationMode: false, turnForUser: () => 1 });
+  eq(transcriptRenderVolume(foldable).assistantMarkdownItems, beforeFold.assistantMarkdownItems,
+    "opening and closing reasoning folds cannot change the source render-volume count");
+  eq(transcriptRenderVolume(foldable).processDisplayItems, beforeFold.processDisplayItems,
+    "fold layout cannot hide the conservative process-item volume");
+
+  const pendingLiveItems: Item[] = [
+    { kind: "user", id: "volume-live-u", text: "question" },
+    ...Array.from({ length: 64 }, (_, index) => ({ kind: "assistant" as const, id: `volume-live-a-${index}`, text: "answer", reasoning: "", streaming: false })),
+    { kind: "assistant", id: "volume-live-tail", text: "", reasoning: "", streaming: true },
+  ];
+  const noAnswerModels = buildTurnModels(pendingLiveItems, NO_LIVE);
+  const liveAnswer = { id: "volume-live-tail", hasAnswerText: true, hasReasoning: false, reasoningComplete: false };
+  const liveAnswerModels = buildTurnModels(pendingLiveItems, liveAnswer);
+  eq(transcriptRenderVolume(noAnswerModels).assistantMarkdownItems, 64, "empty live placeholder is not counted before its first text token");
+  eq(transcriptRenderVolume(liveAnswerModels, liveAnswer).assistantMarkdownItems, 65, "non-empty live text counts before the item snapshot is patched");
+  ok(exceedsTranscriptRenderVolumeBudget(transcriptRenderVolume(liveAnswerModels, liveAnswer)), "live-only text can cross the volume budget on its first visible frame");
+}
 
 const fixture: Item[] = [
   { kind: "user", id: "u1", text: "first" },
@@ -98,12 +153,14 @@ const fixture: Item[] = [
     turnForUser: () => undefined,
   };
   const before = buildTranscriptRows(buildTurnModels([currentUser, currentAnswer]), options);
-  const after = buildTranscriptRows(buildTurnModels([
+  const originalBlocks = buildTranscriptRowBlocks(buildTurnModels([currentUser, currentAnswer]), options);
+  const firstPageItems: Item[] = [
     { kind: "user", id: "duplicate-user", text: "older", createdAt: 100, historyTurn: 1 },
     { kind: "assistant", id: "duplicate-answer", text: "older answer", reasoning: "", streaming: false },
     currentUser,
     currentAnswer,
-  ]), options);
+  ];
+  const after = buildTranscriptRows(buildTurnModels(firstPageItems), options);
   const beforeCurrent = before.filter((row) => row.kind === "user" || row.kind === "answer").map((row) => row.key).join(",");
   const afterCurrent = after.filter((row) =>
     (row.kind === "user" && row.item.text === "current")
@@ -115,6 +172,18 @@ const fixture: Item[] = [
     || (row.kind === "answer" && row.item.text === "older answer")
   ).map((row) => row.key);
   ok(olderKeys.every((key) => key.includes("@") && !key.includes("#")), "duplicate history rows use immutable identity hashes instead of occurrence suffixes");
+  const firstPageBlocks = buildTranscriptRowBlocks(buildTurnModels(firstPageItems), options);
+  const currentBlockKey = originalBlocks[0]?.key;
+  const olderBlockKey = firstPageBlocks.find((block) => block.rows.some((row) => row.kind === "user" && row.item.text === "older"))?.key;
+  const secondPageBlocks = buildTranscriptRowBlocks(buildTurnModels([
+    { kind: "user", id: "duplicate-user", text: "earlier", createdAt: 50, historyTurn: 0 },
+    { kind: "assistant", id: "duplicate-answer", text: "earlier answer", reasoning: "", streaming: false },
+    ...firstPageItems,
+  ]), options);
+  ok(new Set(secondPageBlocks.map((block) => block.key)).size === secondPageBlocks.length, "duplicate user ids still produce unique virtual block keys");
+  ok(new Set(secondPageBlocks.flatMap((block) => block.rows.map((row) => row.key))).size === secondPageBlocks.flatMap((block) => block.rows).length, "duplicate user ids still produce unique row keys");
+  eq(secondPageBlocks.find((block) => block.rows.some((row) => row.kind === "user" && row.item.text === "current"))?.key, currentBlockKey, "prepending another duplicate id preserves the mounted current block key");
+  eq(secondPageBlocks.find((block) => block.rows.some((row) => row.kind === "user" && row.item.text === "older"))?.key, olderBlockKey, "prepending older duplicate ids preserves prior block keys");
 }
 
 const turnOf = new Map([
@@ -211,6 +280,45 @@ const keys = (rows: TranscriptRow[]) => rows.map((row) => row.key).join(",");
   for (const id of ["shell-error", "shell-diff", "shell-running", "shell-stopped"]) {
     ok(rows.some((row) => row.kind === "tool" && row.item.id === id), `${id} remains a standalone visible card`);
   }
+}
+
+{
+  const models = buildTurnModels([
+    { kind: "user", id: "u-interleaved", text: "run the checks" },
+    { kind: "tool", id: "read-before-warning", name: "read_file", args: "{}", readOnly: true, status: "done" },
+    { kind: "notice", id: "mid-turn-warning", level: "warn", text: "permission needs attention" },
+    { kind: "tool", id: "read-after-warning", name: "read_file", args: "{}", readOnly: true, status: "done" },
+    { kind: "compaction", id: "mid-turn-compaction", pending: false, trigger: "manual", messages: 10, summary: "summary", archive: "" },
+    { kind: "phase", id: "phase-after-compaction", text: "resume checks" },
+    { kind: "assistant", id: "a-interleaved", text: "Done", reasoning: "", streaming: false },
+  ]);
+  const expanded = buildTranscriptRows(models, rowOptions(EMPTY_FOLDS, "expanded"));
+  const visibleOrder = expanded.flatMap((row) => {
+    if (row.kind === "tool" || row.kind === "tool-batch" || row.kind === "tool-group") {
+      return row.kind === "tool" ? [`tool:${row.item.id}`] : row.items.map((item) => `tool:${item.id}`);
+    }
+    if (row.kind === "notice") return [`notice:${row.item.id}`];
+    if (row.kind === "compaction") return [`compaction:${row.item.id}`];
+    if (row.kind === "phase") return [`phase:${row.item.id}`];
+    if (row.kind === "answer") return [`answer:${row.item.id}`];
+    return [];
+  });
+
+  eq(
+    visibleOrder.join(","),
+    "tool:read-before-warning,notice:mid-turn-warning,tool:read-after-warning,compaction:mid-turn-compaction,phase:phase-after-compaction,answer:a-interleaved",
+    "outside notices and lifecycle rows stay at their original positions between process runs",
+  );
+  eq(expanded.filter((row) => row.kind === "process-header").length, 1, "interleaved outside rows keep one process fold header");
+
+  const collapsed = buildTranscriptRows(models, rowOptions(EMPTY_FOLDS));
+  const visibleOutside = collapsed.flatMap((row) => {
+    if (row.kind === "notice") return [`notice:${row.item.id}`];
+    if (row.kind === "compaction") return [`compaction:${row.item.id}`];
+    if (row.kind === "answer") return [`answer:${row.item.id}`];
+    return [];
+  });
+  eq(visibleOutside.join(","), "notice:mid-turn-warning,compaction:mid-turn-compaction,answer:a-interleaved", "outside rows stay visible in source order while the process fold is collapsed");
 }
 
 {

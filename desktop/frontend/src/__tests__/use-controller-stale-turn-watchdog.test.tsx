@@ -130,6 +130,7 @@ window.runtime = {
 window.go = {
   main: {
     App: {
+      LatestCompactionForTab: async () => null,
       ListTabs: async () => {
         listTabsCalls += 1;
         return [tabMeta()];

@@ -213,6 +213,7 @@ window.go = {
   main: {
     App: {
       RegisterNavigationIntent: async () => {},
+      LatestCompactionForTab: async () => null,
       ListTabs: async () => currentTabs(),
       MetaForTab: async (tabID: string) => {
         if (tabID === "tab-h" && holdNextMetaForH) {

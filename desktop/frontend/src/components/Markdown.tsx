@@ -229,7 +229,7 @@ export function splitStreamingTailFence(text: string): StreamingTailFence | null
 }
 
 export function useRenderedMarkdownText(text: string, streaming: boolean, holdIdleFinalization = false): string {
-  const [renderedText, setRenderedText] = useState(text);
+  const [renderedText, setRenderedText] = useState(() => streaming ? streamingCommitTarget(text) : text);
   const latestTextRef = useRef(text);
   const frameRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
@@ -244,16 +244,21 @@ export function useRenderedMarkdownText(text: string, streaming: boolean, holdId
 
   useLayoutEffect(() => {
     const endedStreaming = wasStreamingRef.current && !streaming;
+    const startedStreaming = !wasStreamingRef.current && streaming;
     wasStreamingRef.current = streaming;
     if (streaming) {
       cancelFinalizationRef.current?.();
       cancelFinalizationRef.current = null;
       finalizingTextRef.current = null;
+      if (startedStreaming) {
+        const stablePrefix = streamingCommitTarget(text);
+        if (renderedText !== stablePrefix) setRenderedText(stablePrefix);
+      }
       // A bounded live preview occasionally advances its window and drops an
       // old prefix. Discard the stale parsed tree before paint; the complete
       // replacement stays visible through StreamingMarkdownTail and is parsed
       // later under the normal adaptive budget.
-      if (renderedText !== "" && !text.startsWith(renderedText)) {
+      if (!startedStreaming && renderedText !== "" && !text.startsWith(renderedText)) {
         setRenderedText("");
       }
       return;
@@ -444,17 +449,20 @@ export const Markdown = memo(function Markdown({
 
   const committedView = (
     <>
-      <Suspense fallback={<div className="md" data-transcript-geometry-pending data-transcript-selection-source-fallback>{renderedText}</div>}>
-        {sections.length === 1 ? (
-          <MarkdownRenderer text={renderedText} plainStatusBlocks={plainStatusBlocks} />
-        ) : (
-          <div className="md" data-markdown-sections={sections.length}>
-            {sections.map((section, index) => (
-              <MarkdownRenderer key={index} text={section} plainStatusBlocks={plainStatusBlocks} bare />
-            ))}
-          </div>
-        )}
-      </Suspense>
+      {/* An empty stable prefix has nothing to parse; its geometry fallback pushes the live tail down one row. */}
+      {renderedText.length > 0 && (
+        <Suspense fallback={<div className="md" data-transcript-geometry-pending data-transcript-selection-source-fallback>{renderedText}</div>}>
+          {sections.length === 1 ? (
+            <MarkdownRenderer text={renderedText} plainStatusBlocks={plainStatusBlocks} />
+          ) : (
+            <div className="md" data-markdown-sections={sections.length}>
+              {sections.map((section, index) => (
+                <MarkdownRenderer key={index} text={section} plainStatusBlocks={plainStatusBlocks} bare />
+              ))}
+            </div>
+          )}
+        </Suspense>
+      )}
       {pendingText && <StreamingMarkdownTail text={pendingText} />}
     </>
   );

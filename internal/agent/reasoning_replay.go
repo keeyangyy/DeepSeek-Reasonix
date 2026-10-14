@@ -47,10 +47,10 @@ func resolveReasoningReplayPrefix(msgs []provider.Message, hint int, anchor stri
 
 func (a *Agent) emitReasoningReplayAttemptOutcome(id string, attempt int, err error) {
 	if err != nil {
-		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "reasoning_replay", err)
+		a.emitStreamAttempt(id, event.StreamAttemptDiscard, attempt, "reasoning_replay", err, "")
 		return
 	}
-	a.emitStreamAttempt(id, event.StreamAttemptCommit, attempt, "", nil)
+	a.emitStreamAttempt(id, event.StreamAttemptCommit, attempt, "", nil, "")
 }
 
 func (a *Agent) reasoningReplayIssue(result streamedTurn) ReasoningReplayFailure {

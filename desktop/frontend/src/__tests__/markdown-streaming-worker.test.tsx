@@ -96,6 +96,43 @@ const WORKER_RESULT: MarkdownParseResult = {
 console.log("\nmarkdown streaming → worker final parse");
 
 {
+  const root = createRoot(rootEl);
+  const firstChunk = "这一句话的前半";
+  const nextChunk = `${firstChunk}后半仍在同一段落`;
+  await act(async () => {
+    root.render(<Markdown text={firstChunk} streaming />);
+    await flush();
+  });
+  eq(rootEl.querySelector(".md--stream-tail")?.textContent, firstChunk, "a mounted partial sentence stays entirely in the streaming tail");
+  ok(!rootEl.querySelector(".md:not(.md--stream-tail) p"), "a partial sentence is not frozen as a separate parsed paragraph");
+
+  await act(async () => {
+    root.render(<Markdown text={nextChunk} streaming />);
+    await flush();
+  });
+  eq(rootEl.querySelector(".md--stream-tail")?.textContent, nextChunk, "new chunks extend the same tail paragraph without a block split");
+  ok(!rootEl.querySelector(".md:not(.md--stream-tail) p"), "the growing paragraph remains one live text block until a Markdown boundary");
+  await act(async () => root.unmount());
+}
+
+{
+  const root = createRoot(rootEl);
+  const initialText = "从已载入的半句开始";
+  const resumedText = `${initialText}继续生成同一段落`;
+  await act(async () => {
+    root.render(<Markdown text={initialText} streaming={false} />);
+    await flush();
+  });
+  await act(async () => {
+    root.render(<Markdown text={resumedText} streaming />);
+    await flush();
+  });
+  eq(rootEl.querySelector(".md--stream-tail")?.textContent, resumedText, "a stream that resumes from an existing row moves the whole open paragraph into its tail");
+  ok(!rootEl.querySelector(".md:not(.md--stream-tail) p"), "a prior parsed half-sentence does not stay separated from resumed live text");
+  await act(async () => root.unmount());
+}
+
+{
   const parseCalls: string[] = [];
   let respond: (() => void) | null = null;
   const fakeWorker = {
@@ -131,7 +168,7 @@ console.log("\nmarkdown streaming → worker final parse");
   eq(parseCalls.length, 1, "stream completion requests exactly one final parse");
   eq(parseCalls[0], finalText, "the final parse receives the complete text");
   const tail = rootEl.querySelector(".md--stream-tail");
-  eq(tail?.textContent, " final", "the committed view + tail stay on screen until blocks arrive");
+  eq(tail?.textContent, finalText, "the unfinished paragraph stays together in the tail until worker blocks arrive");
 
   await act(async () => {
     respond?.();

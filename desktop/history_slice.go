@@ -116,6 +116,11 @@ type HistoryContentRef struct {
 // HistoryEntry is one display row in a history page.
 type HistoryEntry struct {
 	EntryID string `json:"entryId"`
+	// MessageID is the stable per-message id (ULID) the row was converted
+	// from; empty for legacy event-format sessions. Unlike EntryID (position +
+	// revision derived) it survives rewinds, so the frontend can dedupe rows
+	// that re-keyed across a rewrite.
+	MessageID string `json:"messageId,omitempty"`
 	// Turn is the absolute visible turn the row belongs to (1-based; 0 =
 	// before the first visible turn).
 	Turn int `json:"turn"`
@@ -144,6 +149,9 @@ type HistorySlice struct {
 	// invalidated after another process advances or rewrites the session.
 	RevisionKnown bool   `json:"revisionKnown,omitempty"`
 	Digest        string `json:"digest,omitempty"`
+	// OpenTurnID is the in-flight turn's id (empty when none). The frontend
+	// drops that turn's live rows (a:<turnId>:…) in favour of this page.
+	OpenTurnID string `json:"openTurnId,omitempty"`
 	// Source: index|scan|live-index|live-fallback. Error marks a failed read
 	// (empty Entries alone means a genuinely empty session).
 	Source string `json:"source,omitempty"`
@@ -257,10 +265,13 @@ func decodeHistorySliceCursor(s string) (historySliceCursor, error) {
 // historySliceSource is the windowed read view over one session used to cut a
 // page: per-message visible turns and roles plus bounded message fetches.
 type historySliceSource struct {
-	sessionID  string // transcript basename minus .jsonl
-	total      int    // total provider messages
-	turns      []int  // turns[i] = visible turn of message i (1-based; 0 = before first turn)
-	roles      []provider.Role
+	sessionID string // transcript basename minus .jsonl
+	total     int    // total provider messages
+	turns     []int  // turns[i] = visible turn of message i (1-based; 0 = before first turn)
+	roles     []provider.Role
+	// openTurnID is the in-flight turn's id (empty when none); the page stamps
+	// it so the frontend can align that turn's live rows exactly.
+	openTurnID string
 	totalTurns int
 	revision   int64
 	revKnown   bool
@@ -390,6 +401,8 @@ type historyWindowController interface {
 	HistoryLen() int
 	HistoryWindow(start, end int) []provider.Message
 	SessionPersistedState() (agent.PersistedState, bool)
+	// OpenTurnID is the in-flight turn's id (empty when none).
+	OpenTurnID() string
 }
 
 // HistorySliceForTab returns one page of the tab's history toward older
@@ -490,6 +503,7 @@ func (a *App) liveHistorySliceSource(ctrl control.SessionAPI, sessionPath string
 				total:      n,
 				turns:      turns,
 				roles:      roles,
+				openTurnID: wc.OpenTurnID(),
 				totalTurns: turn,
 				revision:   ps.Revision,
 				revKnown:   ps.RevisionKnown,
@@ -514,6 +528,7 @@ func (a *App) liveHistorySliceSource(ctrl control.SessionAPI, sessionPath string
 		state = ps
 	}
 	src := newInMemoryHistorySliceSource(sessionID, msgs, resolver, state, psOK)
+	src.openTurnID = wc.OpenTurnID()
 	if psOK && ps.UnchangedSincePersisted {
 		src.cacheKey = historyDerivedSourceKey(sessionPath, src)
 	}
@@ -880,6 +895,7 @@ func (a *App) pageHistorySliceSource(src *historySliceSource, req HistorySliceRe
 		Revision:      src.revision,
 		RevisionKnown: src.revKnown,
 		Digest:        src.digest,
+		OpenTurnID:    src.openTurnID,
 	}
 	if hi <= 0 || src.total == 0 {
 		return page, nil
@@ -1135,11 +1151,12 @@ func primeHistoryPlannerState(src *historySliceSource, state *historyMessageConv
 // preview + ref. entryID is the fully-built entry ID (message- or row-form).
 func newHistoryEntry(src *historySliceSource, entryID string, msgIndex, sub int, row HistoryMessage) HistoryEntry {
 	entry := HistoryEntry{
-		EntryID: entryID,
-		Turn:    src.turns[msgIndex],
-		Order:   msgIndex,
-		Message: row,
-		Refs:    []HistoryContentRef{},
+		EntryID:   entryID,
+		MessageID: row.ID,
+		Turn:      src.turns[msgIndex],
+		Order:     msgIndex,
+		Message:   row,
+		Refs:      []HistoryContentRef{},
 	}
 	addRef := func(field, toolCallID string, size, chunks int) {
 		entry.Refs = append(entry.Refs, HistoryContentRef{
@@ -1567,7 +1584,7 @@ func pageHistoryEventRows(src *historySliceSource, rows []HistoryMessage, req Hi
 	src.turns = turns
 	src.totalTurns = turn
 	src.total = len(rows)
-	page := HistorySlice{Entries: []HistoryEntry{}, TotalTurns: turn, Digest: src.digest}
+	page := HistorySlice{Entries: []HistoryEntry{}, TotalTurns: turn, Digest: src.digest, OpenTurnID: src.openTurnID}
 	if hi <= 0 {
 		return page
 	}

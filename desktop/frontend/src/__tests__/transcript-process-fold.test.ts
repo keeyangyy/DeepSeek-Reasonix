@@ -119,6 +119,16 @@ const warningTurn: Item[] = [
       ok(countsLabel.includes("2 tools") && countsLabel.includes("3 thoughts"), "fold label surfaces tool and thought counts");
     }
 
+    await render(harness, [
+      { kind: "user", id: "u-ask-count", text: "ask" },
+      { kind: "tool", id: "ask-count-1", name: "ask", args: "{}", readOnly: false, status: "done" },
+      { kind: "assistant", id: "a-ask-count", text: "answered", reasoning: "considered the choice", streaming: false },
+    ]);
+    {
+      const askLabel = container.querySelector(".turn-collapse__label")?.textContent ?? "";
+      ok(askLabel.includes("1 tools") && askLabel.includes("1 thoughts") && askLabel.includes("1 Ask"), "fold label makes the hidden Ask invocation count visible");
+    }
+
     // A turn whose fold is the only content (e.g. cancelled before any answer)
     // must not collapse into a bare label — nothing would remain visible.
     await render(harness, [

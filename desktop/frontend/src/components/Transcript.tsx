@@ -27,11 +27,13 @@ import {
   foldSegmentStates,
   NO_LIVE,
   reconcileFoldEntries,
+  exceedsTranscriptRenderVolumeBudget,
+  transcriptRenderVolume,
   type FoldMap,
   type ToolItem,
   type TranscriptLiveFlags,
 } from "../lib/transcriptRows";
-import { projectTranscriptTimeline, transcriptRenderMode } from "../lib/transcriptTimeline";
+import { projectTranscriptTimeline, resolveTranscriptRenderMode, shouldAutoWindowTranscript, transcriptRenderModeOverride } from "../lib/transcriptTimeline";
 import {
   readTranscriptFoldOverrides,
   replaceTranscriptFoldOverrides,
@@ -98,6 +100,7 @@ export type TranscriptProps = {
   creationMode?: boolean;
   actionHoverMenus?: boolean;
   rewindSignal?: number;
+  onRewindConsumed?: () => void;
   revealSignal?: number;
   hydrating?: boolean;
   hasOlderHistory?: boolean;
@@ -121,7 +124,7 @@ export function Transcript(props: TranscriptProps) {
     onEditPrompt, onRewind, checkpoints = EMPTY_CHECKPOINTS, actionPending = false,
     rewindDisabled = false, running = false, questionNavigator = true,
     welcomeVariant = "default", creationMode = false, actionHoverMenus = false,
-    rewindSignal = 0, revealSignal = 0, hydrating = false, hasOlderHistory = false,
+    rewindSignal = 0, onRewindConsumed, revealSignal = 0, hydrating = false, hasOlderHistory = false,
     historyStartTurn = 0, historyTotalTurns = 0, loadingOlderHistory = false,
     olderHistoryError, onLoadOlderHistory, turnStartAt, contentRevision = 0,
     invocationMetadata = EMPTY_INVOCATION_METADATA, historyMutation,
@@ -145,6 +148,7 @@ export function Transcript(props: TranscriptProps) {
     reasoningComplete: live.reasoningComplete,
   } : NO_LIVE, [live?.id, live?.reasoning, live?.reasoningComplete, live?.text]);
   const turnModels = useMemo(() => buildTurnModels(items, liveFlags, running, false), [items, liveFlags, running]);
+  const renderVolume = useMemo(() => transcriptRenderVolume(turnModels, liveFlags), [liveFlags, turnModels]);
   // Capture stable commands, never the per-render hook result: a memoized
   // callback holding that result can chain older render/selection contexts.
   const { kernel: transcriptKernel, setScroller: setKernelScroller, snapshot,
@@ -207,7 +211,19 @@ export function Transcript(props: TranscriptProps) {
     subcallsByParent,
   }), [checkpointsByTurn, creationMode, experience, foldPolicy, folds, subcallsByParent, turnForUser, turnModels]);
   const projection = useMemo(() => projectTranscriptTimeline(blocks, hasOlderHistory), [blocks, hasOlderHistory]);
-  const renderMode = transcriptRenderMode(projection.completedBlocks.length, safeMode);
+  const [autoWindowedSurface, setAutoWindowedSurface] = useState<{ key: string; enabled: boolean }>(() => ({ key: surfaceKey, enabled: false }));
+  const autoWindowed = autoWindowedSurface.key === surfaceKey && autoWindowedSurface.enabled;
+  const renderModeOverride = transcriptRenderModeOverride();
+  const defaultRenderMode = resolveTranscriptRenderMode(projection.completedBlocks.length, safeMode, renderModeOverride);
+  const renderMode = resolveTranscriptRenderMode(projection.completedBlocks.length, safeMode, renderModeOverride, autoWindowed);
+  const autoVolumeExceeded = shouldAutoWindowTranscript(safeMode, renderModeOverride,
+    defaultRenderMode === "full" && exceedsTranscriptRenderVolumeBudget(renderVolume));
+  useLayoutEffect(() => {
+    if (autoWindowedSurface.key !== surfaceKey) setAutoWindowedSurface({ key: surfaceKey, enabled: false });
+    if (!autoVolumeExceeded || autoWindowed) return;
+    beginStructural("display-change");
+    setAutoWindowedSurface({ key: surfaceKey, enabled: true });
+  }, [autoVolumeExceeded, autoWindowed, autoWindowedSurface.key, beginStructural, surfaceKey]);
   const allRows = useMemo(() => blocks.flatMap((block) => block.rows), [blocks]);
   const empty = items.length === 0;
   const rowIndexByKey = useMemo(() => new Map(allRows.map((row, index) => [String(row.key), index])), [allRows]);
@@ -264,7 +280,12 @@ export function Transcript(props: TranscriptProps) {
   const questionNavigatorRef = useRef<TranscriptQuestionNavigatorHandle>(null);
   const history = useMemo(() => new TranscriptHistoryRequest(transcriptKernel), [transcriptKernel]);
   const requestOlder = useTranscriptCommand((turn?: number, trigger: HistoryLoadTrigger = "viewport-user") => {
-    if (!onLoadOlderHistory || !hasOlderHistory || loadingOlderHistory || running) return Promise.resolve(false);
+    // User-intent loads (viewport-user / question-jump / retry) stay available
+    // while the turn is streaming — the kernel's reader/tail intent keeps the
+    // viewport anchored, and gating on `running` here left streaming sessions
+    // unable to page history at all (cf89a2c0: 51 top-hits, zero loads).
+    // Machine-driven auto-fill keeps its own running gate below.
+    if (!onLoadOlderHistory || !hasOlderHistory || loadingOlderHistory) return Promise.resolve(false);
     if (trigger !== "question-jump" && trigger !== "retry") beginStructural("prepend");
     return history.load(() => onLoadOlderHistory(turn, trigger));
   });
@@ -272,11 +293,23 @@ export function Transcript(props: TranscriptProps) {
     if (questionNavigatorRef.current) questionNavigatorRef.current.retry();
     else void requestOlder(undefined, "retry");
   });
+  const handledRewindSignalRef = useRef(0);
+  const latestQuestionsRef = useRef(questions);
+  latestQuestionsRef.current = questions;
   useEffect(() => {
-    if (rewindSignal <= 0) return;
-    const last = questions[questions.length - 1];
+    // Only the signal itself may trigger this jump. `questions` changes on every
+    // streaming frame, so depending on it re-fired the jump on each frame and
+    // dragged the viewport back to the last question - the sawtooth users report
+    // as "scrolled to the bottom, let go, and it jumped back up".
+    if (rewindSignal <= 0 || handledRewindSignalRef.current === rewindSignal) return;
+    handledRewindSignalRef.current = rewindSignal;
+    const current = latestQuestionsRef.current;
+    const last = current[current.length - 1];
     if (last) jumpToLoadedQuestion(last);
-  }, [jumpToLoadedQuestion, questions, rewindSignal]);
+// One-shot: clear the signal after consuming it, so remounting the
+    // transcript (switching sessions) never replays this jump.
+    onRewindConsumed?.();
+  }, [jumpToLoadedQuestion, rewindSignal, onRewindConsumed]);
 
   const handleScroll = useTranscriptCommand(() => {
     const towardHistory = onScroll();

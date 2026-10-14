@@ -126,11 +126,12 @@ type WorkspacePathChange struct {
 
 // StreamAttempt is the JSON form of event.StreamAttemptInfo.
 type StreamAttempt struct {
-	ID      string `json:"id"`
-	Action  string `json:"action"` // begin | discard | commit
-	Attempt int    `json:"attempt,omitempty"`
-	Max     int    `json:"max,omitempty"`
-	Reason  string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
+	ID        string `json:"id"`
+	Action    string `json:"action"` // begin | discard | commit
+	Attempt   int    `json:"attempt,omitempty"`
+	Max       int    `json:"max,omitempty"`
+	Reason    string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
+	MessageID string `json:"messageId,omitempty"`
 }
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
@@ -248,13 +249,9 @@ func ToWire(e event.Event) Event {
 			w.RetryScope = string(e.RetryScope)
 		}
 	case event.StreamAttempt:
-		w.StreamAttempt = &StreamAttempt{
-			ID:      e.StreamAttempt.ID,
-			Action:  string(e.StreamAttempt.Action),
-			Attempt: e.StreamAttempt.Attempt,
-			Max:     e.StreamAttempt.Max,
-			Reason:  e.StreamAttempt.Reason,
-		}
+		att := e.StreamAttempt
+		w.StreamAttempt = &StreamAttempt{ID: att.ID, Action: string(att.Action), Attempt: att.Attempt,
+			Max: att.Max, Reason: att.Reason, MessageID: att.MessageID}
 	case event.TurnPhase:
 		w.Phase = string(e.PhaseName)
 		if w.Phase == "" {
@@ -310,18 +307,19 @@ func toWireUsage(e event.Event) *Usage {
 
 // DecisionReceipt is the JSON form of a provider-excluded user decision.
 type DecisionReceipt struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
-	Tool    string `json:"tool,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Outcome string `json:"outcome"`
+	ID           string `json:"id"`
+	OccurrenceID string `json:"occurrenceId,omitempty"`
+	Kind         string `json:"kind"`
+	Tool         string `json:"tool,omitempty"`
+	Subject      string `json:"subject,omitempty"`
+	Outcome      string `json:"outcome"`
 }
 
 func ToWireDecisionReceipt(in *provider.DecisionReceipt) *DecisionReceipt {
 	if in == nil {
 		return nil
 	}
-	return &DecisionReceipt{ID: in.ID, Kind: in.Kind, Tool: in.Tool, Subject: in.Subject, Outcome: in.Outcome}
+	return &DecisionReceipt{ID: in.ID, OccurrenceID: in.OccurrenceID, Kind: in.Kind, Tool: in.Tool, Subject: in.Subject, Outcome: in.Outcome}
 }
 
 type FinalReadiness struct {
@@ -389,10 +387,7 @@ type Ask struct {
 	TurnID    string        `json:"turnId,omitempty"`
 }
 
-// MCPInteraction is the JSON form of an event.MCPInteraction: one
-// server-initiated elicitation awaiting the user's accept/decline/cancel.
-// Schema and URL come from the MCP server; form answers travel only in the
-// resolve call, never on this event.
+// MCPInteraction is the JSON form of an event.MCPInteraction.
 type MCPInteraction struct {
 	ID              string          `json:"id"`
 	Server          string          `json:"server"`
@@ -634,8 +629,6 @@ func ToWireCacheDiagnostics(d *event.CacheDiagnostics) *CacheDiagnostics {
 }
 
 // KindNames returns every stable frontend event kind in event.Kind order. It is
-// the protocol-neutral source used by consumers such as the Remote schema
-// generator; callers receive a copy and may sort it without mutating eventwire.
 func KindNames() []string {
 	names := make([]string, 0, int(event.KindCount))
 	for kind := range event.KindCount {
@@ -745,9 +738,8 @@ type ExtensionCard struct {
 	Actions  []ExtensionActionRef `json:"actions,omitempty"`
 }
 
-// ExtensionFormField is the JSON form of an event.ExtensionFormField. Default
-// travels as raw JSON: the remote schema has no "any" type, and the field is
-// already protocol-validated JSON on arrival.
+// ExtensionFormField carries event.ExtensionFormField on the Remote JSON wire.
+// Default stays json.RawMessage because the protocol has no "any" type.
 type ExtensionFormField struct {
 	Key      string          `json:"key"`
 	Label    string          `json:"label,omitempty"`

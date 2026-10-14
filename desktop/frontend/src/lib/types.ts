@@ -64,6 +64,7 @@ export interface TurnEventReplayView {
   nextAfterSeq: number;
   hasMore: boolean;
   resetRequired: boolean;
+  notReady?: boolean; // backend starting: frontend waits, no failure counted
   transcriptRevision?: number;
   transcriptDigest?: string;
   runtimeEpoch?: string;
@@ -73,8 +74,8 @@ export interface WireStreamAttempt {
   action: StreamAttemptAction;
   attempt?: number;
   max?: number;
-  /** Fixed enum only: connection_reset | premature_eof | idle_timeout */
-  reason?: string;
+  /** reason is a fixed enum; Go sends messageId and messageID remains legacy. */
+  reason?: string; messageId?: string; messageID?: string;
 }
 export interface WireCompaction {
   trigger?: string; // "auto" | "manual"
@@ -238,7 +239,7 @@ export interface WireGuardian {
 }
 
 export interface WireDecisionReceipt {
-  id: string;
+  id: string; occurrenceId?: string;
   kind: string;
   tool?: string;
   subject?: string;
@@ -296,8 +297,6 @@ export interface WireMCPInteraction {
 }
 
 // Extension UI surfaces (stage 8a) — structured-only documents published by
-// extension sidecars through the host UI hub. Exactly one sub-struct is set,
-// selected by `kind`.
 export interface WireExtensionStatus {
   label: string;
   detail?: string;
@@ -799,6 +798,8 @@ export interface ChangedFileInfo {
 
 // Bound-method payloads (desktop/app.go).
 export interface HistoryMessage {
+  /** Stable per-message id (ULID); empty for legacy sessions. */
+  id?: string;
   role: string;
   content: string;
   detail?: string;
@@ -880,6 +881,9 @@ export interface HistoryContentRef {
 
 export interface HistoryEntry {
   entryId: string;
+  /** Stable per-message id (ULID); empty for legacy sessions. Survives
+   * rewinds, unlike entryId (position + revision derived). */
+  messageId?: string;
   turn: number; // 1-based visible turn (0 = before the first turn)
   order: number; // absolute provider-message index
   message: HistoryMessage;
@@ -902,6 +906,9 @@ export interface HistorySlice {
   // Diagnostic read path: index|scan|event-log|live-index|live-fallback.
   source?: string;
   error?: string; // failed read; empty entries alone are not an error
+  /** In-flight turn's id (empty when none). The frontend drops that turn's
+   * live rows (a:<turnId>:…) in favour of this page. */
+  openTurnId?: string;
 }
 
 export interface HistoryContentChunk {

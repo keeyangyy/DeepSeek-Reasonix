@@ -7,6 +7,7 @@ import {LocaleProvider} from '../lib/i18n';
 import type {ProviderView} from '../lib/types';
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost',pretendToBeVisual:true});
 Object.assign(globalThis,{window:dom.window,document:dom.window.document,localStorage:dom.window.localStorage,IS_REACT_ACT_ENVIRONMENT:true});
+Object.defineProperty(globalThis,"navigator",{configurable:true,value:dom.window.navigator});
 const {createRoot}=await import('react-dom/client');
 const {ProviderEditor,providerAccessGroups}=await import('../components/SettingsPanel');
 const provider={name:'stable-id',displayName:'工作账号',kind:'openai',baseUrl:'https://example.com/v1',models:['model'],default:'model',apiKeyEnv:'TEST_KEY',keySet:true,added:true,builtIn:false,visionModels:[],supportedEfforts:[],modelsUrl:'',balanceUrl:'',contextWindow:100000} as ProviderView;

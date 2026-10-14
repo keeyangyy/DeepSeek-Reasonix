@@ -10,6 +10,7 @@ import { createElement, Fragment, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import { JSDOM } from "jsdom";
+import { Markdown } from "../components/Markdown";
 import { normalizeMath } from "../components/mathNormalize";
 import { createComponents } from "../components/markdownComponents";
 import { reasonixRehypePlugins, reasonixRemarkPlugins } from "../components/markdownRemarkPlugins";
@@ -79,6 +80,10 @@ function projectRenderedBlocks(blocks: MarkdownBlock[]): string {
 }
 
 console.log("\nmarkdown pipeline parity");
+
+const emptyPrefixStream = renderToStaticMarkup(createElement(Markdown, { text: "现在", streaming: true }));
+ok(emptyPrefixStream.includes("md--stream-tail"), "an unfinished prose prefix stays in the live tail");
+ok(!emptyPrefixStream.includes("data-transcript-geometry-pending"), "an empty parsed-prefix fallback does not insert a blank line above live prose");
 
 const bigCode = "```js\n" + "const value = compute(index); // keep this line long enough\n".repeat(4000) + "```";
 ok(bigCode.length > 100_000, "code-fence fixture exceeds 100KB");

@@ -1,13 +1,21 @@
 // Run: tsx src/__tests__/hydrate-history-apply.test.ts
 
+import { initialState, reducer } from "../lib/useController";
+
 import {
   activeTabHydrationPlan,
   canAdoptUnboundLiveSurface,
   duplicateLiveItemIds,
   hasCachedLiveTurn,
   hydratedHistoryApplyMode,
+  itemSignature,
+  pageCoveredLiveItemIds,
+  pageAssistantPointer,
+  pageOverlapsLiveContent,
   sameSessionHydrateIdentity,
   sameSessionPlaceholderItems,
+  revisionNotOlder,
+  replaceRemoveIds,
   shouldPreferResidentHistory,
 } from "../lib/hydrateHistoryApply";
 
@@ -93,6 +101,13 @@ ok(
   "different generations reject placeholders even when paths match",
 );
 ok(
+  !sameSessionHydrateIdentity(
+    { sessionPath: "a.jsonl", sessionGeneration: 1 },
+    { sessionPath: "a.jsonl" },
+  ),
+  "an omitted generation is zero, not a wildcard for a later generation",
+);
+ok(
   !sameSessionHydrateIdentity({ sessionPath: "" }, { sessionPath: "" }),
   "empty identities cannot prove the same session",
 );
@@ -103,6 +118,7 @@ const sameSessionPlan = activeTabHydrationPlan(
 );
 ok(sameSessionPlan.surfacePolicy === "preserve-current", "backend sync preserves a proven same-session surface");
 ok(sameSessionPlan.loadOptions.preserveCachedHistory, "same-session backend sync may reuse its resident history");
+ok(sameSessionPlan.loadOptions.sessionGeneration === 3, "same-session hydration carries the generation fence too");
 const reboundPlan = activeTabHydrationPlan(
   { sessionPath: "a.jsonl", sessionGeneration: 4, sessionRevision: 9, sessionDigest: "rev-9" },
   { sessionPath: "a.jsonl", sessionGeneration: 3 },
@@ -110,6 +126,13 @@ const reboundPlan = activeTabHydrationPlan(
 );
 ok(reboundPlan.surfacePolicy === "replace-surface", "backend sync replaces a generation-rebound surface");
 ok(reboundPlan.loadOptions.sessionGeneration === 4, "replace-surface hydration carries the target generation fence");
+{
+  const refreshed = reducer({
+    ...initialState,
+    meta: { sessionPath: "a.jsonl", sessionGeneration: 4 } as never,
+  }, { type: "meta", meta: { label: "metadata-only refresh" } as never });
+  ok(refreshed.meta?.sessionGeneration === 4, "metadata-only refresh retains the known generation");
+}
 ok(
   canAdoptUnboundLiveSurface(
     { sessionPath: "a.jsonl", sessionGeneration: 3 },
@@ -186,6 +209,273 @@ ok(
   }) === "replace",
   "empty idle surface still applies history",
 );
+
+ok(revisionNotOlder(undefined, 1502) === true, "no expected revision accepts any page");
+ok(revisionNotOlder(1501, 1502) === true, "forward revision drift is accepted (a save landed mid-load)");
+ok(revisionNotOlder(1501, 1501) === true, "equal revisions are accepted");
+ok(revisionNotOlder(1502, 1501) === false, "a revision regression is rejected (rebind/rewind)");
+ok(revisionNotOlder(1501, undefined) === true, "an unknown actual revision cannot prove a regression");
+
+// Page-covered terminal rows: frontend-local ids (uN/sN) never match page ids,
+// so the id-based removal leaves the optimistic submit / steer notice mounted
+// next to the page's own copy of the same message.
+const pageUser = (id: string, text: string) => ({ kind: "user", id, text });
+const liveUser = (id: string, text: string) => ({ kind: "user", id, text });
+const pageNotice = (id: string, text: string) => ({ kind: "notice", id, text });
+const liveNotice = (id: string, text: string) => ({ kind: "notice", id, text });
+
+ok(
+  pageCoveredLiveItemIds([pageUser("h:7", "inserted mid-turn")], [liveUser("u4", "inserted mid-turn")]).join() === "u4",
+  "a page-owned optimistic submit is dropped with its frontend-local id",
+);
+ok(
+  pageCoveredLiveItemIds([pageNotice("h:9", "↪ steer text")], [liveNotice("s3", "↪ steer text")]).join() === "s3",
+  "a page-owned steer notice is dropped with its frontend-local id",
+);
+ok(
+  pageCoveredLiveItemIds(
+    [pageUser("h:7", "same text")],
+    [liveUser("u4", "same text"), liveUser("u5", "same text")],
+  ).join() === "u4",
+  "count based: a second identical submit keeps its not-yet-persisted row",
+);
+ok(
+  pageCoveredLiveItemIds(
+    [pageUser("h:7", "same text"), pageUser("h:9", "same text")],
+    [liveUser("u4", "same text"), liveUser("u5", "same text")],
+  ).join() === "u4,u5",
+  "two page rows cover both live copies",
+);
+ok(
+  pageCoveredLiveItemIds([pageUser("h:7", "persisted")], [liveUser("u4", "not persisted yet")]).length === 0,
+  "content the page does not carry keeps its frontend row",
+);
+ok(
+  pageCoveredLiveItemIds([{ kind: "assistant", id: "h:3", text: "half" }], [{ kind: "assistant", id: "a:t1:0", text: "half" }]).length === 0,
+  "assistant rows are owned by the turn-level rules, not this cleanup",
+);
+
+// Streaming rows grow after the page snapshot, so exact signatures never match:
+// the page's copy is an earlier prefix of the live text and must still count as
+// overlap (otherwise the whole page-owns-the-turn cleanup is skipped and the
+// rebuilt rows co-mount = the low-frequency duplicate).
+ok(
+  pageOverlapsLiveContent(
+    [{ kind: "assistant", id: "h:9", text: "part" }],
+    [{ kind: "assistant", id: "a:t1:0", text: "part with more streamed text" }],
+  ) === true,
+  "a page snapshot that prefixes the live text still overlaps",
+);
+ok(
+  pageOverlapsLiveContent(
+    [{ kind: "assistant", id: "h:9", text: "unrelated" }],
+    [{ kind: "assistant", id: "a:t1:0", text: "something else" }],
+  ) === false,
+  "unrelated text rows are not overlap",
+);
+
+{
+  const historyReceipt = { kind: "notice" as const, id: "history", level: "info" as const, code: "decision_receipt", text: "Decision recorded: answered", decisionReceipt: { id: "1", occurrenceId: "receipt-a", kind: "ask", subject: "Choose: A", outcome: "answered" } };
+  const nextReceipt = { ...historyReceipt, id: "live", decisionReceipt: { ...historyReceipt.decisionReceipt, occurrenceId: "receipt-b" } };
+  ok(itemSignature(historyReceipt) !== itemSignature(nextReceipt), "distinct Ask receipts do not share a signature");
+  ok(!pageOverlapsLiveContent([historyReceipt], [nextReceipt]), "same-title Ask receipts do not claim history overlap");
+  ok(pageCoveredLiveItemIds([historyReceipt], [nextReceipt]).length === 0, "a prior Ask receipt does not remove a distinct live one");
+  const replay = { ...historyReceipt, id: "replay" };
+  ok(itemSignature(historyReceipt) === itemSignature(replay), "the same receipt occurrence keeps its signature across IDs");
+  ok(pageCoveredLiveItemIds([historyReceipt], [replay]).join(",") === "replay", "history removes the same live receipt once");
+}
+
+// Page handoff: the page's in-flight turn must not co-mount with the rebuilt
+// live rows, the streaming pointer must follow the page row, and a live
+// "running" tool status must survive a page copy that only knows "stopped".
+type ReducerState = ReturnType<typeof reducer>;
+const toolRow = (id: string, status: "running" | "stopped" | "done") =>
+  ({ kind: "tool" as const, id, name: "wait", args: "", readOnly: true, status, output: "" });
+const assistantRow = (id: string, text: string) =>
+  ({ kind: "assistant" as const, id, text, reasoning: "", streaming: true });
+
+{
+  const base: ReducerState = {
+    ...initialState,
+    historyRevision: 5,
+    items: [assistantRow("a:t1:0", "streamed so far"), toolRow("call-1", "running")],
+    currentAssistant: "a:t1:0",
+    live: { id: "a:t1:0", text: "streamed so far", reasoning: "", reasoningComplete: false },
+  };
+  const next = reducer(base, {
+    type: "history_prepend",
+    items: [assistantRow("h:9", "streamed"), toolRow("call-1", "stopped")],
+    removeIds: ["a:t1:0", "call-1"],
+    startTurn: 1,
+    totalTurns: 3,
+    hasOlder: false,
+    revision: 6,
+    digest: "d6",
+  });
+  ok(next.items.filter((it) => it.id === "call-1").length === 1, "page tool row does not co-mount with the live copy");
+  const tool = next.items.find((it) => it.id === "call-1");
+  ok(tool?.kind === "tool" && tool.status === "running", "a live running tool keeps its status when the page copy says stopped");
+  ok(next.items.filter((it) => it.kind === "assistant").length === 1, "the superseded live assistant row does not remain beside the page copy");
+  ok(next.currentAssistant === "h:9", "the streaming pointer re-points at the page's in-flight assistant row");
+}
+
+// Ask is a segment boundary. Switching back to a session while Ask is waiting
+// can hydrate the pre-Ask assistant again; that row must not become the target
+// for the sampling attempt that resumes after the answer.
+{
+  const oldAssistant = { ...assistantRow("a:turn-ask:0", "pre-Ask thought"), messageID: "message-before-ask", wasStreamed: true as const };
+  const pageAssistant = { ...assistantRow("h:before-ask", "persisted pre-Ask thought"), messageID: "message-before-ask" };
+  const askTool = { ...toolRow("ask-call", "running"), name: "ask" };
+  const askReceipt = {
+    kind: "notice" as const,
+    id: "ask-receipt",
+    level: "info" as const,
+    text: "answered",
+    decisionReceipt: { id: "ask-1", occurrenceId: "ask-receipt-1", kind: "ask", subject: "Choose", outcome: "answered" },
+  };
+  const waiting: ReducerState = {
+    ...initialState,
+    activeTurnId: "turn-ask",
+    items: [oldAssistant, askTool],
+    currentAssistant: oldAssistant.id,
+    live: { id: oldAssistant.id, text: "pre-Ask thought", reasoning: "pre-Ask thought", reasoningComplete: false },
+    ask: { id: "ask-1" } as never,
+    promptEpoch: 2,
+  };
+  const promptStarted = reducer({ ...waiting, ask: undefined }, {
+    type: "event",
+    e: { kind: "ask_request", ask: { id: "ask-1" } } as never,
+  });
+  ok(promptStarted.currentAssistant === undefined && promptStarted.live === undefined, "ask_request closes the prior assistant segment before waiting for the user");
+  const replaced = reducer(waiting, {
+    type: "history_replace",
+    items: [pageAssistant, { ...askTool, status: "stopped" }, askReceipt],
+    startTurn: 1,
+    totalTurns: 2,
+    hasOlder: false,
+    revision: 10,
+  });
+  ok(replaced.currentAssistant === undefined && replaced.live === undefined, "history_replace during Ask wait releases the pre-prompt assistant pointer");
+  ok(pageAssistantPointer(pageAssistant.id, [pageAssistant, askTool, askReceipt]) === undefined, "an Ask tool and answered receipt invalidate the earlier assistant pointer");
+
+  let resumed = reducer(replaced, { type: "ask_submit_succeeded", id: "ask-1", epoch: 2 });
+  resumed = reducer(resumed, { type: "event", e: { kind: "reasoning", reasoning: "post-Ask thought" } });
+  const newAssistantId = resumed.currentAssistant;
+  ok(Boolean(newAssistantId) && newAssistantId !== pageAssistant.id, "post-Ask reasoning allocates a new assistant row");
+  resumed = reducer(resumed, { type: "event", e: { kind: "message", text: "final response", reasoning: "post-Ask thought" } });
+  const oldIndex = resumed.items.findIndex((item) => item.kind === "assistant" && item.id === pageAssistant.id);
+  const toolIndex = resumed.items.findIndex((item) => item.kind === "tool" && item.id === "ask-call");
+  const receiptIndex = resumed.items.findIndex((item) => item.kind === "notice" && item.id === "ask-receipt");
+  const newIndex = resumed.items.findIndex((item) => item.kind === "assistant" && item.id === newAssistantId);
+  const newRow = resumed.items.find((item) => item.kind === "assistant" && item.id === newAssistantId);
+  ok(oldIndex >= 0 && oldIndex < toolIndex && toolIndex < receiptIndex && receiptIndex < newIndex, "history_replace keeps Ask, receipt, and resumed assistant in transcript order");
+  ok(newRow?.kind === "assistant" && newRow.reasoning === "post-Ask thought" && newRow.text === "final response", "post-Ask reasoning and final text stay on the new row");
+
+  const alreadyAnswered = reducer({
+    ...waiting,
+    ask: undefined,
+    items: [oldAssistant, askTool, askReceipt],
+    live: undefined,
+  }, {
+    type: "history_replace",
+    items: [pageAssistant, { ...askTool, status: "done" }, askReceipt],
+    startTurn: 1,
+    totalTurns: 2,
+    hasOlder: false,
+    revision: 12,
+  });
+  ok(alreadyAnswered.currentAssistant === undefined, "a post-answer page cannot restore the pre-Ask assistant as the live target");
+}
+
+// Rebase must match the exact active pointer, not the first assistant row that
+// happened to be marked as streamed in an earlier attempt.
+{
+  const earlier = { ...assistantRow("a:turn-rebase:0", "earlier attempt"), messageID: "message-earlier", wasStreamed: true as const };
+  const active = { ...assistantRow("a:turn-rebase:1", "active attempt"), messageID: "message-active", wasStreamed: true as const };
+  const pageEarlier = { ...assistantRow("h:earlier", "history earlier"), messageID: "message-earlier" };
+  const pageActive = { ...assistantRow("h:active", "history active"), messageID: "message-active" };
+  const rebased = reducer({
+    ...initialState,
+    currentAssistant: active.id,
+    live: { id: active.id, text: "active live text", reasoning: "active live thought", reasoningComplete: false },
+    items: [earlier, active],
+  }, {
+    type: "history_replace",
+    items: [pageEarlier, pageActive],
+    startTurn: 1,
+    totalTurns: 1,
+    hasOlder: false,
+    revision: 13,
+  });
+  const earlierPage = rebased.items.find((item) => item.kind === "assistant" && item.id === pageEarlier.id);
+  const activePage = rebased.items.find((item) => item.kind === "assistant" && item.id === pageActive.id);
+  ok(earlierPage?.kind === "assistant" && earlierPage.text === "history earlier", "rebase leaves earlier streamed assistant history untouched");
+  ok(activePage?.kind === "assistant" && activePage.text === "active live text" && activePage.reasoning === "active live thought", "rebase transfers live content to the exact current assistant row");
+}
+
+{
+  const oldAssistant = { ...assistantRow("a:turn-ask-prepend:0", "pre-Ask thought"), messageID: "message-before-ask", wasStreamed: true as const };
+  const askTool = { ...toolRow("ask-prepend-call", "running"), name: "ask" };
+  const pageAssistant = { ...assistantRow("h:ask-prepend", "pre-Ask thought"), messageID: "message-before-ask" };
+  const receipt = {
+    kind: "notice" as const,
+    id: "ask-prepend-receipt",
+    level: "info" as const,
+    text: "answered",
+    decisionReceipt: { id: "ask-prepend", occurrenceId: "ask-prepend-receipt-1", kind: "ask", subject: "Choose", outcome: "answered" },
+  };
+  const waiting: ReducerState = {
+    ...initialState,
+    historyPrefixCount: 1,
+    activeTurnId: "turn-ask-prepend",
+    items: [{ kind: "user", id: "u:turn-ask-prepend", text: "question" }, oldAssistant, askTool],
+    currentAssistant: oldAssistant.id,
+    live: { id: oldAssistant.id, text: "pre-Ask thought", reasoning: "pre-Ask thought", reasoningComplete: false },
+    ask: { id: "ask-prepend" } as never,
+  };
+  const prepended = reducer(waiting, {
+    type: "history_prepend",
+    items: [pageAssistant, { ...askTool, status: "stopped" }, receipt],
+    removeIds: [oldAssistant.id, askTool.id],
+    startTurn: 0,
+    totalTurns: 2,
+    hasOlder: false,
+    revision: 11,
+  });
+  ok(prepended.currentAssistant === undefined && prepended.live === undefined, "history_prepend during Ask wait releases the stale assistant pointer");
+  let resumed = reducer(prepended, { type: "ask_submit_succeeded", id: "ask-prepend", epoch: 0 });
+  resumed = reducer(resumed, { type: "event", e: { kind: "text", text: "continued" } });
+  const assistantIds = resumed.items.filter((item) => item.kind === "assistant").map((item) => item.id);
+  const askIndex = resumed.items.findIndex((item) => item.kind === "tool" && item.id === askTool.id);
+  const receiptIndex = resumed.items.findIndex((item) => item.kind === "notice" && item.id === receipt.id);
+  const continuedIndex = resumed.items.findIndex((item) => item.kind === "assistant" && item.id === resumed.currentAssistant);
+  ok(assistantIds.length === 2 && askIndex < receiptIndex && receiptIndex < continuedIndex, "history_prepend preserves the answered Ask boundary before resumed output");
+}
+
+// Recorder token rule (frontendDiagnostics.safeToken): row descriptors must
+// survive ^[a-zA-Z0-9._:-]{1,64}$ or the whole field is dropped silently —
+// keep this shape in sync with the describe() used by the items.tail probe.
+const safeTokenRe = /^[a-zA-Z0-9._:-]{1,64}$/;
+const descriptor = (kind: string, id: string, status: string | undefined, length: number) =>
+  `${kind.charAt(0)}.${id.slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}${status ? `.${status}` : ""}.${length}`;
+ok(safeTokenRe.test(descriptor("assistant", "h:entry-1234", "running", 0)), "row descriptor passes the recorder token rule");
+ok(safeTokenRe.test(descriptor("user", "u12", undefined, 42)), "status-less descriptor passes the recorder token rule");
+ok(safeTokenRe.test(descriptor("tool", "call_abc/def", "stopped", 7)), "descriptor scrubs non-token id characters");
+
+// Complete prepend removal: same-id live rows, active-turn rebuild prefix,
+// and page-covered terminal rows are all dropped — a page overlapping the
+// mounted rows must not leave same-toolCallId duplicates behind (observed:
+// 21 duplicates under an older page, plus a steer notice trailing the tools).
+{
+  const pageTools = [toolRow("call-a", "done"), toolRow("call-b", "done")];
+  const liveTools = [toolRow("call-a", "running"), toolRow("call-b", "running")];
+  const ids = replaceRemoveIds([...pageTools, { kind: "notice", id: "he:n1", text: "↪ hi" }], [...liveTools, { kind: "notice", id: "s7", text: "↪ hi" }], "turn-1", ["call-b"]);
+  ok(ids.includes("call-a") && ids.includes("call-b"), "same-id live tools are removed by the complete prepend removal");
+  ok(ids.includes("s7"), "a page-covered steer notice is removed from the live tail");
+  ok(ids.includes("call-a") && !ids.includes("call-x"), "unrelated live ids stay");
+  const prefixIds = replaceRemoveIds([], [{ kind: "assistant", id: "a:turn-1:0", text: "x" }], "turn-1", []);
+  ok(prefixIds.includes("a:turn-1:0"), "active-turn rebuild rows are covered by the prefix rule");
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

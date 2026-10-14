@@ -1,3 +1,5 @@
+import { normalizeSessionGeneration } from "./sessionIdentity";
+
 /** Live-turn markers that a lagging history snapshot must not replace. */
 export type HydrateLiveState = {
   running?: boolean;
@@ -71,6 +73,7 @@ export function activeTabHydrationPlan(
       sessionPath: target.sessionPath,
       sessionRevision: target.sessionRevision,
       sessionDigest: target.sessionDigest,
+      sessionGeneration: target.sessionGeneration,
     },
   };
 }
@@ -87,12 +90,27 @@ export function sameSessionHydrateIdentity(
   const targetPath = (target?.sessionPath ?? "").trim();
   const currentPath = (current?.sessionPath ?? "").trim();
   if (!targetPath || !currentPath || targetPath !== currentPath) return false;
-  if (
-    target?.sessionGeneration !== undefined &&
-    current?.sessionGeneration !== undefined &&
-    target.sessionGeneration !== current.sessionGeneration
-  ) return false;
+  if (normalizeSessionGeneration(target?.sessionGeneration) !== normalizeSessionGeneration(current?.sessionGeneration)) return false;
   return true;
+}
+
+/**
+ * Identity a tab switch is judged against. An explicit optimistic tab wins;
+ * when the caller has none (a click on an already-open tab) the tab's own
+ * retained meta stands in — preserving that tab's mounted surface is the point,
+ * and the page fingerprint/revision checks still guard correctness on apply.
+ */
+export function switchTargetIdentity(
+  optimisticTab: SessionHydrateIdentity | undefined,
+  retainedMeta: SessionHydrateIdentity | undefined,
+): SessionHydrateIdentity | undefined {
+  if (optimisticTab?.sessionPath) {
+    return { sessionPath: optimisticTab.sessionPath, sessionGeneration: optimisticTab.sessionGeneration };
+  }
+  if (retainedMeta?.sessionPath) {
+    return { sessionPath: retainedMeta.sessionPath, sessionGeneration: retainedMeta.sessionGeneration };
+  }
+  return undefined;
 }
 
 /**
@@ -129,6 +147,39 @@ export function canAdoptUnboundLiveSurface(
 
 export function shouldPreferResidentHistory(reset: boolean, preserveCachedHistory?: boolean): boolean {
   return !reset && preserveCachedHistory !== false;
+}
+
+/**
+ * Revision comparison for history pages read while the session keeps being
+ * written: a load that starts at revision N and finishes after a save has
+ * bumped it to N+1 carries correct content (the older page is the same data,
+ * the session just moved on). Only a REGRESSION is fatal — that is a different
+ * transcript generation (rebind/rewind). Strict equality here mis-killed every
+ * page load during streaming (46f624e1: 13 consecutive identity failures).
+ */
+export function revisionNotOlder(expected: number | undefined, actual: number | undefined): boolean {
+  if (expected === undefined || expected <= 0) return true;
+  if (actual === undefined) return true;
+  return actual >= expected;
+}
+
+/**
+ * Full identity acceptance for a history page load: a forward revision drift
+ * (a save landed while the page was in flight) is accepted; an equal revision
+ * must match the digest; a regression (rebind/rewind) is rejected.
+ */
+export function historyPageFingerprintAccepts(
+  expectedRevision: number | undefined,
+  actualRevision: number | undefined,
+  expectedDigest: string | undefined,
+  actualDigest: string | undefined,
+): boolean {
+  if (!revisionNotOlder(expectedRevision, actualRevision)) return false;
+  if (
+    expectedRevision !== undefined && expectedRevision > 0 &&
+    actualRevision !== undefined && actualRevision > expectedRevision
+  ) return true;
+  return !expectedDigest || actualDigest === expectedDigest;
 }
 
 function sameHydrateFingerprint(state: HydrateLiveState | undefined, projection: HydrateProjection | undefined): boolean {
@@ -181,6 +232,13 @@ export function hasReusableCachedTranscript(
   return state.historyRevision === undefined && !state.historyDigest;
 }
 
+// Extract the turn id from a live row id of the form a:<turnId>:<seq>. Returns
+// undefined for history rows (he:) and frontend-local rows (uN/sN/xN).
+export function liveItemTurnId(id: string): string | undefined {
+  const match = /^a:([^:]+):/.exec(id);
+  return match?.[1];
+}
+
 // An empty surface has to apply history or switch-back shows Welcome. A turn
 // that has already streamed rows keeps them — but a tab with no history page
 // behind it still gets one, prepended, instead of a blank transcript above the
@@ -200,20 +258,42 @@ export function hydratedHistoryApplyMode(
   return (state?.historyTotalTurns ?? 0) === 0 ? "prepend" : "skip";
 }
 
-type SignatureItem = {
+export type SignatureItem = {
   kind: string;
   id: string;
   text?: string;
   reasoning?: string;
   name?: string;
   level?: string;
+  code?: string;
+  decisionReceipt?: {
+    id?: string;
+    occurrenceId?: string;
+    kind?: string;
+    tool?: string;
+    subject?: string;
+    outcome?: string;
+  };
   trigger?: string;
   messages?: number;
   surfaceKey?: string;
   generation?: number;
+  status?: string;
+  messageID?: string;
 };
 
-function itemSignature(item: SignatureItem): string {
+export function itemSignature(item: SignatureItem): string {
+  if (item.kind === "notice" && item.decisionReceipt) {
+    const receipt = item.decisionReceipt;
+    return `notice|receipt|${receipt.occurrenceId ?? JSON.stringify([
+      item.code ?? "",
+      receipt.id ?? "",
+      receipt.kind ?? "",
+      receipt.tool ?? "",
+      receipt.subject ?? "",
+      receipt.outcome ?? "",
+    ])}`;
+  }
   switch (item.kind) {
     case "tool": return `tool|${item.id}|${item.name ?? ""}`;
     case "extension": return `extension|${item.surfaceKey ?? ""}|${item.generation ?? 0}`;
@@ -237,6 +317,264 @@ export function duplicateLiveItemIds(
     if (same) return liveItems.slice(0, k).map((item) => item.id);
   }
   return [];
+}
+
+// True when the fetched page already contains content that the mounted
+// live/replay rows also carry (any-position signature match). The page fetch
+// starts after the replay, so its persisted view of the active turn is a
+// superset — the page must own the turn and the replayed rebuild must yield.
+export function pageOverlapsLiveContent(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): boolean {
+  const liveSignatures = new Set<string>();
+  for (const item of liveItems) liveSignatures.add(itemSignature(item));
+  if (liveSignatures.size === 0) return false;
+  for (const item of pageItems) {
+    if (liveSignatures.has(itemSignature(item))) return true;
+  }
+  // Streaming rows keep growing after the page snapshot, so an exact signature
+  // never matches while the turn is live: the page's copy is an earlier prefix
+  // of the live text. Count the prefix relationship as overlap too — otherwise
+  // the page-owns-the-turn cleanup is skipped entirely and the rebuilt rows
+  // co-mount beside the page copies (the low-frequency duplicate).
+  const liveTexts = liveItems.filter((item) => item.kind === "assistant" && typeof item.text === "string" && item.text.length > 0);
+  if (liveTexts.length === 0) return false;
+  for (const item of pageItems) {
+    if (item.kind !== "assistant") continue;
+    const text = typeof item.text === "string" ? item.text : "";
+    if (text.length === 0) continue;
+    for (const live of liveTexts) {
+      if (live.kind !== item.kind || typeof live.text !== "string") continue;
+      if (text.startsWith(live.text) || live.text.startsWith(text)) return true;
+    }
+  }
+  return false;
+}
+
+// Complete removal set for a history prepend: the store's seam-based ids,
+// plus every live row the page supersedes (same id or the page already
+// carries its content). loadOlderHistory used to pass only the seam ids, so a
+// page overlapping the mounted rows left same-toolCallId duplicates (and
+// notice rows) co-mounted — observed as 21 duplicates under an older page and
+// "earlier messages following the newest tool".
+export function replaceRemoveIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+  activeTurnId: string | undefined,
+  storeRemoveIds: readonly string[] | undefined,
+): string[] {
+  const remove = new Set(storeRemoveIds ?? []);
+  const prefix = activeTurnId ? `a:${activeTurnId}:` : undefined;
+  for (const item of liveItems) {
+    if ((prefix && item.id.startsWith(prefix)) || pageItems.some((pageItem) => pageItem.id === item.id)) {
+      remove.add(item.id);
+    }
+  }
+  for (const id of pageCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
+  for (const id of messageIdCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
+  return [...remove];
+}
+
+// True when the page carries the running turn's own heading AND its output, so
+// the replay rebuild must yield: the page's newest user row is the running turn
+// (historyTurn === totalTurns) and rows after it are that turn's durable
+// output. Judging by the page alone is deliberate — the live rebuild may have
+// already streamed text when the page lands (field log bfb949b2: a 133-char
+// rebuilt row was mounted at that instant), so requiring an empty rebuild would
+// silently disable the guard exactly when it is needed.
+// A rebuild row carrying the backend's still-open turn id proves that turn is
+// unfinished, so a page ending at a merely-persisted turn must not claim it.
+export function pageSupersedesInFlightTurn(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+  totalTurns?: number,
+  openTurnId?: string,
+): boolean {
+  if (typeof totalTurns !== "number" || totalTurns <= 0) return false;
+  if (openTurnId && liveItems.some((item) => liveItemTurnId(item.id) === openTurnId)) return false;
+  let heading = -1;
+  for (let i = pageItems.length - 1; i >= 0; i -= 1) {
+    if (pageItems[i].kind === "user") { heading = i; break; }
+  }
+  if (heading < 0) return false;
+  if ((pageItems[heading] as { historyTurn?: number }).historyTurn !== totalTurns) return false;
+  for (let i = heading + 1; i < pageItems.length; i += 1) {
+    const kind = pageItems[i].kind;
+    if (kind === "assistant" || kind === "tool") return true;
+  }
+  return false;
+}
+
+// Rows whose content duplicates an earlier row (same kind + content) — the
+// long-term net for low-frequency double-render reports.
+export function duplicateItemRows(items: readonly SignatureItem[]): SignatureItem[] {
+  const seen = new Set<string>();
+  const dupes: SignatureItem[] = [];
+  for (const item of items) {
+    const signature = itemSignature(item);
+    if (seen.has(signature)) dupes.push(item);
+    else seen.add(signature);
+  }
+  return dupes;
+}
+
+// Arbitrary-position duplicate detection between two item lists (multiset
+// match). Unlike duplicateLiveItemIds, which only matches a page suffix
+// against a live prefix, this detects duplicates regardless of position.
+// The returned ids belong to the second list (b).
+// allowedKinds restricts which b-kinds may be reported: the reducer's fallback
+// dedup uses ["tool"] only — same-id tool rows are safe to drop, while
+// signature-based removal of user/assistant rows would tear a live turn's
+// user-assistant pairing (orphaned assistant loses its turn-actions) or delete
+// a not-yet-persisted live user message whose text merely matches an earlier
+// page row. user/notice/assistant page-coverage cleanup lives in
+// replaceRemoveIds (count-guarded, page-turn-aware).
+export function findDuplicateItemIds(
+  a: readonly SignatureItem[],
+  b: readonly SignatureItem[],
+  allowedKinds?: readonly string[],
+): string[] {
+  const counts = new Map<string, number>();
+  const aIds = new Set<string>();
+  for (const item of a) {
+    aIds.add(item.id);
+    const signature = itemSignature(item);
+    counts.set(signature, (counts.get(signature) ?? 0) + 1);
+  }
+  const dupes: string[] = [];
+  for (const item of b) {
+    // Same id is unconditionally a duplicate (the page owns that row); the
+    // kind whitelist only guards signature matches, so a live row of a paired
+    // turn is never dropped on text equality alone (turn-actions protection).
+    if (aIds.has(item.id)) {
+      dupes.push(item.id);
+      continue;
+    }
+    if (allowedKinds !== undefined && !allowedKinds.includes(item.kind)) continue;
+    const signature = itemSignature(item);
+    const remaining = counts.get(signature) ?? 0;
+    if (remaining > 0) {
+      counts.set(signature, remaining - 1);
+      dupes.push(item.id);
+    }
+  }
+  return dupes;
+}
+
+// Assert that an item list contains no duplicate IDs. Throws so duplicate-
+// render regressions are caught during development and CI instead of
+// surfacing as user-visible double rows. Production bundles short-circuit
+// (import.meta.env.PROD is a compile-time constant here): a live session must
+// never crash on a legal id-reuse window — production observability lives in
+// the items.dupes diagnostics.
+export function assertNoDuplicateItems(items: readonly SignatureItem[], label: string): void {
+  if ((import.meta as { env?: { PROD?: boolean } }).env?.PROD === true) return;
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (seen.has(item.id)) {
+      throw new Error(`[${label}] duplicate item id: ${item.id} (kind=${item.kind})`);
+    }
+    seen.add(item.id);
+  }
+}
+
+// The assistant row owning the page's in-flight turn: walk the tail for the
+// newest unfinished tool row and take the nearest assistant row before it. A
+// tail that already starts a newer turn (user/assistant) has no owner.
+export function pageInFlightAssistantId(items: readonly SignatureItem[]): string | undefined {
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    if (item.kind === "tool" && item.status !== "done" && item.status !== "error") {
+      for (let j = i - 1; j >= 0; j -= 1) {
+        if (items[j].kind === "assistant") return items[j].id;
+      }
+      return undefined;
+    }
+    if (item.kind === "assistant" || item.kind === "user") return undefined;
+  }
+  return undefined;
+}
+
+// Keeps a still-present pointer, otherwise re-points at the page's in-flight
+// assistant row — a dangling pointer would rebuild a tail row on next delta.
+export function pageAssistantPointer(current: string | undefined, pageItems: readonly SignatureItem[]): string | undefined {
+  let askBoundaryIndex = -1;
+  for (let i = pageItems.length - 1; i >= 0; i -= 1) {
+    const item = pageItems[i];
+    if ((item.kind === "tool" && item.name === "ask") || (item.kind === "notice" && item.decisionReceipt?.kind === "ask")) {
+      askBoundaryIndex = i;
+      break;
+    }
+  }
+  const pointer = current && pageItems.some((item) => item.kind === "assistant" && item.id === current)
+    ? current
+    : pageInFlightAssistantId(pageItems);
+  const pointerIndex = pageItems.findIndex((item) => item.kind === "assistant" && item.id === pointer);
+  // Ask separates the segment that asked from the one that resumes.
+  return pointerIndex > askBoundaryIndex ? pointer : undefined;
+}
+
+// Page tool rows are written when the call starts; an in-flight tool the live
+// stream still reports as running is the stronger evidence, so the page's
+// "stopped" placeholder must not downgrade it.
+export function liftLiveToolStatus<T extends SignatureItem>(pageItems: readonly T[], liveItems: readonly SignatureItem[]): T[] {
+  const liveById = new Map(liveItems.map((it) => [it.id, it]));
+  return pageItems.map((pageItem) => {
+    if (pageItem.kind !== "tool" || pageItem.status !== "stopped") return pageItem;
+    const live = liveById.get(pageItem.id);
+    return live?.kind === "tool" && live.status === "running"
+      ? { ...pageItem, status: "running" as const }
+      : pageItem;
+  });
+}
+
+// Terminal frontend rows (optimistic submits, steer notices) whose content the
+// page already carries. These have frontend-local ids (uN/sN) that never match
+// the page's ids, so the id-based removal leaves them behind and the page row
+// plus the frontend row render the same message twice (observed: a mid-turn
+// insert duplicated at the bottom until a tab switch rebuilt the state). Count
+// based: repeated identical texts only consume as many live rows as the page
+// actually carries, so a second, not-yet-persisted submit keeps its row.
+export function pageCoveredLiveItemIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): string[] {
+  const covered = new Map<string, number>();
+  for (const item of pageItems) {
+    const signature = itemSignature(item);
+    covered.set(signature, (covered.get(signature) ?? 0) + 1);
+  }
+  const out: string[] = [];
+  for (const item of liveItems) {
+    if (item.kind !== "user" && item.kind !== "notice") continue;
+    const signature = itemSignature(item);
+    const remaining = covered.get(signature) ?? 0;
+    if (remaining <= 0) continue;
+    covered.set(signature, remaining - 1);
+    out.push(item.id);
+  }
+  return out;
+}
+
+// The page row and the live row for one message carry the same messageID once
+// the backend mints it before sampling: where both sides have it the page owns
+// the row. Rows without an id (legacy, frontend-local) are never matched.
+export function messageIdCoveredLiveItemIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): string[] {
+  const pageIds = new Set<string>();
+  for (const item of pageItems) {
+    if (item.messageID) pageIds.add(item.messageID);
+  }
+  if (pageIds.size === 0) return [];
+  const out: string[] = [];
+  for (const item of liveItems) {
+    if (item.kind !== "assistant") continue;
+    if (item.messageID && pageIds.has(item.messageID)) out.push(item.id);
+  }
+  return out;
 }
 
 export function sameSessionPlaceholderItems<T>(

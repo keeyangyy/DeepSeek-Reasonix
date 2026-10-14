@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import assert from 'node:assert/strict';
 const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost', pretendToBeVisual: true });
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, Node: dom.window.Node, HTMLElement: dom.window.HTMLElement, requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window), cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window), IS_REACT_ACT_ENVIRONMENT: true });
+Object.defineProperty(globalThis, "navigator", { configurable: true, value: dom.window.navigator });
 window.HTMLDialogElement.prototype.showModal = function() { this.setAttribute('open',''); this.querySelector('input')?.focus(); };
 const { createRoot } = await import('react-dom/client');
 await import('../components/ProviderModelDialog');
