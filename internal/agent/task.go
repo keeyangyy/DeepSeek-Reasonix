@@ -570,15 +570,16 @@ func (r *ReadOnlyTaskTool) Execute(ctx context.Context, args json.RawMessage) (s
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("invalid args: %w", err)
 	}
-	// Every entry point compiles to a spec and runs through RunProfileSpec, so a
-	// boundary added there cannot be missed by one caller. read_only_task keeps
-	// its own promise of no durable side effects through Ephemeral.
+	// Every entry point compiles to a spec and runs through RunProfileSpec.
+	// read_only_task adds StatusOnly: a status sidecar with no transcript body,
+	// so the run is visible while it works yet leaves nothing readable behind.
 	spec, err := r.task.buildTaskSpec(ctx, p.Prompt, p.Description, "", nil, p.Tools, p.MaxSteps, p.Model, p.Effort, "", "", false, true)
 	if err != nil {
 		return "", err
 	}
 	spec.Worker.SystemPrompt = DefaultReadOnlyTaskSystemPrompt
 	spec.Context.Ephemeral = true
+	spec.Context.StatusOnly = true
 	return r.task.RunProfileSpec(ctx, spec)
 }
 
@@ -683,7 +684,7 @@ func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profi
 			return ProfileExecSpec{}, err
 		}
 		spec.Grant.WritePaths = claims
-		if requireClaim && claims.Empty() {
+		if len(writePaths) > 0 && claims.Empty() {
 			return ProfileExecSpec{}, fmt.Errorf("writer claim resolved empty")
 		}
 	} else if len(writePaths) > 0 {
@@ -696,10 +697,10 @@ func (t *TaskTool) resolveWriterClaims(writePaths []string, requireClaim bool) (
 	if len(writePaths) > 0 {
 		return NormalizeWritePaths(t.workspaceRoot, writePaths)
 	}
-	if !requireClaim {
-		return WritePathSet{}, nil
-	}
-	return WholeWorkspaceWriteClaim(t.workspaceRoot)
+	// 无 write_paths 的 writer 不再推断 whole-workspace：推断式声明让此类
+	// 子代理全局互斥串行并锁死主 agent 写工具。空声明仅受
+	// max_parallel_writers 上限；显式 whole-workspace 互斥保留。
+	return WritePathSet{}, nil
 }
 
 // RunProfileSpec executes a unified profile/task specification. Shared by task,
@@ -757,10 +758,11 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	modelRef, effortRef := spec.Worker.Model, spec.Worker.Effort
 	usageModelRef := t.usageModelRef(modelRef, effortRef)
 	parentID, parentSink, _, _ := CallContext(ctx)
-	run, err := t.prepareTranscriptRunWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Context.ContinueFrom, spec.Context.ForkFrom, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
+	run, err := t.prepareTranscriptRunWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Context.ContinueFrom, spec.Context.ForkFrom, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name, SubagentDispatchLabel(spec.Worker.Name, spec.Task.Description, spec.Task.Objective))
 	if err != nil {
 		return "", err
 	}
+	t.markDispatchRunning(run, spec.Context.StatusOnly)
 	prov, pricing, ctxWin, err := t.resolveSubSessionRuntime(modelRef, effortRef)
 	if err != nil {
 		return t.failBeforeSubagentRelease(run, fmt.Errorf("sub-agent profile: %w", err))
@@ -777,16 +779,6 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		WritePaths: spec.Grant.WritePaths,
 		Nested:     spec.Sched.Nested,
 		Label:      firstNonEmpty(spec.Task.Description, spec.Worker.Name, "task"),
-	}
-	// Defensive fallback for callers that manually construct a background spec
-	// instead of going through buildTaskSpec.
-	if isWriter && spec.Grant.WritePaths.Empty() && spec.Sched.RunInBackground {
-		whole, werr := WholeWorkspaceWriteClaim(t.workspaceRoot)
-		if werr != nil {
-			return t.failBeforeSubagentRelease(run, werr)
-		}
-		acquireReq.WritePaths = whole
-		spec.Grant.WritePaths = whole
 	}
 
 	recoveryTaskID := subagentRecoveryTaskID(ctx, run.Ref)
@@ -867,13 +859,6 @@ func (t *TaskTool) runBackgroundProfileSpec(ctx context.Context, spec ProfileExe
 		releaseStart = func() {}
 	}
 	label := firstNonEmpty(spec.Task.Description, spec.Worker.Name, "task")
-	if t.transcripts != nil && run != nil && run.Ref != "" {
-		if err := t.transcripts.MarkRunning(run); err != nil {
-			releaseStart()
-			result, saveErr := t.failBeforeSubagentRelease(run, err)
-			return result, saveErr, false
-		}
-	}
 	writerRegistered := false
 	if mutationObserver != nil && backgroundWriter {
 		turn := mutationObserver.OwnershipTurn()
@@ -948,7 +933,7 @@ func (t *TaskTool) bashCanEnforceWriteRoots() bool {
 	return false
 }
 
-func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *tool.Registry, modelRef, effortRef, parentSession, parentID, continueFrom, legacyForkFrom, systemPrompt, kind, name string) (*SubagentRun, error) {
+func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *tool.Registry, modelRef, effortRef, parentSession, parentID, continueFrom, legacyForkFrom, systemPrompt, kind, name, label string) (*SubagentRun, error) {
 	continueFrom = strings.TrimSpace(continueFrom)
 	legacyForkFrom = strings.TrimSpace(legacyForkFrom)
 	parentSession = strings.TrimSpace(parentSession)
@@ -977,6 +962,7 @@ func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *t
 	spec := SubagentSpec{
 		Kind:             kind,
 		Name:             name,
+		Label:            label,
 		WorkspaceRoot:    t.workspaceRoot,
 		ParentSession:    parentSession,
 		ParentToolCallID: parentID,
@@ -994,6 +980,12 @@ func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *t
 		return t.transcripts.PrepareLegacyForkFrom(legacyForkFrom, spec)
 	}
 	return t.transcripts.PrepareFresh(spec)
+}
+
+// markDispatchRunning records a run as running before execution, so the status
+// strip (which reads only the sidecar) can name it from the first moment.
+func (t *TaskTool) markDispatchRunning(run *SubagentRun, statusOnly bool) {
+	MarkDispatchRunning(t.transcripts, run, statusOnly)
 }
 
 func childToolIdentityContext(ctx context.Context) context.Context {

@@ -37,9 +37,6 @@ func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider
 		if plan.releaseParentWrite != nil {
 			plan.releaseParentWrite()
 		}
-		if plan.releaseLease != nil {
-			plan.releaseLease()
-		}
 		if plan.resolvedMeta == nil {
 			return
 		}

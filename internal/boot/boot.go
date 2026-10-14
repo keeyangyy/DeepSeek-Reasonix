@@ -1295,7 +1295,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		// the child model's own vision capability. Text-only children retain the
 		// attachment metadata locally but never receive image parts on the wire.
 		childCtx := agent.WithUserImages(sctx, agent.SubagentImageCandidates(sctx))
-		return runReadOnlySkillSession(childCtx, prov, subReg, task, runOptions, agent.NestedSink(sctx, event.Discard), sysPrompt, agent.RunReadOnlySubAgentWithSession)
+		return runReadOnlySkillSession(childCtx, prov, subReg, task, runOptions, agent.NestedSink(sctx, event.Discard), agent.RunReadOnlySubAgentWithSession, subagentStore, readOnlyStatusSpec(sctx, sk.Name, task, root, sysPrompt, usageModelRef, effortRef))
 	}
 	// Writer-capable subagent skills reuse the sub-agent machinery via this
 	// runner: an isolated loop with the skill body as system prompt, a tool set
@@ -1303,19 +1303,13 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// per-skill model, and resumable transcripts when the parent session supports
 	// them. Its tool activity nests under the invoking call, like `task`.
 	skillRunner := func(sctx context.Context, sk skill.Skill, task string, runOpts skill.SubagentRunOptions) (string, error) {
-		// Writer skills without write_paths claim the whole workspace so they
-		// cannot race fleet/task writers that declared disjoint paths.
+		// Writer skills without write_paths take no workspace-wide claim so
+		// they never serialize against fleet/task writers (2026-09-22
+		// claim-scope fix); only declared paths are reserved.
 		acq := agent.AcquireRequest{
 			Writer: !sk.ReadOnly,
 			Nested: agent.SubagentDepth(sctx) > 0,
 			Label:  sk.Name,
-		}
-		if !sk.ReadOnly {
-			whole, werr := agent.WholeWorkspaceWriteClaim(root)
-			if werr != nil {
-				return "", fmt.Errorf("subagent skill %q write claim: %w", sk.Name, werr)
-			}
-			acq.WritePaths = whole
 		}
 		releaseSlot, err := subagentScheduler.Acquire(sctx, acq)
 		if err != nil {
@@ -1375,6 +1369,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			spec := agent.SubagentSpec{
 				Kind:             "skill",
 				Name:             sk.Name,
+				Label:            agent.SubagentDispatchLabel(sk.Name, "", task),
 				WorkspaceRoot:    root,
 				ParentSession:    parentSession,
 				ParentToolCallID: parentID,
@@ -1394,6 +1389,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			if prepErr != nil {
 				return "", prepErr
 			}
+			// Mark the run running before execution: the strip reads only the
+			// sidecar. Best-effort, like the task path.
+			agent.MarkDispatchRunning(subagentStore, run, false)
 		}
 		defer run.Release()
 		steps := maxSteps

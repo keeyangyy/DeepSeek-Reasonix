@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 )
 
 // prepareWriteCoordination resolves the real execution target, then acquires
@@ -19,16 +18,6 @@ func (a *Agent) prepareWriteCoordination(ctx context.Context, plan *toolCallPlan
 			plan.runArgs = json.RawMessage(`{}`)
 		}
 	}
-	if (plan.effects.WorkspaceMutation || plan.hooksMayMutateWorkspace) && a.svc.workspaceLease != nil {
-		release, err := a.acquireWorkspaceLease(ctx, plan)
-		if err != nil {
-			return toolOutcome{
-				output:  fmt.Sprintf("blocked: the workspace did not become available for writing: %v", err),
-				blocked: true, errMsg: "blocked: workspace write lease unavailable",
-			}, true
-		}
-		plan.releaseLease = release
-	}
 	release, err := a.reserveCoordinatedParentWrite(plan)
 	if err != nil {
 		return writeClaimBlockedOutcome(err), true
@@ -38,38 +27,10 @@ func (a *Agent) prepareWriteCoordination(ctx context.Context, plan *toolCallPlan
 }
 
 func (a *Agent) reserveCoordinatedParentWrite(plan *toolCallPlan) (func(), error) {
-	if plan.hooksMayMutateWorkspace &&
-		a.svc.writeScheduler != nil && a.subagentDepth == 0 {
-		claim, err := WholeWorkspaceWriteClaim(a.writeWorkspaceRoot)
-		if err != nil {
-			return func() {}, err
-		}
-		return a.svc.writeScheduler.ReserveParentWrite(claim)
-	}
+	// Hooks no longer force a whole-workspace reservation: that serialized
+	// every tool call against a running writer. The reservation now derives
+	// from the tool's own declared paths; opaque tools declare none.
 	return a.reserveParentWrite(plan.runTool, plan.runArgs, !plan.effects.WorkspaceMutation)
-}
-
-func (a *Agent) acquireWorkspaceLease(ctx context.Context, plan *toolCallPlan) (func(), error) {
-	noop := func() {}
-	if a == nil || a.svc.workspaceLease == nil || plan == nil || plan.runTool == nil {
-		return noop, nil
-	}
-	// Tool hooks are arbitrary user shell code, so their write surface cannot be
-	// narrowed to the concrete tool's path arguments.
-	if plan.hooksMayMutateWorkspace {
-		return a.svc.workspaceLease.HoldWrite(ctx)
-	}
-	name := plan.runTool.Name()
-	if pathBoundWriterNames[name] {
-		paths, err := extractWritePathsFromArgs(name, a.writeWorkspaceRoot, plan.runArgs)
-		if err == nil && len(paths) > 0 {
-			for i := range paths {
-				paths[i] = resolveMaybeRelative(a.writeWorkspaceRoot, paths[i])
-			}
-			return a.svc.workspaceLease.HoldWriteForPaths(ctx, paths)
-		}
-	}
-	return a.svc.workspaceLease.HoldWrite(ctx)
 }
 
 func (a *Agent) applyLiveWriteReservation(ctx context.Context, plan *toolCallPlan) (toolOutcome, bool) {
@@ -80,30 +41,22 @@ func (a *Agent) applyLiveWriteReservation(ctx context.Context, plan *toolCallPla
 	if id == 0 {
 		return toolOutcome{}, false
 	}
+	if !plan.effects.WorkspaceMutation || plan.hooksMayMutateWorkspace {
+		return toolOutcome{}, false
+	}
 	name := plan.runTool.Name()
-	if plan.hooksMayMutateWorkspace {
-		if err := a.svc.writeScheduler.MarkOpaque(id); err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
+	if !pathBoundWriterNames[name] {
+		// Bash, MCP, and hook-driven writers cannot declare concrete targets.
+		// They realize no claim, so a sub-agent running them never serializes
+		// against sibling writers (2026-09-22 claim-scope fix).
 		return toolOutcome{}, false
 	}
-	if !plan.effects.WorkspaceMutation {
-		return toolOutcome{}, false
+	claim, err := parentWriteReservation(a.writeWorkspaceRoot, name, plan.runArgs)
+	if err != nil {
+		return writeClaimBlockedOutcome(err), true
 	}
-	if pathBoundWriterNames[name] {
-		claim, err := parentWriteReservation(a.writeWorkspaceRoot, name, plan.runArgs)
-		if err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
-		if err := a.svc.writeScheduler.Realize(id, claim); err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
-		return toolOutcome{}, false
-	}
-	if parentWriteGuardTarget(name) {
-		if err := a.svc.writeScheduler.MarkOpaque(id); err != nil {
-			return writeClaimBlockedOutcome(err), true
-		}
+	if err := a.svc.writeScheduler.Realize(id, claim); err != nil {
+		return writeClaimBlockedOutcome(err), true
 	}
 	return toolOutcome{}, false
 }

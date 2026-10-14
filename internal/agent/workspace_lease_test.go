@@ -66,7 +66,7 @@ func deliveryLeaseTestAgent(t *testing.T, owner *workspacelease.Owner, tools ...
 	return a
 }
 
-func TestDeliveryWriterWaitsBeforeToolExecutionButReaderDoesNot(t *testing.T) {
+func TestDeliveryWriterRunsWithoutWorkspaceLease(t *testing.T) {
 	root, locks := t.TempDir(), t.TempDir()
 	first, err := workspacelease.New(root, locks, nil)
 	if err != nil {
@@ -97,17 +97,14 @@ func TestDeliveryWriterWaitsBeforeToolExecutionButReaderDoesNot(t *testing.T) {
 
 	hooks := &workspaceLeaseTestHooks{}
 	a.svc.hooks = hooks
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
-	defer cancel()
-	outcome := a.executeOne(ctx, &a.turn, providerToolCall("write", writer.Name()))
-	if !outcome.blocked || outcome.errMsg != "blocked: workspace write lease unavailable" {
-		t.Fatalf("writer outcome = %+v, want lease block", outcome)
+	outcome := a.executeOne(context.Background(), &a.turn, providerToolCall("write", writer.Name()))
+	// 新语义：workspace 级写锁已移除（多会话同项目运行命令互锁被判定为
+	// 鸡肋，且用户不会让多个会话同时写同一文件），writer 不再等待 lease。
+	if outcome.blocked {
+		t.Fatalf("writer outcome = %+v, want immediate execution without workspace lease", outcome)
 	}
-	if got := writer.calls.Load(); got != 0 {
-		t.Fatalf("writer executed %d times before lease acquisition", got)
-	}
-	if got := hooks.preCalls.Load(); got != 0 {
-		t.Fatalf("PreToolUse ran %d times before lease acquisition", got)
+	if got := writer.calls.Load(); got != 1 {
+		t.Fatalf("writer executed %d times, want 1", got)
 	}
 }
 
