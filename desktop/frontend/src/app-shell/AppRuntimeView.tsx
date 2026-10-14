@@ -20,6 +20,7 @@ import { AppRuntimeEffects } from "../app-runtime/AppRuntimeEffects";
 import { ThemeBackground } from "../components/ThemeBackground";
 import { AppChrome } from "../components/AppChrome";
 import { SidebarRegion } from "./SidebarRegion";
+import { useThemeQuickSwitch } from "../app-runtime/useThemeQuickSwitch";
 import { TopicbarRegion } from "./TopicbarRegion";
 import { buildTopicbarView, TopicbarActionsStack } from "./TopicbarActionsStack";
 import { DockToggleButton } from "./DockToggleButton";
@@ -93,6 +94,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
   const { core, shell, session, navigation, runtime, local } = props;
   const { state, activeTab, activeTabId, t, locale } = core;
   const { sidebarWorkbench, sidebarCreation, windowsFramelessChrome, managementActive, mainWindowMaximised } = shell;
+  const selectQuickTheme = useThemeQuickSwitch();
   const {
     conversationView, visibleRuntimeState, sidebarImDetailConnection,
     surfaceWorkspacePanelRenderable, surfaceWorkspacePanelGridOpen, surfaceWorkspacePanelOverlay, terminalSurfaceOpen,
@@ -263,6 +265,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
             onToggleSearch: chromeCommands.toggleSidebarSearch,
             onToggle: shellGeometry.toggleSidebar,
             onOpenTopic: navigationCommands.handleOpenTopic,
+            onSelectTheme: selectQuickTheme,
           },
         })} />
 

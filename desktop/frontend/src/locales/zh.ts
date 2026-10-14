@@ -73,6 +73,7 @@ export const zh: Record<DictKey, string> = {
   "sidebar.plugins": "插件",
   "sidebar.scheduledTasks": "定时任务",
   "sidebar.utilityActions": "侧栏工具",
+"sidebar.themeQuickSwitch": "浅色 / 深色",
   "summary.session": "会话摘要",
   "summary.tasks": "任务",
   "summary.refresh": "刷新",
