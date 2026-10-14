@@ -522,7 +522,7 @@ func TestE2EDeleteActiveSessionDoesNotRecreateFiles(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("tool never started")
 	}
 	deleteResp := client.call(t, "session/delete", SessionDeleteParams{SessionID: sid})
@@ -542,7 +542,7 @@ func TestE2EDeleteActiveSessionDoesNotRecreateFiles(t *testing.T) {
 		if pr.StopReason != StopCancelled {
 			t.Fatalf("stopReason = %q, want cancelled", pr.StopReason)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("prompt did not finish after delete")
 	}
 
@@ -597,7 +597,7 @@ func TestE2EApprovalRoundTrip(t *testing.T) {
 	var req frame
 	select {
 	case req = <-client.reqs:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no permission request was raised")
 	}
 	var pr PermissionRequestParams
@@ -689,7 +689,7 @@ func TestE2ECancelMidTurn(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("tool never started")
 	}
 	client.notify("session/cancel", SessionCancelParams{SessionID: sid})
@@ -701,7 +701,7 @@ func TestE2ECancelMidTurn(t *testing.T) {
 		if pr.StopReason != StopCancelled {
 			t.Errorf("stopReason = %q, want cancelled", pr.StopReason)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("cancel did not end the turn")
 	}
 	close(releaseTool) // let the tool goroutine unwind

@@ -323,7 +323,7 @@ func TestE2ESessionModes(t *testing.T) {
 		t.Fatalf("session/set_mode: %+v", setResp.Error)
 	}
 	// The switch is confirmed with a current_mode_update notification.
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case n := <-client.notifs:

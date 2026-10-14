@@ -401,7 +401,7 @@ func (c *rpcClient) call(t *testing.T, method string, params any) frame {
 	select {
 	case f := <-c.callAsync(method, params):
 		return f
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second): // was 2s; a loaded Windows CI runner exceeded 2s on session/new (test/full flake), so wait a generous bounded 10s
 		t.Fatalf("%s: timed out", method)
 		return frame{}
 	}
@@ -472,7 +472,7 @@ func (c *orderedRPCClient) next(t *testing.T) frame {
 			t.Fatal("ACP output closed")
 		}
 		return f
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for ACP frame")
 		return frame{}
 	}
@@ -550,7 +550,7 @@ func drainPrompt(t *testing.T, c *rpcClient, promptCh chan frame) ([]frame, fram
 		// persistence path. Loaded Windows release runners can leave that
 		// asynchronous pipeline idle for more than two seconds, so keep a
 		// generous but bounded responsiveness limit for the end-to-end helper.
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("session/prompt: timed out")
 		}
 	}
@@ -765,7 +765,7 @@ func TestServeAdvertisesAndExpandsCustomCommands(t *testing.T) {
 				advertised = true
 			}
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for available_commands_update")
 	}
 	if !advertised {
@@ -791,7 +791,7 @@ func TestServeAdvertisesAndExpandsCustomCommands(t *testing.T) {
 		if got != "Review src/main.go" {
 			t.Fatalf("runner input = %q, want expanded command", got)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("runner did not receive prompt")
 	}
 }
@@ -1208,7 +1208,7 @@ func TestServeSessionConfigQueuesDuringActivePrompt(t *testing.T) {
 	})
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("prompt never started")
 	}
 
@@ -1275,7 +1275,7 @@ func TestServeSessionConfigRejectsBackgroundJobsWhileIdle(t *testing.T) {
 	}()
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("background job never started")
 	}
 
@@ -1396,7 +1396,7 @@ func TestQueuedRebuildPreservesControllerSideAxisDrift(t *testing.T) {
 	})
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first prompt did not start")
 	}
 	requireDeprecatedConfigNoop(t, client, factory, nr.SessionID, "work_mode", "delivery", 1)
@@ -1459,7 +1459,7 @@ func TestServeQueuedSessionConfigDiscardedWhenPromptLeavesBackgroundJob(t *testi
 			})
 			select {
 			case <-startedJob:
-			case <-time.After(2 * time.Second):
+			case <-time.After(10 * time.Second):
 				t.Fatal("background job never started")
 			}
 			select {
@@ -1487,7 +1487,7 @@ func TestServeQueuedSessionConfigDiscardedWhenPromptLeavesBackgroundJob(t *testi
 	})
 	select {
 	case <-startedTurn:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("prompt never started")
 	}
 	setResp := client.call(t, "session/set_config_option", SetSessionConfigOptionParams{
@@ -1569,7 +1569,7 @@ func TestServeSessionConfigRejectsPendingAsk(t *testing.T) {
 	var req frame
 	select {
 	case req = <-client.reqs:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("ask request was not sent to client")
 	}
 
@@ -1769,7 +1769,7 @@ func TestServeCancel(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("prompt never started")
 	}
 	client.notify("session/cancel", SessionCancelParams{SessionID: nr.SessionID})
@@ -1781,7 +1781,7 @@ func TestServeCancel(t *testing.T) {
 		if pr.StopReason != StopCancelled {
 			t.Errorf("stopReason = %q, want cancelled", pr.StopReason)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("cancel did not end the prompt")
 	}
 }
@@ -1808,7 +1808,7 @@ func TestServeSteerInjectsIntoActivePrompt(t *testing.T) {
 	})
 	select {
 	case <-barrier.started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("prompt never reached the tool boundary")
 	}
 
@@ -1880,7 +1880,7 @@ func TestServeRejectsConcurrentPromptForSameSession(t *testing.T) {
 	})
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first prompt never started")
 	}
 
@@ -1901,7 +1901,7 @@ func TestServeRejectsConcurrentPromptForSameSession(t *testing.T) {
 		if resp.Error != nil {
 			t.Fatalf("first prompt errored: %+v", resp.Error)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("first prompt did not finish")
 	}
 }
@@ -1967,7 +1967,7 @@ func TestSessionDeleteWithStuckJobReturnsAfterSingleGrace(t *testing.T) {
 		t.Fatalf("stuck ACP transcript should remain until delayed cleanup: %v", err)
 	}
 	releaseJob()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for agent.IsCleanupPending(path) {
 		if time.Now().After(deadline) {
 			t.Fatalf("cleanup-pending marker was not cleared after stuck job release")
@@ -2118,7 +2118,7 @@ func startNonCooperativeACPJob(t *testing.T, jm *jobs.Manager, sessionPath strin
 	})
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("background job never started")
 	}
 	released := false
