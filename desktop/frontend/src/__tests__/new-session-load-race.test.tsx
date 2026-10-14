@@ -405,7 +405,8 @@ const reusedTabPage = {
 };
 const reusedEmptyPage = { messages: [], startTurn: 0, endTurn: 0, totalTurns: 0, hasOlder: false };
 window.go.main.App = {
-  RegisterNavigationIntent: async () => {},
+RegisterNavigationIntent: async () => {},
+      LatestCompactionForTab: async () => null,
   ListTabs: async () => [reusedTab],
   MetaForTab: async () => meta({ sessionPath: "/sessions/new.jsonl" }),
   ContextUsageForTab: async () => context,
@@ -464,7 +465,8 @@ let raceBackendActiveId = raceTabA.id;
 const raceHistoryCalls: string[] = [];
 const raceSetActiveCalls: string[] = [];
 window.go.main.App = {
-  RegisterNavigationIntent: async () => {},
+RegisterNavigationIntent: async () => {},
+      LatestCompactionForTab: async () => null,
   ListTabs: async () => [raceTabA, raceTabB, raceBlank].map((tab) => ({ ...tab, active: tab.id === raceBackendActiveId })),
   MetaForTab: async (tabID: string) => meta({ sessionPath: `/sessions/${tabID}.jsonl` }),
   ContextUsageForTab: async () => context,
@@ -537,7 +539,8 @@ const staleProjectA = "/repo/project-a";
 const targetProjectB = "/repo/project-b";
 const ensureBlankSurfaceCalls: Array<{ scope: string; workspaceRoot: string }> = [];
 window.go.main.App = {
-  RegisterNavigationIntent: async () => {},
+RegisterNavigationIntent: async () => {},
+      LatestCompactionForTab: async () => null,
   ListTabs: async () => guardedStartupTabs.promise,
   MetaForTab: async (tabID: string) => tabID === "tab-new"
     ? meta({ cwd: targetProjectB, workspaceRoot: targetProjectB, workspaceName: "project-b", workspacePath: targetProjectB })
