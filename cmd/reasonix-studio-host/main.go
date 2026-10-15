@@ -85,7 +85,30 @@ func studioInstall(shell shellIdentity) *update.Install {
 	if strings.TrimSpace(shell.version) == "" {
 		return nil
 	}
-	return &update.Install{Version: shell.version, Layout: update.At(shell.exe, update.StudioLine())}
+	install := &update.Install{Version: shell.version, Layout: update.At(shell.exe, update.StudioLine())}
+	install.Mine = forkCatalog()
+	return install
+}
+
+// The fork publishes its own Studio releases in Studio's shape, signed with its
+// own key. studio-latest is a fixed tag the fork uploads the catalog to, so the
+// address never changes between releases. What the panel lists is decided when
+// the catalog is written (tools/catalogfilter), so a cap here would be a
+// second, disagreeing answer to the same question.
+const (
+	forkCatalogURL = "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/studio-latest/versions.json"
+	// forkCatalogRows is MineCatalog.MaxEntries, where 0 means no cap of its own.
+	forkCatalogRows = 0
+)
+
+// forkCatalog is this fork's own catalog: Studio's shape, this fork's key.
+func forkCatalog() *update.MineCatalog {
+	return &update.MineCatalog{
+		Name:       "mine",
+		URL:        forkCatalogURL,
+		PublicKey:  update.ForkPublicKey(),
+		MaxEntries: forkCatalogRows,
+	}
 }
 
 // studioUpdateHost is the capability this kernel serves installs through, and
@@ -104,6 +127,7 @@ func studioUpdateHost(shell shellIdentity, owner *shellOwner) appupdate.Capabili
 		Running:     shell.version,
 		Line:        update.StudioLine(),
 		Application: application,
+		Mine:        forkCatalog(),
 	})
 }
 

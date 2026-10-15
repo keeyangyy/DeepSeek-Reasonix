@@ -42,17 +42,23 @@ func hubFor(t *testing.T, rt *answersCatalog, running string) VersionHub {
 	return hubOver(context.Background(), Install{Version: running}, &http.Client{Transport: rt})
 }
 
-// Where the fetch lands is not the shell's to choose: a catalog that could be
-// pointed elsewhere would offer to update Studio into another product.
-func TestHubReadsOnlyTheStudioCatalog(t *testing.T) {
+// Where the fetch lands is not a caller's to choose: Studio's catalog is a
+// constant, and a build's own catalog is its own release point. Both are the
+// build's decision; a third address is not.
+func TestHubReadsOnlyTheCatalogsItDeclares(t *testing.T) {
+	const mineCatalog = "https://example.test/mine-versions.json"
 	rt := &answersCatalog{body: twoReleases}
-	hubFor(t, rt, "2.10.0")
+	hubOver(context.Background(), Install{
+		Version: "2.10.0",
+		Mine:    &MineCatalog{Name: "mine", URL: mineCatalog},
+	}, &http.Client{Transport: rt})
 	if len(rt.asked) == 0 {
 		t.Fatal("the hub read no catalog at all")
 	}
+	allowed := map[string]bool{StudioCatalog: true, mineCatalog: true}
 	for _, url := range rt.asked {
-		if url != StudioCatalog {
-			t.Fatalf("fetched %q, want only %q", url, StudioCatalog)
+		if !allowed[url] {
+			t.Fatalf("fetched %q, want only the catalogs this build declares", url)
 		}
 	}
 }
