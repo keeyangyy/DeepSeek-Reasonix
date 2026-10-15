@@ -4,11 +4,13 @@ name: CI
 # kernel changes Studio is built on, so it needs the same kernel gates main-v2
 # has. Studio's own surface (desktop/next, desktop/frontend-next) exists only
 # there and is covered by studio.yml.
+# Fork: studio-mine is this repository's release line. Upstream's studio and
+# main-v2 are never pushed here, so CI would never run without this.
 on:
   push:
-    branches: [main-v2, studio]
+    branches: [studio-mine]
   pull_request:
-    branches: [main-v2, studio]
+    branches: [studio-mine]
 
 permissions:
   contents: read
@@ -26,9 +28,7 @@ jobs:
   # merges. Gated jobs skip only on an explicit `false` output: wrapped in
   # `always()`, a failed `changes` job (or a missing output) makes them run
   # the full matrix instead of silently passing required checks as skipped.
-  # Pushes to main-v2 always run everything. Pull requests run the macOS and
-  # Windows legs only when `platform` is not 'false'; the rule lives in
-  # scripts/ci-platform-scope.sh and fails toward running them.
+  # Pushes to studio-mine always run everything.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -36,14 +36,13 @@ jobs:
       desktop: ${{ steps.filter.outputs.desktop }}
       sdk: ${{ steps.filter.outputs.sdk }}
       scripts: ${{ steps.filter.outputs.scripts }}
-      platform: ${{ steps.filter.outputs.platform }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - id: filter
         run: |
-          code=true; desktop=true; sdk=true; scripts=true; platform=true
+          code=true; desktop=true; sdk=true; scripts=true
           base=""
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -51,7 +50,7 @@ jobs:
             base="${{ github.event.before }}"
           fi
           if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
-            files=$(git diff --name-only --no-renames "$base" HEAD)
+            files=$(git diff --name-only "$base" HEAD)
             if [ -n "$files" ]; then
               code=false; desktop=false; sdk=false; scripts=false
               # Root-module CI: desktop/ is a separate module, so only the
@@ -66,10 +65,9 @@ jobs:
               if echo "$files" | grep -qE '^(sdk/|internal/ext/extension/)'; then sdk=true; fi
               # The release-note tests render every committed Studio note; npm/ holds the publish tests.
               if echo "$files" | grep -qE '^(scripts/|npm/|release-notes/studio/|\.github/workflows/release-studio\.yml$)'; then scripts=true; fi
-              platform=$(git diff -z --name-only --no-renames "$base" HEAD | bash scripts/ci-platform-scope.sh)
             fi
           fi
-          { echo "code=$code"; echo "desktop=$desktop"; echo "sdk=$sdk"; echo "scripts=$scripts"; echo "platform=$platform"; } >> "$GITHUB_OUTPUT"
+          { echo "code=$code"; echo "desktop=$desktop"; echo "sdk=$sdk"; echo "scripts=$scripts"; } >> "$GITHUB_OUTPUT"
 
   release-notes-scripts:
     needs: changes
@@ -97,19 +95,18 @@ jobs:
   # detector reports the diff is unrelated, every step skips and each leg
   # reports success in seconds. `always()` also keeps the legs alive when
   # the changes job itself fails (fail-open: an empty output != 'false').
-  # A pull request with no platform-relevant change moves the macOS and
-  # Windows legs onto an ubuntu runner with every step skipped: the check
-  # names the ruleset requires still report, without a scarce runner.
   test:
     needs: changes
     if: always()
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ github.event_name == 'pull_request' && needs.changes.outputs.platform == 'false' && 'ubuntu-latest' || matrix.os }}
+        # Fork: no macOS runner. macOS left the matrix rather than being kept
+        # as a leg that queues forever.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     env:
-      RUN_STEPS: ${{ github.event_name != 'pull_request' || (needs.changes.outputs.code != 'false' && (matrix.os == 'ubuntu-latest' || needs.changes.outputs.platform != 'false')) }}
+      RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.code != 'false' }}
     steps:
       - if: env.RUN_STEPS == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -308,10 +305,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ github.event_name == 'pull_request' && needs.changes.outputs.platform == 'false' && 'ubuntu-latest' || matrix.os }}
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     env:
-      RUN_STEPS: ${{ github.event_name != 'pull_request' || (needs.changes.outputs.sdk != 'false' && (matrix.os == 'ubuntu-latest' || needs.changes.outputs.platform != 'false')) }}
+      RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.sdk != 'false' }}
     defaults:
       run:
         working-directory: sdk/go
@@ -412,39 +409,13 @@ jobs:
       - name: test -race
         run: go test -race ./...
 
-  # desktop/ is a separate module, so the root macOS matrix above does not
-  # compile it against a real macOS toolchain.
-  desktop-macos:
-    needs: changes
-    if: always() && (github.event_name != 'pull_request' || (needs.changes.outputs.desktop != 'false' && needs.changes.outputs.platform != 'false'))
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: desktop
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: desktop/go.mod
-          cache: true
-          cache-dependency-path: desktop/go.sum
-
-      - name: test
-        run: go test -race ./...
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          version: v2.12.2
-          working-directory: desktop
-          args: --timeout=5m
-
+  # Fork: no macOS runner, so desktop/ is not compiled against a real macOS
+  # toolchain. The Windows leg below still covers the //go:build windows paths.
   # The update helper's versioned-install and uninstall paths are Windows-only
   # (//go:build windows), so the ubuntu leg above never compiles them.
   desktop-windows:
     needs: changes
-    if: always() && (github.event_name != 'pull_request' || (needs.changes.outputs.desktop != 'false' && needs.changes.outputs.platform != 'false'))
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
     runs-on: windows-latest
     defaults:
       run:
@@ -499,7 +470,8 @@ jobs:
       # The step above only type-checks the linux/amd64 build, so every
       # //go:build windows and //go:build darwin file in the tree went unlinted.
       # Both modules cross-check without a toolchain; desktop under darwin does
-      # not, because its watchdog is cgo, so that leg lives in desktop-macos.
+      # not, because its watchdog is cgo — this fork has no macOS runner, so
+      # that leg is dropped rather than moved into a job of its own.
       - name: golangci-lint (cross-platform build tags)
         run: |
           set -euo pipefail
@@ -518,6 +490,8 @@ jobs:
             -ignore 'label "ubuntu-22.04-arm" is unknown' \
             .github/workflows/release-studio.yml \
             .github/workflows/studio-certum-signing-smoke.yml \
+            .github/workflows/release-manual.yml \
+            .github/workflows/release-windows.yml \
             .github/workflows/ci.yml
 
   govulncheck:

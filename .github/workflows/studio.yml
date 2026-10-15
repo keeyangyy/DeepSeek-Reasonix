@@ -1,15 +1,17 @@
 name: Studio
 
 # Studio's own surface — desktop/frontend-next (the SPA) and the Electron shell
-# that serves it — exists only on the studio branch, so it cannot live in ci.yml
-# without failing on main-v2 where neither directory is present. ci.yml covers
-# the kernel; this file covers the frontend build, the desktop module's Go side,
+# that serves it — exists only on the studio-mine branch, so it cannot live in
+# ci.yml without failing where neither directory is present. ci.yml covers the
+# kernel; this file covers the frontend build, the desktop module's Go side,
 # and the packaging contract on real artifacts.
 on:
+  # Fork: studio-mine is this repository's release line; upstream's studio is
+  # never pushed here.
   push:
-    branches: [studio]
+    branches: [studio-mine]
   pull_request:
-    branches: [studio]
+    branches: [studio-mine]
 
 permissions:
   contents: read
@@ -162,30 +164,21 @@ jobs:
           node perf/narrow-rail.mjs
           node perf/selfcheck.mjs branch-tooltip
 
-  # A pull request with no platform-relevant change (scripts/ci-platform-scope.sh)
-  # moves the Windows and macOS legs onto an ubuntu runner with every step
-  # skipped, so the check names still report without a scarce runner. A push to
-  # studio, or a failed `scope`, runs all three.
   desktop:
     name: desktop (${{ matrix.os }})
-    needs: scope
-    if: always()
-    runs-on: ${{ github.event_name == 'pull_request' && needs.scope.outputs.platform == 'false' && matrix.os != 'ubuntu-22.04' && 'ubuntu-latest' || matrix.os }}
-    env:
-      RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.scope.outputs.platform != 'false' || matrix.os == 'ubuntu-22.04' }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        # Fork: no macOS runner.
+        os: [ubuntu-22.04, windows-latest]
     defaults:
       run:
         working-directory: desktop
     steps:
-      - if: env.RUN_STEPS == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - if: env.RUN_STEPS == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: desktop/go.mod
           cache: true
@@ -198,25 +191,21 @@ jobs:
       # carries build dependencies of its own.
       # Same command as `make studio-test`; this job is already in desktop/.
       - name: go test
-        if: env.RUN_STEPS == 'true'
         run: go test ./...
 
-      - if: env.RUN_STEPS == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24"
 
       - name: CUA process and packaging contracts
-        if: env.RUN_STEPS == 'true'
         timeout-minutes: 2
         run: node --test --test-name-pattern=CUA electron/test/unit.mjs
 
       - name: Install Linux native CUA fixture dependencies
-        if: env.RUN_STEPS == 'true' && runner.os == 'Linux'
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb openbox dbus-x11 libgtk-3-dev at-spi2-core
 
       - name: Native CUA application acceptance
-        if: env.RUN_STEPS == 'true'
         timeout-minutes: 6
         shell: bash
         run: |
@@ -231,7 +220,7 @@ jobs:
       # platform-neutral or the Electron bundle cannot ship it. Cross-compiling
       # is host-independent, so once is enough.
       - name: host stays pure Go and platform-neutral
-        if: env.RUN_STEPS == 'true' && runner.os == 'Linux'
+        if: runner.os == 'Linux'
         working-directory: .
         run: |
           for os in windows linux darwin; do
@@ -240,68 +229,31 @@ jobs:
             done
           done
 
-  # The ARM64 leg queues on a scarcer runner pool, so a pull request runs it
-  # only when it touches what the leg verifies; a push to studio always does.
-  # The macOS and Windows package legs follow `platform`, the same rule as the
-  # desktop matrix above.
-  scope:
-    name: package matrix
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.pick.outputs.matrix }}
-      arm64: ${{ steps.pick.outputs.arm64 }}
-      platform: ${{ steps.pick.outputs.platform }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-
-      - id: pick
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          arm64=true
-          platform=true
-          if [ "$EVENT" = pull_request ]; then
-            arm64=false
-            platform=$(git diff -z --name-only --no-renames "$BASE_SHA" HEAD | bash scripts/ci-platform-scope.sh)
-            if git diff --name-only --no-renames "$BASE_SHA" HEAD |
-              grep -qE '^(desktop/electron/|desktop/packaging/|desktop/cmd/update-helper/|desktop/cmd/studio-manifest/|desktop/go\.(mod|sum)$|cmd/reasonix-studio-host/|internal/platform/(update|appupdate)/|go\.(mod|sum)$|scripts/(linux-install-smoke|verify-linux-package|verify-studio-artifacts)\.sh$|scripts/(windows-signing-lib|verify-windows-package|verify-windows-authenticode|install-smoke)\.ps1$|\.github/workflows/(studio|release-studio)\.yml$)'; then
-              arm64=true
-            fi
-          fi
-          legs='[
-            {"os":"macos-latest","arch":"arm64","platform":"darwin"},
-            {"os":"ubuntu-22.04","arch":"amd64","platform":"linux"},
-            {"os":"windows-latest","arch":"amd64","platform":"windows","ebarch":"x64"}
-          ]'
-          if [ "$platform" = false ]; then
-            legs="$(jq -c 'map(select(.platform == "linux"))' <<<"$legs")"
-          elif [ "$arm64" = true ]; then
-            legs="$(jq -c '. + [{"os":"windows-11-arm","arch":"arm64","platform":"windows","ebarch":"arm64"},{"os":"ubuntu-22.04-arm","arch":"arm64","platform":"linux"}]' <<<"$legs")"
-          else
-            legs="$(jq -c . <<<"$legs")"
-          fi
-          {
-            echo "arm64=$arm64"
-            echo "platform=$platform"
-            echo "matrix={\"include\":$legs}"
-          } >> "$GITHUB_OUTPUT"
-
   # The packaging contract, on real artifacts rather than on the config that
   # describes them. Unsigned on purpose: signing and notarization are a
   # distribution concern and belong to the release workflow, and treating their
   # absence as "packaging unverified" is what left macOS and Linux resting on a
   # cross-compile while only Windows had ever produced a package.
+  #
+  # Fork: the legs are written here rather than picked by upstream's `scope`
+  # job. This fork ships Windows amd64 only and has no macOS runner, so the
+  # macOS leg and the Windows ARM64 leg (and the runner-pool-aware picking that
+  # exists for it) are gone.
   package:
     name: package (${{ matrix.os }})
-    needs: scope
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: amd64
+            platform: linux
+          - os: windows-latest
+            arch: amd64
+            platform: windows
+            ebarch: x64
     defaults:
       run:
         shell: bash
@@ -537,27 +489,3 @@ jobs:
             echo "::error::the manifest has no entry for ${{ matrix.platform }}-${{ matrix.arch }}"
             exit 1
           fi
-
-  # The arm64 installer carries one application and no other. Run anywhere but
-  # ARM64 Windows it has to say so and stop, instead of exiting 0 with nothing
-  # installed.
-  arm64-installer-refuses-x64:
-    name: arm64 installer refuses an x64 machine
-    needs: [scope, package]
-    if: needs.scope.outputs.arm64 == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: studio-arm64-installer-ci
-          path: installer
-
-      - name: Run it silently
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $target = Join-Path $env:RUNNER_TEMP 'rx-refused'
-          $run = Start-Process -FilePath installer/ReasonixStudio-windows-arm64-installer.exe -ArgumentList '/S', "/D=$target" -Wait -PassThru
-          Write-Host "exit code $($run.ExitCode)"
-          if ($run.ExitCode -eq 0) { throw 'the arm64 installer exited 0 on an x64 machine' }
-          if (@(Get-ChildItem -Recurse -Force $target -ErrorAction SilentlyContinue).Count -ne 0) { throw 'the arm64 installer wrote into the target on an x64 machine' }
