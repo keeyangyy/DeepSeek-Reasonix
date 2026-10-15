@@ -525,6 +525,23 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Fork: this job sweeps ./... , which includes tests that read what the
+      # kernel produces with the Linux sandbox available. Without the backend
+      # they take the fail-closed path and their committed readings no longer
+      # match, so the job carries the same step the test and race jobs above do.
+      - name: Install and verify Linux sandbox backend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if sysctl -n kernel.unprivileged_userns_clone >/dev/null 2>&1; then
+            sudo sysctl -w kernel.unprivileged_userns_clone=1
+          fi
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc -- true || \
+            echo "::warning::bubblewrap is installed but this runner denies user namespaces; unavailable-backend tests will run fail-closed"
+
       - name: test with coverage
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
 
