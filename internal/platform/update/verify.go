@@ -29,8 +29,9 @@ func Verify(data, sig []byte) error { return verifyWith(publicKey, data, sig) }
 // verifyArtifact is the gate Download gets its artifacts through, indirected
 // only so package tests can sign with a throwaway key: the embedded key's
 // private half exists solely in CI secrets, so nothing else can produce a
-// signature this would accept.
-var verifyArtifact = Verify
+// signature this would accept. The key used is the one the artifact's own
+// catalog declared, so one source cannot speak for another's bytes.
+var verifyArtifact = VerifyWithSource
 
 // PublicKey returns the embedded public key in its canonical two-line text form,
 // so docs/UI can surface it for manual `minisign -Vm <file>` verification.

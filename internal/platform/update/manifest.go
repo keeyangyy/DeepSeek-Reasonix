@@ -21,6 +21,10 @@ type Manifest struct {
 	NativePackages  map[string]Asset `json:"native_packages,omitempty"`   // optional OS package assets, e.g. linux-amd64 → .deb
 	Downloads       map[string]Asset `json:"downloads,omitempty"`         // optional signed human-download assets keyed by exact filename
 	Deltas          map[string]Delta `json:"deltas,omitempty"`            // optional chunked update per PlatformKey; see package delta
+	// sourceKey is the minisign key that verifies this release's artifacts, set
+	// when a catalog entry resolved the manifest. Not part of the wire form: an
+	// empty value means the caller's own key.
+	sourceKey string
 }
 
 // Delta is one platform's chunked update: the signed, zstd-compressed index of

@@ -6,6 +6,8 @@ export interface VersionEntry {
   hasNotes: boolean;
   current: boolean;
   older: boolean;
+  // Names the catalog that published this row; absent is Studio's own.
+  source?: string;
 }
 
 // One release's notes. cached says only where they came from.

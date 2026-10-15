@@ -42,7 +42,7 @@ func serveReleases(t *testing.T, releases ...release) *releaseServer {
 		t.Fatal(err)
 	}
 	restore := verifyArtifact
-	verifyArtifact = func(data, sig []byte) error { return verifyWith(string(pubText), data, sig) }
+	verifyArtifact = func(_ string, data, sig []byte) error { return verifyWith(string(pubText), data, sig) }
 	t.Cleanup(func() { verifyArtifact = restore })
 
 	rs := &releaseServer{}
@@ -226,7 +226,7 @@ func TestDownloadRefusesAManifestForAnotherVersion(t *testing.T) {
 func TestDownloadRefusesAnUnsignedArtifact(t *testing.T) {
 	rs := serveReleases(t, release{"v2.0.0", []byte("artifact")})
 	u := rs.updater(t, "v1.0.0")
-	verifyArtifact = func([]byte, []byte) error { return fmt.Errorf("signature verification failed") }
+	verifyArtifact = func(string, []byte, []byte) error { return fmt.Errorf("signature verification failed") }
 
 	if _, err := u.Download(context.Background(), "v2.0.0", Report{}); err == nil {
 		t.Fatal("an artifact whose signature does not check out must not be cached")

@@ -50,31 +50,9 @@ func (r Report) phase(name string) {
 // ManifestFor resolves a published version to its own immutable manifest. The
 // catalog is the only way in: an entry names that release's <tag>/latest.json,
 // which never moves, so an older version resolves exactly as the newest does.
+// Every catalog this build declares is tried; see manifestFor.
 func (u *Updater) ManifestFor(ctx context.Context, version string) (*Manifest, error) {
-	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL, u.opts.UserAgent)
-	if err != nil {
-		return nil, err
-	}
-	if w, gone := idx.WithdrawnVersion(version); gone {
-		return nil, fmt.Errorf("%w: %s", ErrWithdrawn, w.Version)
-	}
-	for _, e := range idx.Versions {
-		if !SameVersion(e.Version, version) {
-			continue
-		}
-		m, err := FetchManifestAt(ctx, u.opts.HTTP, e.Manifest, u.opts.UserAgent)
-		if err != nil {
-			return nil, err
-		}
-		// The catalog says this tag holds that version; the manifest under it has
-		// to agree, or a mis-published row would install a build the user never
-		// picked from the list.
-		if !SameVersion(m.Version, version) {
-			return nil, fmt.Errorf("update: %s resolves to a manifest for %s", version, m.Version)
-		}
-		return m, nil
-	}
-	return nil, fmt.Errorf("update: %s is not in the published catalog", version)
+	return u.manifestFor(ctx, version)
 }
 
 // Download fetches one published version's artifact for this platform, verifies
@@ -116,9 +94,10 @@ func (u *Updater) DownloadManifest(ctx context.Context, m *Manifest, r Report) (
 	if err != nil {
 		return Cached{}, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
-	// Signature first: the digest is only the manifest's claim about the bytes,
-	// and the manifest is only trustworthy once its artifact has been verified.
-	if err := verifyArtifact(data, sig); err != nil {
+	// Signature first: the digest is only the manifest's claim about the bytes.
+	// The key is the one the catalog that published this version declared, or
+	// Studio's when it named none.
+	if err := verifyArtifact(u.artifactKey(m), data, sig); err != nil {
 		return Cached{}, fmt.Errorf("%w: %w", ErrVerify, err)
 	}
 	c, err := cache.Save(m.Version, asset, data, kind, sig)

@@ -3,8 +3,6 @@ package update
 import (
 	"context"
 	"net/http"
-	"sort"
-	"strings"
 	"time"
 
 	"reasonix/internal/base/netclient"
@@ -12,9 +10,10 @@ import (
 )
 
 // StudioCatalog is Studio's own rollback catalog, published by
-// release-studio.yml. It is a constant rather than something a caller names: a
-// catalog that could be pointed elsewhere is one whose entries would offer to
-// "update" Studio into a different product.
+// release-studio.yml. It stays a constant rather than something a caller
+// names: a catalog that could be pointed elsewhere is one whose entries would
+// offer to "update" Studio into a different product. A build that publishes its
+// own releases declares a second catalog in Install.Mine, beside this one.
 const StudioCatalog = StudioMirror + "/studio/versions.json"
 
 // Install is what a shell knows about itself that the kernel cannot work out.
@@ -25,6 +24,9 @@ const StudioCatalog = StudioMirror + "/studio/versions.json"
 type Install struct {
 	Version string
 	Layout  Layout
+	// Mine is the build's own catalog, listed beside Studio's. nil keeps the
+	// panel upstream-only.
+	Mine *MineCatalog
 }
 
 // VersionEntry is one published release as a version panel shows it.
@@ -35,6 +37,8 @@ type VersionEntry struct {
 	HasNotes    bool   `json:"hasNotes"`
 	Current     bool   `json:"current"`
 	Older       bool   `json:"older"`
+	// Source names the catalog that published this row; "" is Studio's own.
+	Source string `json:"source,omitempty"`
 }
 
 // WithdrawnNote says the running version was pulled after publication and why,
@@ -76,21 +80,17 @@ func Hub(ctx context.Context, in Install) VersionHub {
 }
 
 // hubOver is Hub with the route already decided, so a test can answer the
-// catalog without reaching the network. The catalog URL stays a constant: what
-// is injectable here is how the fetch travels, never where it lands.
+// catalogs without reaching the network. Where they land is not injectable:
+// Studio's catalog is a constant, and a build's own is its release point. Both
+// are read in readCatalogs.
 func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 	hub := VersionHub{Current: in.Version, Pinned: PinnedVersion()}
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
 	defer cancel()
-	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog, UserAgent: UserAgent(in.Version)}).Check(ctx)
-	hub.Latest, hub.Newer, hub.StalePin = st.Latest, st.Newer, st.StalePin
-	hub.Versions = versionRows(st.Entries, in.Version)
-	if st.Withdrawn != nil {
-		hub.Withdrawn = &WithdrawnNote{Version: st.Withdrawn.Version, Reason: st.Withdrawn.Reason}
-	}
-	if err != nil {
-		hub.Err = err.Error()
-	}
+	read := readCatalogs(ctx, in, hub.Pinned, client)
+	hub.Latest, hub.Newer, hub.StalePin = read.latest, read.newer, read.stalePin
+	hub.Withdrawn, hub.Err = read.withdrawn, read.err
+	hub.Versions = versionRowsFor(read.entries, in.Version)
 	return hub.nonNil()
 }
 
@@ -100,24 +100,7 @@ func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 // statement of what runs and its only handle for pinning, so it cannot depend
 // on the network.
 func versionRows(entries []IndexEntry, current string) []VersionEntry {
-	rows := make([]VersionEntry, 0, len(entries)+1)
-	seen := false
-	for _, e := range entries {
-		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt, HasNotes: strings.TrimSpace(e.Notes) != ""}
-		if SameVersion(e.Version, current) {
-			row.Current, seen = true, true
-		} else {
-			row.Older = e.IsOlderThan(current)
-		}
-		rows = append(rows, row)
-	}
-	if !seen && strings.TrimSpace(current) != "" {
-		rows = append(rows, VersionEntry{Version: current, Current: true})
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		return CompareVersions(rows[i].Version, rows[j].Version) > 0
-	})
-	return rows
+	return versionRowsFor(sourceEntries(entries, ""), current)
 }
 
 // nonNil keeps an empty catalog an empty list. A nil slice marshals to null,

@@ -48,6 +48,10 @@ type Options struct {
 	// Application is what a swap replaces where the unit is a bundle. A shell
 	// that is its own executable fills it from update.LocalApplication.
 	Application update.Application
+	// Mine is the build's own catalog, declared beside Studio's. A version it
+	// lists is fetched, verified and installed through it: the panel that lists
+	// a version and the path that installs it have to name the same catalog.
+	Mine *update.MineCatalog
 }
 
 // New returns the capability a hub serves updates through, and nil where
