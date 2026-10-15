@@ -518,6 +518,17 @@ func perseverationRetries(cfg *config.Config, entry *config.ProviderEntry) *int 
 	return cfg.ProgressWatch.PerseverationRetries
 }
 
+// rememberAutoConfirmFrom reads [memory] auto_confirm_* for this build: whether
+// the agent may save a memory of each scope without asking. It is read when the
+// runtime is built, because the gate that decides carries the answer for the
+// session's life.
+func rememberAutoConfirmFrom(cfg *config.Config) control.RememberAutoConfirm {
+	return control.RememberAutoConfirm{
+		Project: cfg.Memory.AutoConfirmProjectRemember,
+		Global:  cfg.Memory.AutoConfirmGlobalRemember,
+	}
+}
+
 func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, label string) control.Options {
 	opts, cfg, root, entry, t := b.opts, b.cfg, b.root, b.model.entry, &b.tools
 	specOptions := t.specOptions
@@ -554,6 +565,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		SkillProfile:                   t.runners.profile,
 		Hooks:                          t.hookRunner,
 		Memory:                         b.prompt.memory,
+		RememberAutoConfirm:            rememberAutoConfirmFrom(cfg),
 		// Read at Close time: freeze chains the extension runtime set onto it.
 		Cleanup:               func() { b.cleanup() },
 		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, entry.APIKey()),

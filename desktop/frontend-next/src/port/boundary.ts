@@ -99,6 +99,16 @@ export interface BrowserToolsSettings {
   path: string;
 }
 
+// The remember-confirmation switch as the user file holds it, one axis per
+// memory scope: a global fact reaches every project, so the two answer apart.
+export interface RememberApprovalSettings {
+  projectAutoConfirm: boolean;
+  projectEffective: boolean;
+  globalAutoConfirm: boolean;
+  globalEffective: boolean;
+  path: string;
+}
+
 export interface AutoArchiveSettings {
   enabled: boolean;
   days: number;

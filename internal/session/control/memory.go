@@ -41,6 +41,10 @@ type memoryManager struct {
 	// what refreshRecalled compares with their files before the next one.
 	recalled   []memory.Memory
 	autoWrites map[[32]byte]int
+	// receipt names the fact the user's switch let a remember call through, so
+	// the write that follows can report it once it has happened. It lives for
+	// one call: a later decision or a management-surface save clears it.
+	receipt string
 
 	// instructions is what the model has of the standing-instruction block. It
 	// rides the turn rather than the prefix: the project's own rules are what

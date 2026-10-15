@@ -1,6 +1,6 @@
 import { SseShell } from "./sse_shell";
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings, RememberApprovalSettings } from "./boundary";
 
 // Where the agent may reach: the permission rules a call is matched against and
 // the sandbox the shell runs in.
@@ -40,6 +40,12 @@ export class SseBoundary extends SseShell {
   }
   saveBrowserTools(enabled: boolean) {
     return this.post0<BrowserToolsSettings>("/browser-tools", { enabled });
+  }
+  rememberApproval() {
+    return this.get<RememberApprovalSettings>("/memory/remember-approval");
+  }
+  saveRememberApproval(switches: Pick<RememberApprovalSettings, "projectAutoConfirm" | "globalAutoConfirm">) {
+    return this.post0<RememberApprovalSettings>("/memory/remember-approval", switches);
   }
   displayCurrency() {
     return this.get<DisplayCurrencySettings>("/display-currency");

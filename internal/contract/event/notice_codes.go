@@ -104,4 +104,6 @@ const (
 	NoticeCodeWebSearchModelRemoved       = "web_search_model_removed"
 	NoticeCodeWebSearchModelUnsupported   = "web_search_model_unsupported"
 	NoticeCodeWebSearchModelNoCredentials = "web_search_model_no_credentials"
+	// A memory was saved without asking, because the user's switch covers it; Detail is the fact's name.
+	NoticeCodeMemorySavedUnasked = "memory_saved_unasked"
 )

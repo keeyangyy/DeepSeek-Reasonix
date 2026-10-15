@@ -84,6 +84,7 @@ type controllerDeps struct {
 	// and write serialization behind its own locks, off c.mu — so a memory-panel
 	// save never stalls an approval or status poll. See memory.go.
 	memory                 memoryManager
+	rememberAutoConfirm    RememberAutoConfirm
 	cleanup                func()
 	display                displayPrefs // what this session shows; see display_prefs.go
 	disableColdResumePrune bool         // legacy; rewrite elision removed, still gates cold notice
@@ -170,6 +171,7 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		skillProfile:           opts.SkillProfile,
 		hooks:                  opts.Hooks,
 		memory:                 newMemoryManager(opts.Memory),
+		rememberAutoConfirm:    opts.RememberAutoConfirm,
 		cleanup:                opts.Cleanup,
 		display:                displayPrefsFrom(opts),
 		disableColdResumePrune: opts.DisableColdResumePrune,
