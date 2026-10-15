@@ -224,6 +224,10 @@ export function Versions({ port }: { port: Port }) {
   const moving = progress !== null && MOVING.has(progress.phase) ? progress.version : "";
   const ready = progress?.phase === "ready" ? progress.version : "";
   const locked = busy || starting !== "" || moving !== "";
+  // Whether the offered release is this fork's own or Studio's: a build that
+  // reads both catalogs says which one a prompt is about, so moving onto the
+  // upstream line is a choice rather than a surprise.
+  const latestIsMine = list.some((v) => v.version === hub.latest && !!v.source);
   const readyOlder = ready !== "" && list.some((v) => v.version === ready && v.older);
   const past = list.filter((v) => v.older && !v.current);
   const held = new Set([moving, ready, hub.pinned, openNotes].filter(Boolean));
@@ -286,7 +290,10 @@ export function Versions({ port }: { port: Port }) {
       {!hub.err && hub.newer && !hub.pinned && !hub.withdrawn && !ready && !moving && !failure && (
         <div className="find" data-lvl="ok">
           <span className="t">{t("有新版本 {v}", { v: hub.latest })}</span>
-          <span className="why">{t("可在下方对应行安装。下载完成后会先问你，再重启。")}</span>
+          <span className="why">
+            {t(latestIsMine ? "这来自本 fork 的发布。" : "这来自上游的发布。")}
+            {t("可在下方对应行安装。下载完成后会先问你，再重启。")}
+          </span>
         </div>
       )}
       {ready && later !== ready && (
@@ -339,7 +346,7 @@ export function Versions({ port }: { port: Port }) {
             data-action={v.hasNotes ? "versions.notes-close" : undefined}
             onKeyDown={v.hasNotes ? (e) => closeNotes(e, v.version) : undefined}
           >
-            <span className="nm">{v.version}</span>
+            <span className="nm">{v.version}{v.source && <span className="vsrc" data-src={v.source}>{t("本 fork")}</span>}</span>
             <span className="ds">{t(v.current ? "正在运行" : v.older ? "更早的版本" : "更新的版本")}</span>
             {/* A row the catalog does not carry has no date. Saying so beats an
                 empty column: it is why this version has no download page. */}
