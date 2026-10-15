@@ -39,6 +39,11 @@ type heldScope struct {
 	// turnNarration is the user's [agent] turn_narration. It adds output tokens
 	// to every turn, so a cloned repo must not turn it on.
 	turnNarration string
+	// rememberProject and rememberGlobal are the user's [memory] auto-confirm
+	// switches. A project file may set neither: skipping a confirmation widens
+	// what the agent may persist, and that is the user's call, not the clone's.
+	rememberProject bool
+	rememberGlobal  bool
 }
 
 func holdUserScope(c *Config) heldScope {
@@ -66,6 +71,8 @@ func holdUserScope(c *Config) heldScope {
 		layaLocal:       c.Tools.SystemOne.Laya.Local,
 		rememberDevices: c.Serve.RememberPairedDevices,
 		turnNarration:   c.TurnNarration(),
+		rememberProject: c.Memory.AutoConfirmProjectRemember,
+		rememberGlobal:  c.Memory.AutoConfirmGlobalRemember,
 	}
 }
 
@@ -162,6 +169,16 @@ func (h heldScope) narrow(c *Config, r Roots, root string, projectMeta toml.Meta
 		c.ignoreProject("agent.host_verification", c.Agent.HostVerification, ProjectUserOnly)
 		c.Agent.HostVerification = h.hostVerif
 	}
+	// Skipping a memory confirmation is the user's call: a cloned repo must not
+	// widen what the agent persists without asking.
+	if c.Memory.AutoConfirmProjectRemember != h.rememberProject {
+		c.ignoreProject("memory.auto_confirm_project_remember", fmt.Sprintf("%t", c.Memory.AutoConfirmProjectRemember), ProjectUserOnly)
+	}
+	c.Memory.AutoConfirmProjectRemember = h.rememberProject
+	if c.Memory.AutoConfirmGlobalRemember != h.rememberGlobal {
+		c.ignoreProject("memory.auto_confirm_global_remember", fmt.Sprintf("%t", c.Memory.AutoConfirmGlobalRemember), ProjectUserOnly)
+	}
+	c.Memory.AutoConfirmGlobalRemember = h.rememberGlobal
 	// Keeping paired phones across restarts is the user's alone: it widens how
 	// long a device stays trusted, which is not a clone's to give away.
 	if c.Serve.RememberPairedDevices != h.rememberDevices {

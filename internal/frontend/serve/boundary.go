@@ -24,6 +24,8 @@ func (s *Server) registerBoundaryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sandbox", s.saveSandboxSettings)
 	mux.HandleFunc("GET /browser-tools", s.browserToolsSettings)
 	mux.HandleFunc("POST /browser-tools", s.saveBrowserToolsSettings)
+	mux.HandleFunc("GET /memory/remember-approval", s.rememberApprovalSettings)
+	mux.HandleFunc("POST /memory/remember-approval", s.saveRememberApprovalSettings)
 	// The file every one of these is written to, for when it is the thing that
 	// is wrong: each save above refuses with the same code, and this is where a
 	// surface reads it before trying, and repairs it after.

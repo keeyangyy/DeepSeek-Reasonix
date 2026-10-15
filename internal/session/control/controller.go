@@ -335,6 +335,7 @@ type Options struct {
 	SkillProfile        skill.ProfileResolver
 	Hooks               *hook.Runner
 	Memory              *memory.Set
+	RememberAutoConfirm RememberAutoConfirm
 	Cleanup             func()
 	// Balance reads the active provider's optional wallet endpoint. Nil, or a
 	// cache built on an empty URL, means the provider declares none. Hosts that
