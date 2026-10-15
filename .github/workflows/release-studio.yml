@@ -1126,7 +1126,15 @@ jobs:
           VERSION: ${{ needs.resolve.outputs.version }}
           MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          # Fork: this release line has no R2 mirror, so the manifest step below
+          # would drop the delta anyway. Skip building and signing it rather
+          # than chunking a ~170 MB tree nobody can fetch.
+          HAS_R2: ${{ secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_ACCOUNT_ID != '' && secrets.R2_BUCKET != '' }}
         run: |
+          if [ "$HAS_R2" != "true" ]; then
+            echo "HAS_R2 is unset: no mirror can serve a delta, skipping."
+            exit 0
+          fi
           go run ./cmd/studio-delta build dist/ReasonixStudio-windows-amd64.zip "$VERSION" windows-amd64 delta
           cd desktop
           go run ./cmd/sign sign ../delta/windows-amd64/index.json.zst

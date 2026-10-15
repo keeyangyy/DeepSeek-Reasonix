@@ -25,6 +25,7 @@
 /workgroupassay
 /write_heartbeat
 /catalog-detector
+/catalogfilter
 /tool-surface-cache
 
 # Go test/build scratch
