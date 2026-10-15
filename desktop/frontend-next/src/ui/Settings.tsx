@@ -46,7 +46,7 @@ import { planProtocolSwitch } from "./protocolswitch";
 import { Boundary } from "./Boundary";
 import { Path } from "./Path";
 import { About } from "./About";
-import { Memory } from "./Memory";
+import { Memory, RememberApproval } from "./Memory";
 import { DEFAULT_DAYS } from "./Usage";
 import { UsageSettings } from "./UsageSettings";
 import { Storage } from "./Storage";
@@ -749,6 +749,7 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
               title={t("记忆")}
               hint={t("agent 自动记录的内容：未经配置，但会据此执行。此处按触发时机分组，并标出上一轮实际使用的条目。")}
             >
+              <RememberApproval port={localPort} onChanged={onChanged} />
               <Memory port={localPort} />
             </Group>
           )}

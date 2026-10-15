@@ -1,5 +1,5 @@
 import type { Adjudications, BrowserToolsSettings, ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./port";
-import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings } from "./boundary";
+import type { AskTimeoutSettings, AutoArchiveSettings, ChangedFilesSettings, FoldWorkSettings, TurnNarrationSettings, DisplayCurrencyMode, DisplayCurrencySettings, ProgressWatchSettings, WorkspaceRoots, ReceiptSettings, RememberApprovalSettings } from "./boundary";
 import { HttpError } from "./http_error";
 import { MockShell } from "./mock_shell";
 
@@ -135,6 +135,25 @@ export class MockBoundary extends MockShell {
   async saveBrowserTools(enabled: boolean): Promise<BrowserToolsSettings> {
     this.browser = { ...this.browser, enabled, effective: enabled };
     return { ...this.browser };
+  }
+
+  private remember: RememberApprovalSettings = {
+    projectAutoConfirm: false, projectEffective: false,
+    globalAutoConfirm: false, globalEffective: false,
+    path: "/Users/you/.reasonix/config.toml",
+  };
+
+  async rememberApproval(): Promise<RememberApprovalSettings> {
+    return { ...this.remember };
+  }
+
+  async saveRememberApproval(switches: Pick<RememberApprovalSettings, "projectAutoConfirm" | "globalAutoConfirm">): Promise<RememberApprovalSettings> {
+    this.remember = {
+      ...this.remember,
+      projectAutoConfirm: switches.projectAutoConfirm, projectEffective: switches.projectAutoConfirm,
+      globalAutoConfirm: switches.globalAutoConfirm, globalEffective: switches.globalAutoConfirm,
+    };
+    return { ...this.remember };
   }
 
   private archive: AutoArchiveSettings = { enabled: false, days: 30, defaultDays: 30, path: "/Users/you/.reasonix/config.toml" };
