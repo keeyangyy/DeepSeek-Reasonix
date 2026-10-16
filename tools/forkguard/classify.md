@@ -32,6 +32,10 @@ reviewed: 2026-10-16
 - 数据 schema / 版本、公共契约、权限与安全相关
 - 不可绕过的接口变更（我方实现编不过）
 
+## 通道
+
+判读走 REST：`POST https://models.github.ai/inference/chat/completions`，带 `Authorization: Bearer $GITHUB_TOKEN`，workflow 侧声明 `models: read`。官方 `actions/ai-inference@v1` 虽可用，但解析回复有 bug（模型返回纯文本时报 `Cannot use 'in' operator to search for 'choices' in OK`），不要用它。
+
 ## 流程（顺序不可颠倒）
 
 1. **先跑命中主题的守护测试**（报告里的 `guards`）：全绿 → `verdict: proceed`，不必再判其余。
