@@ -75,13 +75,19 @@ type UpdateVersion struct {
 	ManifestURL string `json:"manifestUrl"`
 }
 
-// UpdateVersionList is the panel's payload: the running build plus every version
-// the catalog offers. Err is reported in the payload instead of failing the
-// call, so a startup check can stay quiet on a network error.
+// UpdateVersionList is the panel's payload: the running build, how this install
+// can update at all, and every version the catalog offers. The install-profile
+// fields are list-level because they describe the machine, not one version. Err
+// is reported in the payload instead of failing the call, so a startup check
+// can stay quiet on a network error.
 type UpdateVersionList struct {
-	Current string          `json:"current"`
-	Entries []UpdateVersion `json:"entries"`
-	Err     string          `json:"err,omitempty"`
+	Current           string          `json:"current"`
+	CanSelfUpdate     bool            `json:"canSelfUpdate"`
+	ManualReason      string          `json:"manualReason,omitempty"`
+	InstallMode       string          `json:"installMode,omitempty"`
+	RequiresElevation bool            `json:"requiresElevation,omitempty"`
+	Entries           []UpdateVersion `json:"entries"`
+	Err               string          `json:"err,omitempty"`
 }
 
 // ListUpdateVersions reports the versions the update panel may offer. It reads
@@ -89,7 +95,15 @@ type UpdateVersionList struct {
 // while the stable channel's own check keeps rejecting a pre-release manifest.
 func (a *App) ListUpdateVersions(selectedChannel string) (*UpdateVersionList, error) {
 	selectedChannel = targetUpdateChannel(selectedChannel)
-	out := &UpdateVersionList{Current: version, Entries: []UpdateVersion{}}
+	profile := detectInstallProfile()
+	out := &UpdateVersionList{
+		Current:           version,
+		CanSelfUpdate:     profile.CanSelfUpdate && canSelfUpdate(),
+		ManualReason:      firstNonEmptyStr(profile.ManualReason, manualUpdateReason()),
+		InstallMode:       profile.Mode,
+		RequiresElevation: profile.RequiresElev,
+		Entries:           []UpdateVersion{},
+	}
 	c, err := httpClient()
 	if err != nil {
 		out.Err = err.Error()

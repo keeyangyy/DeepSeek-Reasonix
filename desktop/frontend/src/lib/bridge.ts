@@ -152,6 +152,7 @@ import type {
   SessionClearResult,
 } from "./types";
 import { browserPreviewShellSupport } from "./shellSupportPreview";
+import { previewVersionList, type UpdateVersionList } from "./updateVersions";
 export * from "./remoteTabEvents";
 export const COMPACT_RATIO_MIN_PERCENT = 30, COMPACT_RATIO_MAX_PERCENT = 85;
 
@@ -663,6 +664,10 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   CheckUpdate(channel: string): Promise<UpdateInfo | null>;
   /** v1.20+ single-action update: download, verify, install, relaunch. */
   ApplyUpdateRequest(channel: string, expectedVersion: string, requestId: string): Promise<void>;
+  /** The versions the update panel may offer, newest first. */
+  ListUpdateVersions(channel: string): Promise<UpdateVersionList | null>;
+  /** Install one version the list offered — an older or pre-release build. */
+  ApplyUpdateToVersion(channel: string, expectedVersion: string, requestId: string): Promise<void>;
   /** Discard a stuck previous update transaction so the next install can proceed. */
   AbandonPendingUpdate?(): Promise<void>;
   OpenDownloadPage(): Promise<void>;
@@ -5172,7 +5177,7 @@ function makeMockApp(): AppBindings {
       await this.SetAutoApproveTools(on);
     },
     async Version() {
-      return "v1.0.0 (browser dev)";
+      return "v1.38.53"; // dev preview: pretend the newest published stable build
     },
     async CheckUpdate(channel: string) {
       void channel;
@@ -5208,6 +5213,10 @@ function makeMockApp(): AppBindings {
       emitUpdater({ requestId, version: expectedVersion, channel: selectedChannel, phase: "relaunching", received: 0, total: 0 });
     },
     async AbandonPendingUpdate() {},
+    // Dev seams: the version list and its install action, so the Settings panel
+    // can be previewed without a published catalog.
+    async ListUpdateVersions() { return previewVersionList("v1.38.53"); },
+    async ApplyUpdateToVersion(c: string, v: string, r: string) { await this.ApplyUpdateRequest(c, v, r); },
     async OpenDownloadPage() {
       if (typeof window !== "undefined") {
         window.open("https://reasonix.io/?download=desktop#start", "_blank", "noopener");

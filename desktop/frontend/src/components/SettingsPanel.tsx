@@ -25,6 +25,7 @@ import { cachedFetchProviderModelCatalog, cachedFetchProviderModels, invalidateP
 import { providerBaseURLForSave, providerEndpointMismatchDetail, providerRequestURLForCatalogFormatChange, providerRequestURLFromConfig, trimmedBaseURL } from "../lib/providerEndpoint";
 import { providerModelVisionCapability, providerVisionModelsForView } from "../lib/providerVisionCapability";
 import { useUpdater } from "../lib/useUpdater";
+import { UpdateVersionList } from "./UpdateVersionList";
 import {
   applyTheme,
   getTheme,
@@ -6993,11 +6994,12 @@ function UpdatesSection({
   applySettings: (fn: () => Promise<void>) => Promise<boolean>;
 }) {
   const t = useT();
-  const { status, check, apply: applyUpdate, openDownload, abandonPending } = useUpdater();
+  const { status, check, apply: applyUpdate, versions, listVersions, applyVersion, openDownload, abandonPending } = useUpdater();
   const [version, setVersion] = useState("");
   useEffect(() => {
     app.Version().then(setVersion).catch(() => {});
   }, []);
+  useEffect(() => { void listVersions(); }, [listVersions]);
 
   const updaterBusy =
     status.kind === "checking" ||
@@ -7106,20 +7108,7 @@ function UpdatesSection({
           <ExternalLink size={13} aria-hidden="true" />
         </button>
       </div>
-      {status.kind === "available" && (
-        <div className="updates-control__action">
-          <div className="updates-control__action-copy">
-            {!status.info.canSelfUpdate && <div>{status.info.manualReason || t("updater.macHint")}</div>}
-          </div>
-          <button
-            className="btn btn--primary btn--small"
-            disabled={settingsBusy || updaterBusy}
-            onClick={() => applyUpdate(status.info)}
-          >
-            {status.info.canSelfUpdate ? t("updater.updateAndRestart") : t("updater.goToDownload")}
-          </button>
-        </div>
-      )}
+      {versions && <UpdateVersionList list={versions} busy={settingsBusy || updaterBusy} onInstall={applyVersion} />}
       {status.kind === "error" && (
         <div
           className="banner banner--update banner--error"
