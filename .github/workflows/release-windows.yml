@@ -163,6 +163,11 @@ jobs:
             dist/Reasonix-windows-amd64-installer.exe \
             dist/Reasonix-windows-amd64-installer.exe.minisig \
             --clobber
+          # The version catalog points each entry at <tag>/latest.json, so the
+          # same manifest has to exist on the version's own release too — the
+          # anchor below is overwritten by every release and cannot serve as an
+          # immutable per-version address.
+          gh release upload "$RELEASE_TAG" manifest-input/latest.json --clobber
           # The anchor is a fixed tag whose contents every release of this line
           # overwrites, so the updater never follows the repository-wide latest
           # badge -- which the studio and legacy 1.39 lines also claim.
@@ -172,6 +177,48 @@ jobs:
               --notes "Update-check anchor for the wails-mine (1.38.x) line. latest.json here is overwritten by every release of that line; do not delete."
           fi
           gh release upload wails-latest manifest-input/latest.json --clobber
+
+      - name: Update this line's version catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The catalog lists which versions the update panel may offer. It is
+          # rewritten on every release and always keeps the whole history;
+          # catalogfilter decides what the panel actually shows.
+          anchor=wails-latest
+          catalog_keep=100000
+          recent=5
+          recent_stable=3
+          # The channel decides whether the panel counts this entry toward the
+          # stable quota, so it is derived from the tag's shape: vX.Y.Z is a
+          # stable release, vX.Y.Z-beta.N is a pre-release.
+          channel=stable
+          case "$RELEASE_TAG" in *-beta.*) channel=beta ;; esac
+          mkdir -p catalog
+          existing=-
+          if gh release download "$anchor" -p versions.json -D catalog --clobber 2>/dev/null; then
+            existing=catalog/versions.json
+          else
+            echo "No catalog yet; starting a new one."
+          fi
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # The next release reads back what this one wrote, so the index keeps
+          # every entry and only the filter trims: a small keep here would drop
+          # history permanently.
+          #
+          # Written to a temp file first: the existing index is read from this
+          # same path, and a plain redirect would truncate it before the script ran.
+          bash scripts/update-versions-index.sh "$existing" "$RELEASE_TAG" "$RELEASE_TAG" "$channel" "$now" "$catalog_keep" \
+            | go run ./tools/catalogfilter -recent "$recent" -recent-stable "$recent_stable" \
+            > catalog/versions.json.new
+          mv catalog/versions.json.new catalog/versions.json
+          # Idempotency check: the version just published must be listed exactly
+          # once, whatever the filter kept around it.
+          jq -e --arg v "$RELEASE_TAG" '.versions | map(select(.version == $v)) | length == 1' catalog/versions.json >/dev/null
+          gh release upload "$anchor" catalog/versions.json --clobber
+          jq -r '.versions[].version' catalog/versions.json
 
       - name: Summarize release
         env:
