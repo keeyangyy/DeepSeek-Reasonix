@@ -16311,6 +16311,51 @@ body > .mermaid-diagram--fullscreen {
   animation: updates-control-spin 0.9s linear infinite;
 }
 
+/* Version list: newest first, one row per catalog entry, with a channel badge
+   and the running build marked in place of an install button. */
+.updates-control__versions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.updates-control__version-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: var(--font-control-small);
+}
+
+.updates-control__version-tag {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.updates-control__channel {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-dim);
+  font-size: var(--font-caption);
+}
+
+.updates-control__channel--beta {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.updates-control__version-date {
+  color: var(--fg-dim);
+}
+
+.updates-control__version-current {
+  color: var(--ok);
+}
+
 @keyframes updates-control-spin {
   to { transform: rotate(360deg); }
 }

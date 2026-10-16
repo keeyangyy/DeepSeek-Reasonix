@@ -1,6 +1,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { app, onUpdaterProgress } from "./bridge";
 import type { UpdateInfo } from "./types";
+import type { UpdateVersionList } from "./updateVersions";
 
 // useUpdater drives the auto-update state machine shared by the top banner and the
 // Settings panel. v1.20+ uses a single "update and restart" action that downloads,
@@ -12,8 +13,8 @@ export type UpdateStatus =
   | { kind: "checking" }
   | { kind: "upToDate"; current: string }
   | { kind: "available"; info: UpdateInfo }
-  | { kind: "downloading"; received: number; total: number; info: UpdateInfo }
-  | { kind: "verifying"; info: UpdateInfo }
+  | { kind: "downloading"; received: number; total: number; info?: UpdateInfo }
+  | { kind: "verifying"; info?: UpdateInfo }
   | { kind: "authorizing"; info?: UpdateInfo }
   | { kind: "installing"; info?: UpdateInfo }
   | { kind: "relaunching"; info?: UpdateInfo }
@@ -29,6 +30,12 @@ export interface Updater {
   refresh: () => Promise<void>;
   /** Single-action update: download + verify + install + relaunch. */
   apply: (info: UpdateInfo) => void;
+  /** The versions the update panel may offer, newest first (Settings list). */
+  versions: UpdateVersionList | null;
+  /** Load the version list without superseding an active operation. */
+  listVersions: () => Promise<void>;
+  /** Install one version the list offered — an older or pre-release build. */
+  applyVersion: (version: string) => void;
   openDownload: () => void;
   /** Discard a stuck previous update transaction so the next install can proceed. */
   abandonPending: () => Promise<void>;
@@ -160,13 +167,15 @@ function useUpdaterInternal(): Updater {
         if (info && normalizedChannel(info.channel) !== operation.channel) return cur;
         switch (p.phase) {
           case "downloading":
-            return info ? { kind: "downloading", received: p.received, total: p.total, info } : cur;
+            // A picked version has no UpdateInfo, so these three advance on the
+            // progress payload alone rather than short-circuiting on `info`.
+            return { kind: "downloading", received: p.received, total: p.total, info };
           case "verifying":
-            return info ? { kind: "verifying", info } : cur;
+            return { kind: "verifying", info };
           case "downloaded":
             // Intermediate cache-ready signal: keep showing verifying/installing
             // rather than a separate user action.
-            return info ? { kind: "installing", info } : cur;
+            return { kind: "installing", info };
           case "authorizing":
             return { kind: "authorizing", info };
           case "recovering":
@@ -260,6 +269,60 @@ function useUpdaterInternal(): Updater {
     void app.OpenDownloadPage();
   }, []);
 
+  const [versions, setVersions] = useState<UpdateVersionList | null>(null);
+
+  // listVersions loads the version list the Settings panel shows. It reuses the
+  // check operation kind so a check and a list load cannot both own the state
+  // machine, and it publishes the list itself rather than a status line.
+  const listVersions = useCallback(async () => {
+    if (isBusyOperation(operationRef.current.kind)) return;
+    const operation = beginOperation("stable", "checking");
+    setStatus({ kind: "checking" });
+    try {
+      const list = await app.ListUpdateVersions("stable");
+      if (!isCurrentOperation(operation)) return;
+      completeOperation(operation);
+      setVersions(list);
+      if (list?.err) {
+        setStatus(updateError(list.err));
+        return;
+      }
+      setStatus({ kind: "idle" });
+    } catch (e) {
+      if (!isCurrentOperation(operation)) return;
+      completeOperation(operation);
+      setStatus(updateError(errMsg(e)));
+    }
+  }, [beginOperation, completeOperation, isCurrentOperation]);
+
+  // applyVersion runs the same download -> verify -> install -> relaunch
+  // sequence as apply, but for a version the user picked from the list. Versions
+  // reach the list without an UpdateInfo, so the payload here carries only what
+  // the progress UI needs.
+  const applyVersion = useCallback((version: string) => {
+    if (!version) return;
+    const active = operationRef.current;
+    if (isBusyOperation(active.kind)) return;
+    if (versions && !versions.canSelfUpdate) {
+      void app.OpenDownloadPage();
+      return;
+    }
+    const operation = beginOperation("stable", "applying", version);
+    // Mirror apply(): a package install waits for authorization before any
+    // download progress, and the list payload carries that machine-level fact.
+    setStatus(
+      versions && (versions.requiresElevation || versions.installMode === "deb")
+        ? { kind: "authorizing" }
+        : { kind: "downloading", received: 0, total: 0 },
+    );
+    void app.ApplyUpdateToVersion("stable", version, operation.requestId).catch((e) => {
+      if (!isCurrentOperation(operation)) return;
+      const message = errMsg(e);
+      completeOperation(operation);
+      setStatus(updateError(message));
+    });
+  }, [versions, beginOperation, completeOperation, isCurrentOperation]);
+
   const abandonPending = useCallback(async () => {
     const active = operationRef.current;
     if (isBusyOperation(active.kind)) return;
@@ -294,7 +357,7 @@ function useUpdaterInternal(): Updater {
     setStatus({ kind: "idle" });
   }, []);
 
-  return { status, check, refresh, apply, openDownload, abandonPending, reset };
+  return { status, check, refresh, apply, versions, listVersions, applyVersion, openDownload, abandonPending, reset };
 }
 
 export function UpdaterProvider({ children }: { children: ReactNode }) {
