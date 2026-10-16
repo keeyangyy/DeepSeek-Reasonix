@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -383,22 +382,6 @@ func (a *App) syncSessionCatalogMetadata(ctx context.Context, catalog *sessionca
 	a.sessionCatalogMetadataFingerprint = fingerprint
 	a.sessionCatalogMetadataMu.Unlock()
 	return nil
-}
-
-// sessionCatalogMetadataFingerprint derives a stable identity for the metadata
-// set fed into Catalog.SyncMetadata. Orderings are deterministic (global topics,
-// then projects in file order), so a marshaled comparison is exact.
-func sessionCatalogMetadataFingerprint(projects []sessioncatalog.ProjectRecord, topics []sessioncatalog.TopicMetadata) string {
-	if len(projects) == 0 && len(topics) == 0 {
-		return ""
-	}
-	projectsJSON, _ := json.Marshal(projects)
-	topicsJSON, _ := json.Marshal(topics)
-	var buf strings.Builder
-	buf.Write(projectsJSON)
-	buf.WriteByte(0)
-	buf.Write(topicsJSON)
-	return buf.String()
 }
 
 func (a *App) emitProjectTreeChangedV2(revision uint64, roots []string, reason string) {
