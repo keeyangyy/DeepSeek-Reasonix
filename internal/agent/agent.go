@@ -843,13 +843,6 @@ func (a *Agent) steerQueueLen() int {
 // fires (e.g. 0.8). The status line uses it to show headroom to the next compact.
 func (a *Agent) CompactRatio() float64 { return a.compactRatio }
 
-// foldIndexEnabled reports whether compaction digests carry a folded-work
-// index. Nil keeps the feature on: the config default is enabled, and an
-// agent built without an explicit setting must not silently lose it.
-func (a *Agent) foldIndexEnabled() bool {
-	return a.foldIndex == nil || *a.foldIndex
-}
-
 // CompactNow forces one projection compaction (canonical transcript untouched).
 func (a *Agent) CompactNow(ctx context.Context, instructions string) error {
 	_, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{
