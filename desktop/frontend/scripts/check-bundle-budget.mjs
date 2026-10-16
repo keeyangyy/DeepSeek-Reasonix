@@ -456,6 +456,10 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // Same-path generation fences, unique virtual-block keys, the live-tail
 // placeholder fix, Ask counts, and compact topic actions measure 2432.148 KiB
 // locally. Retain 0.452 KiB of toolchain headroom; gzip/chunk budgets stay put.
-const rawInitialBudgetKiB = 2_432.6;
+// 2026-10-16: the update panel's version list — its list component, the wire
+// types plus the browser-preview catalog it renders, the three locale strings,
+// and the row CSS — adds 2.1 KiB raw (2434.7 KiB measured locally). Widen the
+// raw ceiling to 2435.2; every gzip and chunk budget stays put.
+const rawInitialBudgetKiB = 2_435.2;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
