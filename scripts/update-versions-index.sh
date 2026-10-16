@@ -93,7 +93,19 @@ printf '%s' "$base" | jq \
   --arg manifestBase "$manifest_base" \
   --arg notes "$notes" \
   --argjson keep "$keep" '
-  def semver: [splits("[.-]")] | map(select(test("^[0-9]+$")) | tonumber);
+  # Sort key for a version, ordering a release ABOVE its own pre-releases
+  # (1.38.54 > 1.38.54-beta.2) and pre-releases numerically (beta.11 >
+  # beta.2). The flag at position 4 does both: a release is [1,38,54,1] and a
+  # pre-release [1,38,54,0,2], so the release always sorts higher.
+  def semver:
+    ltrimstr("v")
+    | split("-") as $parts
+    | ($parts[0] | [scan("[0-9]+")] | map(tonumber)) as $release
+    | $release
+      + (if ($parts | length) > 1
+         then [0] + ([$parts[1:][] | scan("[0-9]+")] | map(tonumber))
+         else [1]
+         end);
   ([.withdrawn // [] | .[].version | ltrimstr("v")]) as $gone
   | (.withdrawn // []) as $withdrawn
   | {
