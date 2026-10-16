@@ -12,7 +12,6 @@ import (
 	"reasonix/internal/ablation"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
-	"reasonix/internal/sessioncontext"
 )
 
 // Compaction is a low-frequency cache-reset point: the prompt grows append-only
@@ -142,20 +141,6 @@ func (a *Agent) recentTailBudget() int {
 func foldEconomics(region []provider.Message) bool {
 	const minFoldTokens = 400
 	return estimateMessagesTokens(stripFoldIndexes(region)) >= minFoldTokens
-}
-
-// stripFoldIndexes removes the folded-work index section from summary
-// messages, leaving every other message untouched.
-func stripFoldIndexes(fold []provider.Message) []provider.Message {
-	out := make([]provider.Message, len(fold))
-	for i, m := range fold {
-		if isCompactionSummary(m) {
-			prose, _ := splitFoldIndex(m.Content)
-			m.Content = strings.TrimRight(prose, "\n")
-		}
-		out[i] = m
-	}
-	return out
 }
 
 func estimateMessagesTokens(msgs []provider.Message) int {
@@ -398,31 +383,6 @@ func compactionInstructionWithFocus(instructions string) string {
 	instruction := compactionInstruction
 	if strings.TrimSpace(instructions) != "" {
 		instruction += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + strings.TrimSpace(instructions)
-	}
-	return instruction
-}
-
-// compactionSnapshotRule is appended only when the fold actually carries a
-// host session-context snapshot; the summarizer must not restate it.
-const compactionSnapshotRule = "\n\nSkip every message wrapped in <session-context> tags: that " +
-	"host-generated snapshot, its section-lengths manifest, and its preamble are re-injected on every " +
-	"turn. Do not copy their contents, not even in summary form - restating them would freeze stale state."
-
-// carriesSessionContext reports whether a fold replays a host session-context
-// snapshot. Matching on content keeps the check valid after provenance stripping.
-func carriesSessionContext(region []provider.Message) bool {
-	for _, m := range region {
-		if m.Role == provider.RoleUser && sessioncontext.IsContent(m.Content) {
-			return true
-		}
-	}
-	return false
-}
-
-func (a *Agent) compactionInstructionFor(region []provider.Message, instructions string) string {
-	instruction := compactionInstructionWithFocus(instructions)
-	if carriesSessionContext(region) {
-		instruction += compactionSnapshotRule
 	}
 	return instruction
 }
