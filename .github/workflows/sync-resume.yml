@@ -1,0 +1,104 @@
+name: Sync upstream (resume)
+
+# Fork: the other half of the upstream-sync flow. When the owner has dealt with
+# what a sync pull request asked for, a comment carrying /sync on that pull
+# request asks this workflow to re-run the fork's guard tests and, when they
+# are green, merge the pull request and cut a release.
+#
+# Criteria: tools/forkguard/classify.md. Decisions: project docs
+# (decisions/2026-10-16-上游自动同步与发版.md), not part of this repository.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: sync-resume-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    # issue_comment fires for plain issues too, so the comment has to be on a
+    # pull request and has to carry the command.
+    if: |
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/sync')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check out the pull request branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          branch=$(gh pr view "$PR" --json headRefName --jq .headRefName)
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          git fetch --quiet --tags origin
+          git switch --track -c "$branch" "origin/$branch"
+      - name: Re-run the fork's guard tests
+        env:
+          BRANCH: ${{ steps.branch.outputs.branch }}
+        run: |
+          set -uo pipefail
+          tag="${BRANCH#sync/upstream-}"
+          last_mine=$(git tag --list 'v*-mine.*' --sort=-v:refname | head -1)
+          base_version=$(printf '%s' "$last_mine" | sed -e 's/^v//' -e 's/-mine\.[0-9]*$//')
+          go run ./tools/forkguard -range "studio-v$base_version..$tag" > "$RUNNER_TEMP/report.json"
+          : > "$RUNNER_TEMP/guard-failed.txt"
+          state=none
+          ran=0
+          while IFS= read -r cmd; do
+            [ -z "$cmd" ] && continue
+            ran=$((ran + 1))
+            state=green
+            if ! eval "$cmd" > "$RUNNER_TEMP/guard-$ran.log" 2>&1; then
+              state=red
+              printf '%s\n' "- \`$cmd\`" >> "$RUNNER_TEMP/guard-failed.txt"
+            fi
+          done < <(jq -r '.guards[]' "$RUNNER_TEMP/report.json")
+          echo "$state" > "$RUNNER_TEMP/guard-state.txt"
+          {
+            echo "### guard tests (re-run)"
+            echo "state: $state (ran $ran)"
+            if [ -s "$RUNNER_TEMP/guard-failed.txt" ]; then
+              echo "failed:"
+              cat "$RUNNER_TEMP/guard-failed.txt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Merge and release, or report what is still red
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          BRANCH: ${{ steps.branch.outputs.branch }}
+          AUTO: ${{ vars.SYNC_AUTO_MERGE }}
+        run: |
+          set -euo pipefail
+          state=$(cat "$RUNNER_TEMP/guard-state.txt")
+          if [ "$state" != "green" ]; then
+            gh pr comment "$PR" --body-file "$RUNNER_TEMP/guard-failed.txt"
+            echo "guards still not green ($state): nothing merged" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$AUTO" != "true" ]; then
+            gh pr comment "$PR" --body "守护测试全绿；但 \`SYNC_AUTO_MERGE\` 不是 true，我不自动合并。"
+            exit 0
+          fi
+          gh pr merge "$PR" --merge
+          tag="${BRANCH#sync/upstream-}"
+          version="${tag#studio-v}-mine.$(( $(git tag --list "v${tag#studio-v}-mine.*" | wc -l) + 1 ))"
+          gh workflow run release-manual.yml \
+            -f version="$version" \
+            -f title="Studio v$version"
+          echo "merged PR #$PR and asked for release $version" >> "$GITHUB_STEP_SUMMARY"

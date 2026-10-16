@@ -1,18 +1,17 @@
-name: Sync upstream (shadow)
+name: Sync upstream
 
 # Fork: upstream sync. Every six hours it asks one question — has upstream cut
 # a new studio-v* release? — and when it has, it merges that release onto a
-# branch and opens a pull request for it.
+# branch, opens a pull request, runs the fork's guard tests, and asks a model
+# to classify what the range touched.
 #
-# The pull request is where this flow lands: no separate issue, no throwaway
-# branch. Conflicts are found by git in the working copy before the push, so a
-# pull request opens clean unless a functional conflict is left in it on
-# purpose for the owner to decide.
+# It merges the pull request and cuts a release only when the verdict is
+# proceed and the SYNC_AUTO_MERGE variable is true. Anything functional stops
+# at the pull request for the owner to decide.
 #
-# Still to arrive: the classifier call, the auto-merge and the release. Until
-# then this stage only opens the pull request and asks CI to run on it. The
-# criteria are recorded in the project docs
-# (decisions/2026-10-16-上游自动同步与发版.md), which are not part of this repository.
+# Criteria live in tools/forkguard/classify.md; the decisions behind them are
+# recorded in the project docs (decisions/2026-10-16-上游自动同步与发版.md),
+# which are not part of this repository.
 on:
   schedule:
     - cron: "0 */6 * * *"
@@ -22,11 +21,16 @@ on:
         description: "upstream tag to sync (empty: the newest studio-v*)"
         required: false
         default: ""
+      dry_run:
+        description: "classify and report, but never merge or release"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   pull-requests: write
   actions: write
+  models: read
 
 concurrency:
   group: sync-upstream
@@ -48,27 +52,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           WANTED: ${{ inputs.tag }}
-          BASE: ${{ vars.SYNC_BASE }}
         run: |
           set -euo pipefail
           git remote add upstream https://github.com/esengine/DeepSeek-Reasonix.git
           git fetch --quiet --tags upstream
           tag="${WANTED:-$(git tag --list 'studio-v*' --sort=-v:refname | head -1)}"
           branch="sync/upstream-$tag"
-          # One release at a time: a pull request that is still open (or was
-          # already merged) means this tag is in hand, so a later run waits
-          # instead of rewriting the branch under whoever is reviewing it.
+          # Our own release tag is the record of where we stand, so the range
+          # to inspect and the "already released" test both read from it rather
+          # than from a separate state file.
+          last_mine=$(git tag --list 'v*-mine.*' --sort=-v:refname | head -1)
+          base_version=$(printf '%s' "$last_mine" | sed -e 's/^v//' -e 's/-mine\.[0-9]*$//')
+          base="studio-v$base_version"
+          version="${tag#studio-v}"
+          released=$(git tag --list "v$version-mine.*" | wc -l)
+          # A pull request that is still open (or was already merged) means
+          # this tag is in hand, so a later run waits instead of rewriting the
+          # branch under whoever is reading it.
           inHand=$(gh pr list --state all --head "$branch" --json number --jq 'length')
           proceed=false
-          if [ -n "$tag" ] && [ -n "$BASE" ] && [ "$tag" != "$BASE" ] && [ "$inHand" = "0" ]; then
+          if [ -n "$tag" ] && [ -n "$base_version" ] && [ "$released" = "0" ] && [ "$inHand" = "0" ]; then
             proceed=true
           fi
           {
             echo "tag=$tag"
-            echo "base=$BASE"
+            echo "base=$base"
             echo "proceed=$proceed"
           } >> "$GITHUB_OUTPUT"
-          echo "newest=$tag base=$BASE inHand=$inHand proceed=$proceed" >> "$GITHUB_STEP_SUMMARY"
+          echo "newest=$tag base=$base released=$released inHand=$inHand proceed=$proceed" >> "$GITHUB_STEP_SUMMARY"
 
   sync:
     needs: probe
@@ -99,7 +110,7 @@ jobs:
             echo "clean" > "$RUNNER_TEMP/merge-state.txt"
           else
             # The conflict markers are the hand-off: they stay in the branch so
-            # the pull request shows what a human or the classifier has to
+            # the pull request shows what a person or the classifier has to
             # decide, instead of silently taking one side.
             echo "conflicted" > "$RUNNER_TEMP/merge-state.txt"
             git diff --name-only --diff-filter=U | sort > "$RUNNER_TEMP/conflicted.txt"
@@ -119,7 +130,6 @@ jobs:
       - name: Write the pull request body
         run: |
           set -euo pipefail
-          body="$RUNNER_TEMP/pr-body.md"
           {
             echo "## 上游同步 \`$TAG\`（base \`$BASE\`）"
             echo
@@ -146,9 +156,9 @@ jobs:
             echo "### 上游新增文件（前 40；反向吸收看这里）"
             jq -r '.upstream_added[:40][] | "- \`\(.)\`"' "$RUNNER_TEMP/report.json"
             echo
-            echo "> 判读口径见 \`tools/forkguard/classify.md\`。本阶段只开 PR 并请求 CI；自动合并与发版随后接上。"
-          } > "$body"
-          cat "$body" >> "$GITHUB_STEP_SUMMARY"
+            echo "> 判读口径见 \`tools/forkguard/classify.md\`。"
+          } > "$RUNNER_TEMP/pr-body.md"
+          cat "$RUNNER_TEMP/pr-body.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Push the sync branch
         run: |
           set -euo pipefail
@@ -169,3 +179,109 @@ jobs:
             exit 0
           fi
           gh workflow run ci.yml --ref "$BRANCH"
+      - name: Run the fork's guard tests
+        run: |
+          set -uo pipefail
+          if [ "$(cat "$RUNNER_TEMP/merge-state.txt")" != "clean" ]; then
+            echo "conflicted" > "$RUNNER_TEMP/guard-state.txt"
+            echo "guard tests skipped: the branch carries conflicts" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          state=none
+          ran=0
+          : > "$RUNNER_TEMP/guard-failed.txt"
+          while IFS= read -r cmd; do
+            [ -z "$cmd" ] && continue
+            ran=$((ran + 1))
+            state=green
+            if ! eval "$cmd" > "$RUNNER_TEMP/guard-$ran.log" 2>&1; then
+              state=red
+              printf '%s\n' "- \`$cmd\`" >> "$RUNNER_TEMP/guard-failed.txt"
+            fi
+          done < <(jq -r '.guards[]' "$RUNNER_TEMP/report.json")
+          echo "$state" > "$RUNNER_TEMP/guard-state.txt"
+          {
+            echo "### guard tests"
+            echo "state: $state (ran $ran)"
+            if [ -s "$RUNNER_TEMP/guard-failed.txt" ]; then
+              echo "failed:"
+              cat "$RUNNER_TEMP/guard-failed.txt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Classify with the model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          state=$(cat "$RUNNER_TEMP/guard-state.txt")
+          if [ "$state" = "green" ]; then
+            jq -n '{verdict:"proceed", guards_passed:true, hits:[], summary:"守护测试全绿，不必判读"}' > "$RUNNER_TEMP/verdict.json"
+            echo "guards green: the model is not called" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$state" = "conflicted" ]; then
+            jq -n '{verdict:"hold", guards_passed:false, hits:[], summary:"分支仍带着未解决的冲突"}' > "$RUNNER_TEMP/verdict.json"
+            exit 0
+          fi
+          jq -r '.hits[].path' "$RUNNER_TEMP/report.json" | sort -u > "$RUNNER_TEMP/hit-paths.txt"
+          git diff "$BASE..$TAG" -- $(cat "$RUNNER_TEMP/hit-paths.txt") > "$RUNNER_TEMP/hits.diff" || true
+          head -c 200000 "$RUNNER_TEMP/hits.diff" > "$RUNNER_TEMP/hits-clipped.diff"
+          jq -n \
+            --rawfile rules tools/forkguard/classify.md \
+            --rawfile schema tools/forkguard/schema.json \
+            --rawfile report "$RUNNER_TEMP/report.json" \
+            --rawfile diff "$RUNNER_TEMP/hits-clipped.diff" \
+            '{model:"openai/gpt-4o-mini", temperature:0, max_tokens:2000,
+              messages:[
+                {role:"system", content:$rules},
+                {role:"user", content:("## forkguard 报告\n" + $report + "\n\n## 命中文件的 diff（可能被截断）\n" + $diff + "\n\n## 输出契约\n" + $schema)}
+              ]}' > "$RUNNER_TEMP/request.json"
+          curl -sS -o "$RUNNER_TEMP/response.json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @"$RUNNER_TEMP/request.json" \
+            https://models.github.ai/inference/chat/completions
+          jq -r '.choices[0].message.content // ""' "$RUNNER_TEMP/response.json" > "$RUNNER_TEMP/verdict.raw"
+          sed -e 's/^```json$//' -e 's/^```$//' "$RUNNER_TEMP/verdict.raw" > "$RUNNER_TEMP/verdict.json"
+          if ! jq -e '.verdict == "proceed" or .verdict == "hold"' "$RUNNER_TEMP/verdict.json" > /dev/null 2>&1; then
+            jq -n '{verdict:"hold", guards_passed:false, hits:[], summary:"判读输出不合法，按停处理"}' > "$RUNNER_TEMP/verdict.json"
+          fi
+      - name: Act on the verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTO: ${{ vars.SYNC_AUTO_MERGE }}
+          DRY: ${{ inputs.dry_run }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          verdict=$(jq -r .verdict "$RUNNER_TEMP/verdict.json")
+          pr=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number')
+          {
+            echo "判读结论：**$verdict**"
+            echo
+            jq -r '.summary' "$RUNNER_TEMP/verdict.json"
+            echo
+            jq -r '.hits[]? | "- [\(.class)] \(.topic) — \(.file)：\(.decision)（\(.evidence)）"' "$RUNNER_TEMP/verdict.json"
+          } > "$RUNNER_TEMP/verdict.md"
+          gh pr comment "$pr" --body-file "$RUNNER_TEMP/verdict.md"
+
+          if [ "$verdict" = "hold" ]; then
+            gh pr ready "$pr" --undo
+            gh pr comment "$pr" --body "@$OWNER 需要你裁决：处理完在上面回一句 \`/sync\`，我会重新跑守护测试并合并。"
+            echo "verdict hold: waiting for the owner on PR #$pr" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$AUTO" != "true" ] || [ "${DRY:-false}" = "true" ]; then
+            echo "verdict proceed, but SYNC_AUTO_MERGE=$AUTO and dry_run=${DRY:-false}: not merging" >> "$GITHUB_STEP_SUMMARY"
+            gh pr comment "$pr" --body "判读通过。自动合并未开启（\`SYNC_AUTO_MERGE\`=$AUTO，dry_run=${DRY:-false}），留着等你决定。"
+            exit 0
+          fi
+
+          gh pr ready "$pr"
+          gh pr merge "$pr" --merge
+          version="${TAG#studio-v}-mine.$(( $(git tag --list "v${TAG#studio-v}-mine.*" | wc -l) + 1 ))"
+          gh workflow run release-manual.yml \
+            -f version="$version" \
+            -f title="Studio v$version"
+          echo "merged PR #$pr and asked for release $version" >> "$GITHUB_STEP_SUMMARY"

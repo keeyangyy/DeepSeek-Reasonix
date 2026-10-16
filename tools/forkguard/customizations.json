@@ -1,5 +1,6 @@
 {
   "purpose": "机器可读的 fork 定制清单：上游改动命中的挂载点、以及可能被上游反向吸收的自有文件。供 tools/forkguard 粗筛与云端判读使用。维护：主题变化时同步更新。",
+  "guards_note": "guards 只列 Go 侧命令（在 PR 上直接可跑）；前端守护测试由 PR 触发的 CI 覆盖，不在这里重复。",
   "baseline": "studio-v2.41.0",
   "topics": [
     {
@@ -49,8 +50,7 @@
         "internal/platform/update/verify.go"
       ],
       "guards": [
-        "go test ./internal/platform/update/ ./internal/platform/appupdate/ -count=1",
-        "npx -y pnpm@10 exec vitest run src/ui/Versions.mine-source.interaction.test.tsx src/ui/Versions.withdrawn.interaction.test.tsx src/ui/Versions.interaction.test.tsx"
+        "go test ./internal/platform/update/ ./internal/platform/appupdate/ -count=1"
       ]
     },
     {
@@ -92,8 +92,7 @@
       ],
       "guards": [
         "go test ./internal/state/memory/ -run Remember -count=1",
-        "go test ./internal/session/control/ -run Remember -count=1",
-        "npx -y pnpm@10 exec vitest run src/ui/Memory.approval.test.tsx"
+        "go test ./internal/session/control/ -run Remember -count=1"
       ]
     }
   ]
