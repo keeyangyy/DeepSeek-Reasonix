@@ -36,6 +36,14 @@ reviewed: 2026-10-16
 
 判读走 REST：`POST https://models.github.ai/inference/chat/completions`，带 `Authorization: Bearer $GITHUB_TOKEN`，workflow 侧声明 `models: read`。官方 `actions/ai-inference@v1` 虽可用，但解析回复有 bug（模型返回纯文本时报 `Cannot use 'in' operator to search for 'choices' in OK`），不要用它。
 
+## 闸门与开关
+
+1. **守护测试先行**：PR 上跑该主题的 Go 守护测试（前端部分由 PR 上的 CI 覆盖，不重复跑）。全绿即 `proceed`，不必再判读。
+2. **判读**：测试红、或该主题没有守护测试时，按上面的通道对照本表逐个命中点定级；输出必须过 [schema.json](schema.json)，不合法一律按 `hold`。
+3. **放行条件**：`verdict: proceed` **且** 仓库变量 `SYNC_AUTO_MERGE` 为 `true` → 合并 PR 并调发版链。任一不满足，就只把结论写进 PR 评论、等人决定。
+4. **停下条件**：出现任一 `functional` → PR 转 draft、列出待裁决点、@owner，不再推进。
+5. `SYNC_AUTO_MERGE` 的用途：先以 `false` 合入、观察几轮判读结论，确认无误会后再设 `true` 打开自动合并。
+
 ## 流程（顺序不可颠倒）
 
 1. **先跑命中主题的守护测试**（报告里的 `guards`）：全绿 → `verdict: proceed`，不必再判其余。
