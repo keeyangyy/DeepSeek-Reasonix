@@ -16,19 +16,6 @@ package store
 
 import "strings"
 
-// jsonlSidecarSuffixes are the .jsonl sidecars a directory scan cannot tell
-// apart from a transcript by extension. A listing classifies by name, so one
-// missing here is shown to the user as a conversation of its own.
-var jsonlSidecarSuffixes = []string{
-	".events.jsonl",
-	".conflicts.jsonl",
-	".guardian.jsonl",
-	".turns.jsonl",
-	".wire.jsonl",
-	".adjudication.jsonl",
-	".execution.jsonl",
-}
-
 // IsSessionTranscriptName reports whether name is a primary session transcript
 // file. Append-only event logs and guardian sidecars also end in .jsonl, so
 // callers that discover sessions by directory scan must use this helper instead
