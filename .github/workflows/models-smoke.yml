@@ -1,0 +1,36 @@
+name: Models smoke
+
+# Fork: one-shot check that this repository can reach GitHub Models, which the
+# upstream-sync classifier would call instead of carrying its own API key.
+# Triggered by pushing this file (or by hand), so it needs no schedule.
+on:
+  push:
+    branches: [feat-studio/upstream-sync]
+    paths:
+      - .github/workflows/models-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  models: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/ai-inference@v1
+        id: ai
+        with:
+          model: openai/gpt-4o-mini
+          prompt: "Answer with exactly one word: OK"
+      - name: Report what came back
+        env:
+          RESPONSE: ${{ steps.ai.outputs.response }}
+        run: |
+          echo "models reachable: ${RESPONSE:-<empty>}"
+          {
+            echo "## GitHub Models smoke"
+            echo
+            echo "- model: openai/gpt-4o-mini"
+            echo "- response: ${RESPONSE:-<empty>}"
+          } >> "$GITHUB_STEP_SUMMARY"
