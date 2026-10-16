@@ -26,3 +26,19 @@
 *.yml text eol=lf
 .githooks/** text eol=lf
 benchmarks/**/*.sh text eol=lf
+
+# Image assets: mark them explicitly so git never treats one as text and
+# rewrites its line endings. Git warns "CRLF will be replaced by LF" when a
+# binary file does not happen to look binary to its content sniffing, which is
+# what images hit. Note *.svg is deliberately absent — it is XML text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.bmp binary
+*.ico binary
+*.icns binary
+*.tif binary
+*.tiff binary
