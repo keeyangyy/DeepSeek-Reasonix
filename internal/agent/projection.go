@@ -121,15 +121,6 @@ const (
 	CompactionNoop
 )
 
-// RecallLedger tracks what this compaction generation has spent pulling
-// folded content back. Carrying the generation it belongs to is what resets
-// the budget: a stale generation reads as an unspent one, with no reset call
-// to forget.
-type RecallLedger struct {
-	Generation  uint64 `json:"generation,omitempty"`
-	SpentTokens int    `json:"spent_tokens,omitempty"`
-}
-
 // CompactionState is the session context sidecar payload.
 type CompactionState struct {
 	SchemaVersion      int                        `json:"schema_version"`
@@ -481,18 +472,6 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:16])
-}
-
-// projectionValid reports whether st can be reused for the current transcript
-// and provider/model lineage. Fail closed: missing CoveredPrefixHash or a blank
-// sidecar PromptCacheKey when the current lineage key is known forces rebuild.
-// projectionValid reports whether the bound projection can still be sent. Only the
-// transcript it covers decides that: the provider/model lineage is deliberately not
-// consulted, so a model or workspace switch keeps a summary that still matches the
-// history. A window too small for the fold is caught by the send-time size check,
-// not by dropping it here.
-func projectionValid(st CompactionState, msgs []provider.Message) bool {
-	return projectionContentValid(st, msgs)
 }
 
 // projectionContentValid reports whether st's projection body still matches the
