@@ -4,13 +4,13 @@
     "commented-code": 0,
     "complexity": 1894,
     "essay": 1913,
-    "file-size": 102777,
+    "file-size": 103000,
     "function-size": 8280,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 116,
-    "test-file-size": 68860
+    "test-file-size": 70000
   },
   "files": {
     "cmd/e2ebench/main.go": {
