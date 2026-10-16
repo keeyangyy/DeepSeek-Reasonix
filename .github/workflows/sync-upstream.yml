@@ -278,6 +278,14 @@ jobs:
             exit 0
           fi
 
+          # CI runs because this flow asked for it, not because the push
+          # triggered it, so its result is waited for by run id.
+          run_id=$(gh run list --workflow ci.yml --branch "$BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')
+          if ! gh run watch "$run_id" --exit-status --interval 30 > /dev/null 2>&1; then
+            gh pr comment "$pr" --body "CI 未通过（run \`$run_id\`），不合并。"
+            echo "CI did not pass; not merging" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           gh pr ready "$pr"
           gh pr merge "$pr" --merge
           version="${TAG#studio-v}-mine.$(( $(git tag --list "v${TAG#studio-v}-mine.*" | wc -l) + 1 ))"
