@@ -11,6 +11,11 @@ on:
     branches: [studio-mine]
   pull_request:
     branches: [studio-mine]
+  # Fork: the upstream-sync flow cannot lean on a push from GITHUB_TOKEN to
+  # start CI (GitHub treats that as a recursive trigger and skips it), so that
+  # flow asks for the run explicitly instead:
+  # `gh workflow run ci.yml --ref sync/upstream-<tag>`.
+  workflow_dispatch:
 
 permissions:
   contents: read

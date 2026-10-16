@@ -1,14 +1,18 @@
 name: Sync upstream (shadow)
 
-# Fork: upstream sync, shadow stage. Every six hours it asks one question — has
-# upstream cut a new studio-v* release? — and when it has, it merges that
-# release into a throwaway checkout, intersects the result with the fork's own
-# customizations (tools/forkguard), and reports what needs review.
+# Fork: upstream sync. Every six hours it asks one question — has upstream cut
+# a new studio-v* release? — and when it has, it merges that release onto a
+# branch and opens a pull request for it.
 #
-# It never pushes studio-mine, never releases and never touches the
-# studio-latest anchor; those arrive with the later stages. The criteria it
-# follows are recorded in the project docs (decisions/2026-10-16-上游自动同步与发版.md),
-# which are not part of this repository.
+# The pull request is where this flow lands: no separate issue, no throwaway
+# branch. Conflicts are found by git in the working copy before the push, so a
+# pull request opens clean unless a functional conflict is left in it on
+# purpose for the owner to decide.
+#
+# Still to arrive: the classifier call, the auto-merge and the release. Until
+# then this stage only opens the pull request and asks CI to run on it. The
+# criteria are recorded in the project docs
+# (decisions/2026-10-16-上游自动同步与发版.md), which are not part of this repository.
 on:
   schedule:
     - cron: "0 */6 * * *"
@@ -20,8 +24,9 @@ on:
         default: ""
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
+  pull-requests: write
+  actions: write
 
 concurrency:
   group: sync-upstream
@@ -41,6 +46,7 @@ jobs:
       - id: pick
         name: Pick the release to sync
         env:
+          GH_TOKEN: ${{ github.token }}
           WANTED: ${{ inputs.tag }}
           BASE: ${{ vars.SYNC_BASE }}
         run: |
@@ -48,8 +54,13 @@ jobs:
           git remote add upstream https://github.com/esengine/DeepSeek-Reasonix.git
           git fetch --quiet --tags upstream
           tag="${WANTED:-$(git tag --list 'studio-v*' --sort=-v:refname | head -1)}"
+          branch="sync/upstream-$tag"
+          # One release at a time: a pull request that is still open (or was
+          # already merged) means this tag is in hand, so a later run waits
+          # instead of rewriting the branch under whoever is reviewing it.
+          inHand=$(gh pr list --state all --head "$branch" --json number --jq 'length')
           proceed=false
-          if [ -n "$tag" ] && [ -n "$BASE" ] && [ "$tag" != "$BASE" ]; then
+          if [ -n "$tag" ] && [ -n "$BASE" ] && [ "$tag" != "$BASE" ] && [ "$inHand" = "0" ]; then
             proceed=true
           fi
           {
@@ -57,15 +68,16 @@ jobs:
             echo "base=$BASE"
             echo "proceed=$proceed"
           } >> "$GITHUB_OUTPUT"
-          echo "newest=$tag base=$BASE proceed=$proceed" >> "$GITHUB_STEP_SUMMARY"
+          echo "newest=$tag base=$BASE inHand=$inHand proceed=$proceed" >> "$GITHUB_STEP_SUMMARY"
 
-  review:
+  sync:
     needs: probe
     if: needs.probe.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     env:
       TAG: ${{ needs.probe.outputs.tag }}
       BASE: ${{ needs.probe.outputs.base }}
+      BRANCH: sync/upstream-${{ needs.probe.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -74,66 +86,86 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Merge the release into a throwaway branch
+      - name: Merge the release onto the sync branch
         run: |
           set -euo pipefail
           git remote add upstream https://github.com/esengine/DeepSeek-Reasonix.git
           git fetch --quiet --tags upstream
           git config user.name "reasonix-sync"
           git config user.email "reasonix-sync@users.noreply.github.com"
-          git switch --create "sync/upstream-$TAG" studio-mine
-          : > conflicted.txt
+          git switch --create "$BRANCH" studio-mine
+          : > "$RUNNER_TEMP/conflicted.txt"
           if git merge --no-edit "$TAG"; then
-            echo "clean" > merge-state.txt
+            echo "clean" > "$RUNNER_TEMP/merge-state.txt"
           else
-            echo "conflicted" > merge-state.txt
-            git diff --name-only --diff-filter=U | sort > conflicted.txt
+            # The conflict markers are the hand-off: they stay in the branch so
+            # the pull request shows what a human or the classifier has to
+            # decide, instead of silently taking one side.
+            echo "conflicted" > "$RUNNER_TEMP/merge-state.txt"
+            git diff --name-only --diff-filter=U | sort > "$RUNNER_TEMP/conflicted.txt"
+            git add -A
+            git commit --no-edit
           fi
-          echo "merge state: $(cat merge-state.txt)" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### merge"
+            echo "state: $(cat "$RUNNER_TEMP/merge-state.txt")"
+            echo "conflicted files: $(wc -l < "$RUNNER_TEMP/conflicted.txt")"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Intersect with the fork's customizations
         run: |
           set -euo pipefail
-          go run ./tools/forkguard -range "$BASE..$TAG" > report.json
-          jq -e '.changes >= 0' report.json > /dev/null
-      - name: Write the report
+          go run ./tools/forkguard -range "$BASE..$TAG" > "$RUNNER_TEMP/report.json"
+          jq -e '.changes >= 0' "$RUNNER_TEMP/report.json" > /dev/null
+      - name: Write the pull request body
         run: |
           set -euo pipefail
+          body="$RUNNER_TEMP/pr-body.md"
           {
-            echo "## 上游同步 $TAG（base $BASE）"
+            echo "## 上游同步 \`$TAG\`（base \`$BASE\`）"
             echo
-            echo "- 改动文件：$(jq -r .changes report.json)"
-            echo "- 命中定制点：$(jq -r '.hits | length' report.json)"
-            echo "- 上游新增文件：$(jq -r '.upstream_added | length' report.json)"
-            echo "- 合并状态：$(cat merge-state.txt)"
+            echo "把上游 \`$TAG\` 合进 \`studio-mine\`。"
             echo
-            if [ -s conflicted.txt ]; then
-              echo "### 文本冲突"
+            echo "- 改动文件：$(jq -r .changes "$RUNNER_TEMP/report.json")"
+            echo "- 命中定制点：$(jq -r '.hits | length' "$RUNNER_TEMP/report.json")"
+            echo "- 上游新增文件：$(jq -r '.upstream_added | length' "$RUNNER_TEMP/report.json")"
+            echo "- 合并状态：\`$(cat "$RUNNER_TEMP/merge-state.txt")\`，冲突文件 $(wc -l < "$RUNNER_TEMP/conflicted.txt") 个"
+            echo
+            if [ -s "$RUNNER_TEMP/conflicted.txt" ]; then
+              echo "### 未解决的冲突（留在 PR 里等裁决）"
               echo '```'
-              cat conflicted.txt
+              cat "$RUNNER_TEMP/conflicted.txt"
               echo '```'
               echo
             fi
             echo "### 命中（需判读）"
-            jq -r '.hits[] | "- `\(.path)` — \(.topic)（\(.kind), \(.status)）"' report.json
+            jq -r '.hits[] | "- \`\(.path)\` — \(.topic)（\(.kind), \(.status)）"' "$RUNNER_TEMP/report.json"
             echo
-            echo "### 守护测试（先跑这些：全绿则不必判读）"
-            jq -r '.guards[] | "- `\(.)`"' report.json
+            echo "### 守护测试（先跑这些；全绿则不必判读）"
+            jq -r '.guards[] | "- \`\(.)\`"' "$RUNNER_TEMP/report.json"
             echo
-            echo "### 上游新增文件（前 40，反向吸收看这里）"
-            jq -r '.upstream_added[:40][] | "- `\(.)`"' report.json
+            echo "### 上游新增文件（前 40；反向吸收看这里）"
+            jq -r '.upstream_added[:40][] | "- \`\(.)\`"' "$RUNNER_TEMP/report.json"
             echo
-            echo "> 影子模式：本流程不推 studio-mine、不出包、不动锚点。判读口径见 \`tools/forkguard/classify.md\`。"
-          } > report.md
-          cat report.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Open the review issue once per release
+            echo "> 判读口径见 \`tools/forkguard/classify.md\`。本阶段只开 PR 并请求 CI；自动合并与发版随后接上。"
+          } > "$body"
+          cat "$body" >> "$GITHUB_STEP_SUMMARY"
+      - name: Push the sync branch
+        run: |
+          set -euo pipefail
+          git push --set-upstream origin "$BRANCH"
+      - name: Open the pull request
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          title="[上游同步] $TAG"
-          existing=$(gh issue list --state all --search "$title in:title" --json number --jq 'length')
-          if [ "$existing" != "0" ]; then
-            echo "issue for $TAG already exists; leaving it alone" >> "$GITHUB_STEP_SUMMARY"
+          gh pr create --base studio-mine --head "$BRANCH" --title "[上游同步] $TAG" --body-file "$RUNNER_TEMP/pr-body.md"
+      - name: Ask CI to run on the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$(cat "$RUNNER_TEMP/merge-state.txt")" != "clean" ]; then
+            echo "branch carries unresolved conflicts; CI waits until they are dealt with" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh issue create --title "$title" --body-file report.md
+          gh workflow run ci.yml --ref "$BRANCH"
