@@ -148,13 +148,13 @@ jobs:
               echo
             fi
             echo "### 命中（需判读）"
-            jq -r '.hits[] | "- \`\(.path)\` — \(.topic)（\(.kind), \(.status)）"' "$RUNNER_TEMP/report.json"
+            jq -r '.hits[] | "- `\(.path)` — \(.topic)（\(.kind), \(.status)）"' "$RUNNER_TEMP/report.json"
             echo
             echo "### 守护测试（先跑这些；全绿则不必判读）"
-            jq -r '.guards[] | "- \`\(.)\`"' "$RUNNER_TEMP/report.json"
+            jq -r '.guards[] | "- `\(.)`"' "$RUNNER_TEMP/report.json"
             echo
             echo "### 上游新增文件（前 40；反向吸收看这里）"
-            jq -r '.upstream_added[:40][] | "- \`\(.)\`"' "$RUNNER_TEMP/report.json"
+            jq -r '.upstream_added[:40][] | "- `\(.)`"' "$RUNNER_TEMP/report.json"
             echo
             echo "> 判读口径见 \`tools/forkguard/classify.md\`。"
           } > "$RUNNER_TEMP/pr-body.md"
