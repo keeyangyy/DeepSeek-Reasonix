@@ -356,6 +356,12 @@ func validateDesktopManifest(selected string, m *update.Manifest) error {
 	if err := validateManifestChannel(selected, m); err != nil {
 		return err
 	}
+	return validateManifestAssetsOnly(selected, m)
+}
+
+// validateManifestAssetsOnly checks everything about a manifest except the
+// channel's version-shape rule.
+func validateManifestAssetsOnly(selected string, m *update.Manifest) error {
 	if m.DownloadPage != manifestDownloadPageURL {
 		return fmt.Errorf("%s manifest has invalid download page %q", selected, m.DownloadPage)
 	}
@@ -402,28 +408,8 @@ func validateDesktopManifest(selected string, m *update.Manifest) error {
 // failure is kept — a user staring at a gateway 403 (#6005) needs to see that
 // the R2 pointer failed too, not just whichever endpoint happened to die last.
 func fetchManifest(ctx context.Context, c, fallback *http.Client, selected string) (*update.Manifest, error) {
-	var errs []error
 	selected = normalizeUpdateChannel(selected)
-	for _, url := range manifestEndpoints(selected) {
-		endpointCtx, cancel := context.WithTimeout(ctx, manifestEndpointTimeout)
-		b, err := fetchManifestBytes(endpointCtx, c, fallback, selected, url)
-		cancel()
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		var m update.Manifest
-		if err := json.Unmarshal(b, &m); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", url, err))
-			continue
-		}
-		if err := validateDesktopManifest(selected, &m); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", url, err))
-			continue
-		}
-		return &m, nil
-	}
-	return nil, fmt.Errorf("update: fetch manifest: %w", errors.Join(errs...))
+	return fetchManifestAnchored(ctx, c, fallback, selected, manifestEndpoints(selected))
 }
 
 // fetchManifestBytes gives the default and IPv4 transports separate halves of

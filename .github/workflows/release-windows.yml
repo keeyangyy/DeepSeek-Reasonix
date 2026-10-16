@@ -168,15 +168,26 @@ jobs:
           # anchor below is overwritten by every release and cannot serve as an
           # immutable per-version address.
           gh release upload "$RELEASE_TAG" manifest-input/latest.json --clobber
-          # The anchor is a fixed tag whose contents every release of this line
-          # overwrites, so the updater never follows the repository-wide latest
-          # badge -- which the studio and legacy 1.39 lines also claim.
+          # The anchor is a fixed tag the stable releases publish to, so the
+          # updater never follows the repository-wide latest badge -- which the
+          # studio and legacy 1.39 lines also claim.
           if ! gh release view wails-latest >/dev/null 2>&1; then
             gh release create wails-latest --latest=false \
               --title "wails-mine update anchor" \
-              --notes "Update-check anchor for the wails-mine (1.38.x) line. latest.json here is overwritten by every release of that line; do not delete."
+              --notes "Update-check anchor for the wails-mine (1.38.x) line. latest.json here describes the newest stable release; pre-releases are listed in versions.json instead."
           fi
-          gh release upload wails-latest manifest-input/latest.json --clobber
+          # A pre-release must never overwrite the anchor: the stable channel's
+          # own check rejects a pre-release manifest outright, so overwriting it
+          # would turn every stable user's update check into an error. Older and
+          # pre-release builds stay reachable through the version catalog above.
+          case "$RELEASE_TAG" in
+            *-beta.*)
+              echo "Pre-release $RELEASE_TAG: keeping the anchor's stable manifest."
+              ;;
+            *)
+              gh release upload wails-latest manifest-input/latest.json --clobber
+              ;;
+          esac
 
       - name: Update this line's version catalog
         env:
