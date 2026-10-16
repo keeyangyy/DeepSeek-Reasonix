@@ -26,6 +26,7 @@
 /write_heartbeat
 /catalog-detector
 /catalogfilter
+/forkguard
 /tool-surface-cache
 
 # Go test/build scratch

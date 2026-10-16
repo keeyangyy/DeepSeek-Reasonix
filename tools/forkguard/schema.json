@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "forkguard 上游同步判读结论",
+  "type": "object",
+  "required": ["verdict", "guards_passed", "hits", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "verdict": {
+      "enum": ["proceed", "hold"],
+      "description": "hold 只在命中功能性类时给出；不确定一律 hold"
+    },
+    "guards_passed": {
+      "type": "boolean",
+      "description": "命中主题的守护测试是否全绿"
+    },
+    "hits": {
+      "type": "array",
+      "description": "逐个命中点的定级；机械类也要给出",
+      "items": {
+        "type": "object",
+        "required": ["topic", "file", "class", "decision", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "topic": { "type": "string", "description": "主题名，取自 customizations.json" },
+          "file": { "type": "string" },
+          "class": { "enum": ["mechanical", "functional"] },
+          "decision": {
+            "enum": ["ours", "theirs", "merge", "upstream-absorbed", "none"],
+            "description": "该文件冲突的处置；upstream-absorbed 表示上游自行实现了本主题"
+          },
+          "evidence": { "type": "string", "description": "上游 hunk 引用或我方笔记条目" },
+          "counterexample": { "type": "string", "description": "若结论错，最可能错在哪" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "summary": { "type": "string", "description": "一句话，写给人看，会进通知" }
+  }
+}

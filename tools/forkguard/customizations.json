@@ -1,0 +1,100 @@
+{
+  "purpose": "机器可读的 fork 定制清单：上游改动命中的挂载点、以及可能被上游反向吸收的自有文件。供 tools/forkguard 粗筛与云端判读使用。维护：主题变化时同步更新。",
+  "baseline": "studio-v2.41.0",
+  "topics": [
+    {
+      "topic": "本线发版链与 CI 基础设施",
+      "branch": "feat-studio/ci-release",
+      "added": [
+        ".github/workflows/ci-rerun.yml",
+        ".github/workflows/release-manual.yml",
+        ".github/workflows/release-windows.yml",
+        "tools/catalogfilter/main.go",
+        "tools/catalogfilter/main_test.go"
+      ],
+      "mounts": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release-studio.yml",
+        ".github/workflows/studio.yml",
+        ".gitignore",
+        "cmd/signpath-contract/linux_arch_test.go"
+      ],
+      "guards": [
+        "go test ./cmd/signpath-contract/ -count=1",
+        "go test ./tools/catalogfilter/ -count=1"
+      ]
+    },
+    {
+      "topic": "版本页双来源",
+      "branch": "feat-studio/update-channel",
+      "added": [
+        "internal/platform/update/mine_catalog.go",
+        "internal/platform/update/mine_catalog_test.go",
+        "desktop/frontend-next/src/ui/Versions.mine-source.interaction.test.tsx"
+      ],
+      "mounts": [
+        "cmd/reasonix-studio-host/main.go",
+        "desktop/frontend-next/src/i18n/en_settings.ts",
+        "desktop/frontend-next/src/port/version.ts",
+        "desktop/frontend-next/src/styles/app.css",
+        "desktop/frontend-next/src/ui/Versions.tsx",
+        "internal/platform/appupdate/appupdate.go",
+        "internal/platform/appupdate/install.go",
+        "internal/platform/update/download.go",
+        "internal/platform/update/download_test.go",
+        "internal/platform/update/hub.go",
+        "internal/platform/update/hub_catalog_test.go",
+        "internal/platform/update/manifest.go",
+        "internal/platform/update/updater.go",
+        "internal/platform/update/verify.go"
+      ],
+      "guards": [
+        "go test ./internal/platform/update/ ./internal/platform/appupdate/ -count=1",
+        "npx -y pnpm@10 exec vitest run src/ui/Versions.mine-source.interaction.test.tsx src/ui/Versions.withdrawn.interaction.test.tsx src/ui/Versions.interaction.test.tsx"
+      ]
+    },
+    {
+      "topic": "记忆写入免确认开关",
+      "branch": "feat-studio/memory-autoconfirm",
+      "added": [
+        "internal/contract/config/memory_autoconfirm.go",
+        "internal/frontend/serve/remember_approval.go",
+        "internal/session/control/remember_autoconfirm.go",
+        "internal/session/control/remember_autoconfirm_test.go",
+        "internal/state/memory/remember_autoconfirm.go",
+        "internal/state/memory/remember_autoconfirm_test.go",
+        "desktop/frontend-next/src/ui/Memory.approval.test.tsx"
+      ],
+      "mounts": [
+        "desktop/frontend-next/src/actions.ts",
+        "desktop/frontend-next/src/i18n/en_kernel.ts",
+        "desktop/frontend-next/src/i18n/en_settings.ts",
+        "desktop/frontend-next/src/i18n/kernel.ts",
+        "desktop/frontend-next/src/i18n/notices.ts",
+        "desktop/frontend-next/src/port/boundary.ts",
+        "desktop/frontend-next/src/port/mock_boundary.ts",
+        "desktop/frontend-next/src/port/port.ts",
+        "desktop/frontend-next/src/port/sse_boundary.ts",
+        "desktop/frontend-next/src/ui/Memory.tsx",
+        "desktop/frontend-next/src/ui/Settings.tsx",
+        "internal/assembly/boot/build.go",
+        "internal/contract/config/config.go",
+        "internal/contract/config/project_scope.go",
+        "internal/contract/config/render_memory.go",
+        "internal/contract/event/notice_codes.go",
+        "internal/frontend/serve/boundary.go",
+        "internal/session/control/approval_bridge.go",
+        "internal/session/control/controller.go",
+        "internal/session/control/controller_deps.go",
+        "internal/session/control/memory.go",
+        "internal/session/control/memory_command.go",
+        "internal/session/control/port.go"
+      ],
+      "guards": [
+        "go test ./internal/state/memory/ -run Remember -count=1",
+        "go test ./internal/session/control/ -run Remember -count=1",
+        "npx -y pnpm@10 exec vitest run src/ui/Memory.approval.test.tsx"
+      ]
+    }
+  ]
+}
