@@ -173,23 +173,6 @@ type TurnEventReplayView struct {
 	RuntimeEpoch       string `json:"runtimeEpoch,omitempty"`
 }
 
-// workspaceNotReady reports whether the tab is in a transient startup window
-// (no permanent startup failure yet), so a replay caller can retry later.
-func (a *App) workspaceNotReady(tab *WorkspaceTab) bool {
-	if tab == nil {
-		return true
-	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if strings.TrimSpace(tab.StartupErr) != "" {
-		return false
-	}
-	if issue := a.sessionRuntimeViewLocked(tab).Issue; issue != nil && strings.TrimSpace(issue.Message) != "" {
-		return false
-	}
-	return true
-}
-
 // TurnEventsForTab supplies the durable suffix used to repair sequence gaps or
 // rebuild after a runtime epoch change.
 func (a *App) TurnEventsForTab(tabID string, afterSeq uint64) (TurnEventReplayView, error) {
