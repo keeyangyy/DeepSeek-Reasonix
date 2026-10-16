@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 )
@@ -12,9 +13,7 @@ import (
 func entry(t *testing.T, version, channel string, extra map[string]string) json.RawMessage {
 	t.Helper()
 	fields := map[string]string{"version": version, "tag": "v" + version, "channel": channel}
-	for k, v := range extra {
-		fields[k] = v
-	}
+	maps.Copy(fields, extra)
 	b, err := json.Marshal(fields)
 	if err != nil {
 		t.Fatalf("marshal entry: %v", err)
