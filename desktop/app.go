@@ -4158,7 +4158,7 @@ func (a *App) buildSessionRebindCandidate(
 		StatsSource:              "desktop",
 		TaskStore:                a.taskStore(),
 		OnConfigLoadWarnings:     a.configLoadWarningsHandler(),
-		Sink:                     a.desktopControllerSink(sink, cfg.Notifications),
+		Sink:                     a.desktopControllerSink(sink, cfg.Notifications, tab.ID),
 		WorkspaceRoot:            root,
 		SessionDir:               sessionDir,
 		EffortOverride:           effortPtr(profile.effort),

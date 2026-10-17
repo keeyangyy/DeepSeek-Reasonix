@@ -3784,7 +3784,7 @@ func (a *App) desktopNotificationSender() notify.Sender {
 	return a.notificationSender
 }
 
-func (a *App) desktopControllerSink(inner event.Sink, cfg config.NotificationsConfig) event.Sink {
+func (a *App) desktopControllerSink(inner event.Sink, cfg config.NotificationsConfig, scope string) event.Sink {
 	if !cfg.Enabled {
 		return inner
 	}
@@ -3792,7 +3792,11 @@ func (a *App) desktopControllerSink(inner event.Sink, cfg config.NotificationsCo
 	if sender == nil {
 		return inner
 	}
-	return notify.NewSink(inner, sender, cfg)
+	sink := notify.NewSink(inner, sender, cfg)
+	// The scope keeps this tab's request ids (they restart at 1 in every
+	// controller) from colliding with another tab's notification identity.
+	sink.SetScope(scope)
+	return sink
 }
 
 func setTabStartupError(tab *WorkspaceTab, err error) bool {
@@ -4052,7 +4056,7 @@ func (a *App) buildTabControllerWithContextCore(tab *WorkspaceTab, loadedSession
 	// resurrecting removed tools on the shared host.
 	extensionGen := a.currentExtensionGeneration()
 	sharedHost := a.acquireSharedHost(rootKey)
-	sink := a.desktopControllerSink(buildSink, cfg.Notifications)
+	sink := a.desktopControllerSink(buildSink, cfg.Notifications, tab.ID)
 	buildCtx, registration := beginSharedHostMCPRegistration(buildCtx, sharedHost)
 	defer registration.rollback()
 	ctrl, err := a.buildTabControllerBootFenced(buildCtx, extensionGen, boot.Options{
