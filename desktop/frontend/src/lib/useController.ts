@@ -7,6 +7,7 @@ import { asArray } from "./array";
 import { createControllerModelCommands } from "./controllerModelCommands";
 import { compactArchivedToolItems } from "./archivedToolItems";
 import { addBreadcrumb } from "./breadcrumbs";
+import { recoverRefusedClear } from "./clearSessionRecovery";
 import { app, onEvent, onReady, onRuntimeRebuilt, onTabMeta, onTopicActivation } from "./bridge";
 import { invalidateCache } from "./composerHistory";
 import { formatInboxCancelError } from "./inboxError";
@@ -4508,17 +4509,7 @@ export function useController() {
     try {
       cleared = tabId ? await app.ClearSessionForTab(tabId) : await app.ClearSession();
     } catch (err) {
-      // A refused clear is not "nothing happened": the controller may already
-      // have rotated (its transition callback republishes the tab's path) and
-      // only a follow-up step failed. Re-read the authoritative session
-      // identity instead of assuming the old transcript is still live, and
-      // rethrow so the clear-context surface warns the user — returning here
-      // silently reported success for a clear that never completed.
-      if (tabId) {
-        await refreshMetaForTab(tabId).catch(() => {});
-        await loadSessionDataForTab(tabId, false, "startup", { preserveCachedHistory: true }).catch(() => {});
-      }
-      throw err;
+      return await recoverRefusedClear(tabId, refreshMetaForTab, loadSessionDataForTab, err);
     }
     if (tabId) bumpSessionLoadSeq(tabId);
     invalidateCache();
