@@ -194,7 +194,7 @@ func TestDesktopSettersConcurrentlyKeepEveryField(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			lang := "en"
 			if i%2 == 1 {
 				lang = "zh"
@@ -204,7 +204,7 @@ func TestDesktopSettersConcurrentlyKeepEveryField(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			style := "text"
 			if i%2 == 1 {
 				style = "icon"
