@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"reasonix/desktop/internal/instanceidentity"
 	"reasonix/desktop/internal/winuninstall"
 	"reasonix/internal/installlayout"
 	"reasonix/internal/proc"
@@ -591,6 +592,10 @@ func cleanupOwnedWindowsUpdateDirectory(path string, owner os.FileInfo) error {
 func startRelaunch(relaunch, installDir string) error {
 	cmd := proc.VisibleCommand(relaunch)
 	cmd.Dir = installDir
+	// REASONIX_HOME and the update-instance id exist only so this helper can
+	// verify the data home it restarts into. Passing them on would make the new
+	// desktop — and every shell it spawns — look like an isolated runtime.
+	cmd.Env = instanceidentity.WithoutUpdateEnvironment(os.Environ())
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Start()
 }

@@ -144,11 +144,47 @@ func TestStageWindowsUpdateHelperCopyAllocatesExclusiveNodes(t *testing.T) {
 	if first == second {
 		t.Fatalf("exclusive helper copies reused path %q", first)
 	}
-	for _, path := range []string{first, second} {
-		got, err := os.ReadFile(path)
-		if err != nil || string(got) != string(content) {
-			t.Fatalf("staged helper %q = %q, %v", path, got, err)
+	got, err := os.ReadFile(second)
+	if err != nil || string(got) != string(content) {
+		t.Fatalf("staged helper %q = %q, %v", second, got, err)
+	}
+	// Only the copy just staged survives: leaving each one behind grew the
+	// update cache by a helper-sized file per release.
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Fatalf("earlier helper copy %q was not pruned: %v", first, err)
+	}
+}
+
+func TestPruneWindowsUpdateHelperCopiesKeepsUnrelatedFiles(t *testing.T) {
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "reasonix-update-helper-keep.exe")
+	others := []string{
+		filepath.Join(dir, "reasonix-update-helper-old.exe"),
+		filepath.Join(dir, "Reasonix-windows-amd64-installer.exe"),
+		filepath.Join(dir, "downloaded.json"),
+	}
+	for _, path := range append([]string{keep}, others...) {
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
 		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "reasonix-update-helper-dir.exe"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pruneWindowsUpdateHelperCopies(dir, keep)
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("kept helper copy is missing: %v", err)
+	}
+	if _, err := os.Stat(others[0]); !os.IsNotExist(err) {
+		t.Fatalf("stale helper copy survived: %v", err)
+	}
+	for _, path := range others[1:] {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("unrelated file %q was pruned: %v", filepath.Base(path), err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "reasonix-update-helper-dir.exe")); err != nil {
+		t.Fatalf("directory matching the helper prefix was pruned: %v", err)
 	}
 }
 

@@ -37,6 +37,18 @@ func TestIdentityPreservesExistingFormatAndAliases(t *testing.T) {
 		t.Fatal("equivalent home changed GUID")
 	}
 }
+func TestWithoutUpdateEnvironmentKeepsEverythingElse(t *testing.T) {
+	env := WithoutUpdateEnvironment([]string{
+		"PATH=keep",
+		"reasonix_home=C:\\data",
+		"REASONIX_UPDATE_INSTANCE_ID=" + Prefix + ".0123456789abcdef",
+		"OTHER=1",
+	})
+	if len(env) != 2 || env[0] != "PATH=keep" || env[1] != "OTHER=1" {
+		t.Fatalf("handoff variables leaked into the relaunched desktop: %v", env)
+	}
+}
+
 func TestUpdateEnvironmentFreezesHome(t *testing.T) {
 	env := UpdateEnvironment([]string{"PATH=keep", "reasonix_home=old", "REASONIX_UPDATE_INSTANCE_ID=stale"}, "relative-home")
 	values := map[string]string{}
