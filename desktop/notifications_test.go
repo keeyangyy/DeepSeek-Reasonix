@@ -34,7 +34,7 @@ func TestDesktopControllerSinkSendsConfiguredSystemNotifications(t *testing.T) {
 		TurnDone:        true,
 		ApprovalRequest: true,
 		AskRequest:      true,
-	})
+	}, "tab-a")
 
 	sink.Emit(event.Event{Kind: event.TurnDone})
 
@@ -56,7 +56,7 @@ func TestDesktopControllerSinkSkipsSystemNotificationsWhenDisabled(t *testing.T)
 	sink := app.desktopControllerSink(inner, config.NotificationsConfig{
 		Enabled:  false,
 		TurnDone: true,
-	})
+	}, "tab-a")
 
 	sink.Emit(event.Event{Kind: event.TurnDone})
 
