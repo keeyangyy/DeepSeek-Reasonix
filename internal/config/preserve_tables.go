@@ -179,6 +179,15 @@ func elementOwnKeyLines(block string) map[string]string {
 // element by element, leaving the caller to refuse the save rather than write a
 // lossy one.
 func carryArrayElementFields(body, next, section string) (string, bool) {
+	return carryArrayElementFieldsExcept(body, next, section, nil)
+}
+
+// carryArrayElementFieldsExcept is carryArrayElementFields with the element keys
+// this save removed on purpose. A key the render no longer writes is only a
+// foreign field when the save did not drop it: carrying back a key the save
+// deleted would put it on disk again and make the round-trip guard refuse the
+// whole edit.
+func carryArrayElementFieldsExcept(body, next, section string, dropped map[string]bool) (string, bool) {
 	oldElems, ok := arrayElements(body, section)
 	if !ok {
 		return "", false
@@ -194,7 +203,7 @@ func carryArrayElementFields(body, next, section string) (string, bool) {
 	for _, elem := range newElems {
 		block := strings.TrimRight(elem.text, "\n")
 		if old, found := findArrayElement(oldElems, elem.name); found {
-			block = appendMissingElementKeys(block, old.text)
+			block = appendMissingElementKeys(block, old.text, dropped)
 		}
 		blocks = append(blocks, block)
 	}
@@ -213,12 +222,15 @@ func findArrayElement(elems []arrayElement, name string) (arrayElement, bool) {
 
 // appendMissingElementKeys writes into block, just before its first sub-table,
 // every own key the old element had and block does not.
-func appendMissingElementKeys(block, oldBlock string) string {
+func appendMissingElementKeys(block, oldBlock string, dropped map[string]bool) string {
 	have := elementOwnKeyLines(block)
 	missing := elementOwnKeyLines(oldBlock)
 	names := make([]string, 0, len(missing))
 	for name := range missing {
 		if _, exists := have[name]; exists {
+			continue
+		}
+		if dropped[name] {
 			continue
 		}
 		names = append(names, name)

@@ -159,13 +159,83 @@ func patchUserConfigText(text string, base, next *Config, nextRender string) (st
 			body = patched
 			continue
 		}
-		patched, ok := upsertUserConfigEntry(body, nextRender, entry)
+		patched, ok := upsertUserConfigEntry(body, nextRender, entry, droppedElementKeys(before, after, entry.key.section))
 		if !ok {
 			return "", false
 		}
 		body = patched
 	}
 	return stripRetiredUserConfigLines(body), true
+}
+
+// droppedElementKeys lists, for one array-of-tables section, the element keys
+// the save intentionally removed: keys present in the base render for an element
+// that is still there, and absent from the next render. Those are deletions the
+// save decided on, not fields this build fails to model, so the carry-over step
+// must not write them back.
+func droppedElementKeys(before, after map[string]userConfigEntry, section string) map[string]bool {
+	entry, ok := after[userConfigKey{section: section}.id()]
+	if !ok || !entry.table {
+		return nil
+	}
+	beforeEntry, hadBefore := before[userConfigKey{section: section}.id()]
+	if !hadBefore || !beforeEntry.table {
+		return nil
+	}
+	oldElems, ok := sessionOwnElementKeys(beforeEntry.value)
+	if !ok {
+		return nil
+	}
+	newElems, ok := sessionOwnElementKeys(entry.value)
+	if !ok {
+		return nil
+	}
+	dropped := map[string]bool{}
+	for name, keys := range oldElems {
+		kept, present := newElems[name]
+		if !present {
+			continue
+		}
+		for key := range keys {
+			if !kept[key] {
+				dropped[key] = true
+			}
+		}
+	}
+	if len(dropped) == 0 {
+		return nil
+	}
+	return dropped
+}
+
+// sessionOwnElementKeys indexes one array-of-tables value by element identity,
+// then by that element's own key names. Elements are matched the same way
+// carryArrayElementFields matches them: on their `name` (providers, plugins) or
+// `id` (bot connections).
+func sessionOwnElementKeys(value any) (map[string]map[string]bool, bool) {
+	elems, ok := value.([]map[string]any)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]map[string]bool, len(elems))
+	for _, elem := range elems {
+		name := ""
+		for _, key := range []string{"name", "id"} {
+			if v, ok := elem[key].(string); ok {
+				name = v
+				break
+			}
+		}
+		if name == "" {
+			return nil, false
+		}
+		keys := make(map[string]bool, len(elem))
+		for key := range elem {
+			keys[key] = true
+		}
+		out[name] = keys
+	}
+	return out, true
 }
 
 // stripRetiredUserConfigLines drops the retired keys a whole render drops by
@@ -312,7 +382,7 @@ func sortedUserConfigNames(table map[string]any) []string {
 // upsertUserConfigEntry writes one entry into body from the lines nextRender
 // gives it. A table is replaced whole; a scalar is written at its key, leaving
 // the rest of its table — comments included — untouched.
-func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (string, bool) {
+func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry, dropped map[string]bool) (string, bool) {
 	body = dropInlinePathSection(body, nextRender, entry.key)
 	if entry.key.section != "" {
 		var ok bool
@@ -328,7 +398,7 @@ func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (stri
 		// Elements keep the keys this build does not model; refuse when they
 		// cannot be matched by name instead of replacing them wholesale.
 		patched := replaceTOMLSection(body, entry.key.section, block)
-		return carryArrayElementFields(body, patched, entry.key.section)
+		return carryArrayElementFieldsExcept(body, patched, entry.key.section, dropped)
 	}
 	line := userConfigRenderKeyLine(nextRender, entry.key)
 	if line == "" {
