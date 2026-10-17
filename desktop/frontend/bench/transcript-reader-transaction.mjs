@@ -372,6 +372,12 @@ async function runColdExpansion(page, transcript, label) {
   // pre-click viewport rather than including actionability setup as drift.
   await toggle.click({ trial: true });
   await waitForNativeViewportSettlement(page);
+  // This step measures a COLD expansion, so the reasoning body must start
+  // folded. The default policy leaves the newest block open, and folding it by
+  // clicking first would spend the reader anchor this assertion measures.
+  // Force the folder policy for this page instead: one click, one expansion.
+  const wasExpanded = await toggle.getAttribute("aria-expanded");
+  assert(wasExpanded === "false", `${label}: cold reasoning body starts folded (aria-expanded=${wasExpanded})`);
   const before = await block.evaluate(element => ({ key: element.dataset.transcriptBlockKey,
     top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height }));
   await toggle.click();
@@ -456,6 +462,12 @@ async function runBrowser(browserType, label) {
   const browser = await browserType.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    // Start every reasoning body folded so the cold-expansion step has a real
+    // cold state to measure. The default policy keeps the newest block open,
+    // which would make that step measure nothing.
+    await page.addInitScript(() => {
+      try { localStorage.setItem("reasonix-default-collapsed", "all-collapsed"); } catch { /* no storage */ }
+    });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(url, { waitUntil: "domcontentloaded" });

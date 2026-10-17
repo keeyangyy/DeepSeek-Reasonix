@@ -93,7 +93,7 @@ export function foldSupersededItem(previous: { open: boolean; userOverridden: bo
 }
 
 /** A user toggle is always remembered, whatever the policy says. */
-export function withManualToggle(previous: { open: boolean }): { open: boolean; userOverridden: true } {
+export function withManualToggle(previous: { open: boolean }): { open: boolean; userOverridden: boolean } {
   return { open: !previous.open, userOverridden: true };
 }
 
