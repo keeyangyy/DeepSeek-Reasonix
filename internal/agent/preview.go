@@ -27,6 +27,10 @@ var TransientUserBlockTags = []string{
 	"capability-route",
 	"interrupted-turn-recovery",
 	"execution-policy",
+	// Historical: releases before durable origin stamping prepended this block,
+	// and sitting ahead of every other block it hid host wording from the
+	// openings the synthetic list matches on.
+	"workspace",
 }
 
 // reTrailingExecutionPolicy matches the host-appended execution-policy block at
