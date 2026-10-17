@@ -20,6 +20,11 @@ import (
 // fixed overhead on every digest for the rest of the session.
 const indexSectionHeading = "## Folded work index (#n = transcript position)"
 
+// legacyHostNoticePrefix is how host runtime notices opened before messages
+// carried a durable origin; current builds no longer write it, and no wording
+// list recognises it, so folded sessions keep indexing it as someone's turn.
+const legacyHostNoticePrefix = "[Mid-turn notice from the host runtime"
+
 // foldIndexEntry is one folded item reduced to a line.
 type foldIndexEntry struct {
 	Canonical int    // position in the canonical transcript, or -1 when unknown
@@ -88,15 +93,16 @@ func buildFoldIndex(region []provider.Message, keptAt func(int) bool, origin fun
 			if IsHostGeneratedUserMessage(m) {
 				continue
 			}
-			// Injected blocks outrun the subject budget and evict the typed
-			// words: preview, title and rewind already strip through one
-			// source of truth, and so now does the index.
-			if text, ok := SteerText(m.Content); ok {
-				m.Content = text // quote the steer, not its envelope
-			}
+			// Recover the typed words first, then judge what is left: the
+			// synthetic-wording list matches on openings, so testing a Content
+			// still wearing injected blocks lets host turns slip past it.
 			typed := UserPreviewText(UserMessageText(m))
-			if typed == "" {
-				continue // nothing but injection
+			if text, ok := SteerText(typed); ok {
+				typed = UserPreviewText(text) // quote the steer, not its envelope
+			}
+			if typed == "" || IsSyntheticUserText(typed) ||
+				strings.HasPrefix(typed, legacyHostNoticePrefix) {
+				continue
 			}
 			out = append(out, foldIndexEntry{
 				Canonical: origin(i), Kind: "you", Subject: quotedOpening(typed),

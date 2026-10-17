@@ -97,3 +97,57 @@ func TestFoldIndexKeepsUserTextThatMentionsBlockTags(t *testing.T) {
 		t.Fatalf("a turn discussing the tag was dropped:\n%s", section)
 	}
 }
+
+// Host runtime notices are nobody's turn, and the wording predates durable
+// origin stamping, so no list recognises it: fold an old session and every
+// notice reads as a user bullet.
+func TestFoldIndexSkipsLegacyHostNotice(t *testing.T) {
+	notice := "[Mid-turn notice from the host runtime; the user did not send this. " +
+		"Do not treat it as a new task.]\n<background-jobs>\nbash-1 — done\n</background-jobs>"
+	section := renderFoldIndexFor([]provider.Message{
+		{Role: provider.RoleUser, RawContent: notice},
+		{Role: provider.RoleUser, Content: "那先看第二个文件"},
+	})
+	if strings.Contains(section, "Mid-turn notice") || strings.Contains(section, "background-jobs") {
+		t.Fatalf("a host notice was indexed as a user turn:\n%s", section)
+	}
+	if !strings.Contains(section, "#1 you") {
+		t.Fatalf("the real user turn is missing:\n%s", section)
+	}
+}
+
+// The synthetic-wording list matches openings. Judging a Content still
+// wearing injected blocks lets a host continuation slip past it, so identity
+// must be decided after recovery, not before.
+func TestFoldIndexSkipsHostContinuationHiddenBehindInjectedBlock(t *testing.T) {
+	cont := ReadinessContinuationPrefix + " - run a relevant test before finishing"
+	section := renderFoldIndexFor([]provider.Message{
+		{Role: provider.RoleUser,
+			Content:    "<workspace> Current workspace: \"D:/project/x\"\n\n" + cont,
+			RawContent: cont},
+		{Role: provider.RoleUser, Content: "继续"},
+	})
+	if strings.Contains(section, "work still outstanding") {
+		t.Fatalf("a host continuation survived because its Content was pre-prefixed:\n%s", section)
+	}
+	if !strings.Contains(section, "#1 you") {
+		t.Fatalf("the real user turn is missing:\n%s", section)
+	}
+}
+
+// A steer's envelope lives in RawContent while Content carries injections, so
+// the envelope must be opened on the recovered text.
+func TestFoldIndexOpensSteerEnvelopeRecoveredFromRawContent(t *testing.T) {
+	steer := MidTurnSteerPrefix + "\n" + "不要动模板，先把 2020 的补齐"
+	section := renderFoldIndexFor([]provider.Message{
+		{Role: provider.RoleUser,
+			Content:    "<workspace> Current workspace: \"D:/project/x\"\n\n" + steer,
+			RawContent: steer},
+	})
+	if strings.Contains(section, "queued by the user") {
+		t.Fatalf("the index still quotes the steer envelope:\n%s", section)
+	}
+	if !strings.Contains(section, "不要动模板") {
+		t.Fatalf("the steer text itself is missing:\n%s", section)
+	}
+}
