@@ -409,6 +409,7 @@ func TestManifestChannelValidation(t *testing.T) {
 		wantError bool
 	}{
 		{name: "stable release", channel: "stable", version: "v1.17.21"},
+		{name: "beta pre-release accepted", channel: "stable", version: "v1.18.0-beta.7"},
 		{name: "legacy preview selects official", channel: "preview", version: "v1.17.21"},
 		{name: "legacy canary selects official", channel: "canary", version: "v1.17.21"},
 		{name: "legacy preview rejects prerelease", channel: "preview", version: "v1.18.0-preview.7", wantError: true},

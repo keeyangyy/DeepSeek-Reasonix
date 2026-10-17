@@ -34,22 +34,22 @@ func TestValidateCatalogManifestURL(t *testing.T) {
 	}
 }
 
-// Picking a version from the list may name a pre-release; the automatic update
-// path must keep rejecting one.
-func TestValidateVersionedUpdaterRequestAllowsPrerelease(t *testing.T) {
-	_, _, version, err := validateVersionedUpdaterRequest("web-1", "stable", "v1.38.54-beta.2")
+// The line runs a single update channel, so a beta picked from the version list
+// is a valid request target — while an unknown version shape stays refused.
+func TestValidateUpdaterRequestAcceptsBeta(t *testing.T) {
+	_, _, version, err := validateUpdaterRequest("web-1", "stable", "v1.38.54-beta.2")
 	if err != nil {
-		t.Fatalf("validateVersionedUpdaterRequest rejected a pre-release: %v", err)
+		t.Fatalf("validateUpdaterRequest rejected a pre-release: %v", err)
 	}
 	if version != "v1.38.54-beta.2" {
 		t.Errorf("version = %q, want v1.38.54-beta.2", version)
 	}
-	if _, _, _, err := validateUpdaterRequest("web-1", "stable", "v1.38.54-beta.2"); err == nil {
-		t.Error("validateUpdaterRequest accepted a pre-release for the automatic path")
+	if _, _, _, err := validateUpdaterRequest("web-1", "stable", "v1.38.54"); err != nil {
+		t.Errorf("validateUpdaterRequest rejected a release: %v", err)
 	}
 	for _, bad := range []string{"latest", "v1.38.54-rc.1", "1.38.54", ""} {
-		if _, _, _, err := validateVersionedUpdaterRequest("web-1", "stable", bad); err == nil {
-			t.Errorf("validateVersionedUpdaterRequest accepted %q", bad)
+		if _, _, _, err := validateUpdaterRequest("web-1", "stable", bad); err == nil {
+			t.Errorf("validateUpdaterRequest accepted %q", bad)
 		}
 	}
 }

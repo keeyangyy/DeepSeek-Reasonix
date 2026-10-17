@@ -36,24 +36,11 @@ var (
 	markPendingUpdateHealthyAfterReady       = repair.MarkUpdateHealthyExact
 )
 
+// validateUpdaterRequest binds a request id, the (single) update channel and the
+// expected version. The version may be any shape this line publishes, including
+// a pre-release: the line runs one channel, so a beta picked from the version
+// list validates exactly like a release.
 func validateUpdaterRequest(requestID, selectedChannel, expectedVersion string) (string, string, string, error) {
-	requestID = strings.TrimSpace(requestID)
-	if !updaterRequestIDRE.MatchString(requestID) {
-		return "", "", "", fmt.Errorf("update: invalid request id")
-	}
-	selectedChannel = targetUpdateChannel(selectedChannel)
-	expectedVersion = strings.TrimSpace(expectedVersion)
-	if !stableDesktopVersionRE.MatchString(expectedVersion) {
-		return "", "", "", fmt.Errorf("update: invalid %s version %q", selectedChannel, expectedVersion)
-	}
-	return requestID, selectedChannel, expectedVersion, nil
-}
-
-// validateVersionedUpdaterRequest is the same request check for an explicit
-// "install this version" call: the version may be any shape this line
-// publishes, including a pre-release the user picked from the version list.
-// ApplyUpdateRequest keeps the stricter stable-only rule above.
-func validateVersionedUpdaterRequest(requestID, selectedChannel, expectedVersion string) (string, string, string, error) {
 	requestID = strings.TrimSpace(requestID)
 	if !updaterRequestIDRE.MatchString(requestID) {
 		return "", "", "", fmt.Errorf("update: invalid request id")
@@ -166,7 +153,7 @@ func (a *App) openDownloadPage(selectedChannel string) {
 // downloadUpdateRequest downloads, verifies, and caches the exact version bound
 // to a request. Used only by ApplyUpdateRequest; not exposed as a Wails binding.
 func (a *App) downloadUpdateRequest(selectedChannel, expectedVersion, requestID string) (*UpdateDownloadResult, error) {
-	requestID, selectedChannel, expectedVersion, err := validateVersionedUpdaterRequest(requestID, selectedChannel, expectedVersion)
+	requestID, selectedChannel, expectedVersion, err := validateUpdaterRequest(requestID, selectedChannel, expectedVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +208,7 @@ func (a *App) downloadUpdateRequest(selectedChannel, expectedVersion, requestID 
 // installUpdateRequest applies the exact cached, verified update bound to a
 // request and then exits/relaunches. Used only by ApplyUpdateRequest.
 func (a *App) installUpdateRequest(selectedChannel, expectedVersion, requestID string) error {
-	requestID, selectedChannel, expectedVersion, err := validateVersionedUpdaterRequest(requestID, selectedChannel, expectedVersion)
+	requestID, selectedChannel, expectedVersion, err := validateUpdaterRequest(requestID, selectedChannel, expectedVersion)
 	if err != nil {
 		return err
 	}
@@ -473,20 +460,19 @@ func (a *App) installPortableUpdate(requestID string, meta *cachedUpdate, data [
 // path ("更新并重启"); there is no durable cross-restart pending state when the
 // operation fails — the user simply retries.
 func (a *App) ApplyUpdateRequest(selectedChannel, expectedVersion, requestID string) error {
-	return a.applyUpdate(selectedChannel, expectedVersion, requestID, validateUpdaterRequest)
+	return a.applyUpdate(selectedChannel, expectedVersion, requestID)
 }
 
 // ApplyUpdateToVersion installs one version the version list offered — an older
-// release, or a pre-release the user picked on purpose. The sequence is
-// identical to ApplyUpdateRequest; only the request rule is wider, because the
-// version may be any shape this line published and its manifest is resolved
-// through the catalog.
+// release, or a pre-release the user picked on purpose. It runs the same
+// single-action sequence as ApplyUpdateRequest; when the target is not the
+// current release, its manifest is resolved through the catalog.
 func (a *App) ApplyUpdateToVersion(selectedChannel, expectedVersion, requestID string) error {
-	return a.applyUpdate(selectedChannel, expectedVersion, requestID, validateVersionedUpdaterRequest)
+	return a.applyUpdate(selectedChannel, expectedVersion, requestID)
 }
 
-func (a *App) applyUpdate(selectedChannel, expectedVersion, requestID string, validate func(string, string, string) (string, string, string, error)) error {
-	requestID, selectedChannel, expectedVersion, err := validate(requestID, selectedChannel, expectedVersion)
+func (a *App) applyUpdate(selectedChannel, expectedVersion, requestID string) error {
+	requestID, selectedChannel, expectedVersion, err := validateUpdaterRequest(requestID, selectedChannel, expectedVersion)
 	if err != nil {
 		return err
 	}

@@ -1,8 +1,8 @@
 package main
 
 // The version catalog: versions.json, published on the same anchor as
-// latest.json. The panel lists installable versions from it while the anchor
-// keeps describing the newest stable release.
+// latest.json. The panel lists installable versions from it; the anchor itself
+// describes whatever was published most recently (a release or a pre-release).
 
 import (
 	"context"
@@ -10,14 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"reasonix/desktop/internal/update"
 )
 
 // githubCatalogFallback is the version catalog's fixed address. It sits on the
-// same anchor release as the manifest, which every stable release rewrites.
+// same anchor release as the manifest, which every release rewrites.
 const githubCatalogFallback = "https://github.com/keeyangyy/DeepSeek-Reasonix/releases/download/wails-latest/versions.json"
 
 // channelOfVersion derives an entry's channel from its version shape, matching
@@ -180,7 +179,7 @@ func resolveUpdateManifestWith(ctx context.Context, c, fallback *http.Client, se
 		if err := validateCatalogManifestURL(e.Manifest); err != nil {
 			return nil, false, err
 		}
-		m, err := fetchManifestFrom(ctx, c, fallback, selected, e.Manifest, validateExplicitVersionManifest)
+		m, err := fetchManifestFrom(ctx, c, fallback, selected, e.Manifest, validateDesktopManifest)
 		if err != nil {
 			return nil, false, err
 		}
@@ -193,22 +192,6 @@ func resolveUpdateManifestWith(ctx context.Context, c, fallback *http.Client, se
 		return nil, false, anchorErr
 	}
 	return nil, false, fmt.Errorf("update: %s is neither the current release nor listed in the catalog", wantVersion)
-}
-
-// desktopVersionRE accepts this line's pre-release form (vX.Y.Z-beta.N) on top
-// of the stable shape. Only an explicit "install this version" request uses it;
-// the automatic channel check keeps stableDesktopVersionRE.
-var desktopVersionRE = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[0-9]+)?$`)
-
-// validateExplicitVersionManifest is the manifest rule for a version the user
-// picked from the catalog: the version shape may be a pre-release, while every
-// asset rule (base URL, signature address, size, digest, layout) applies.
-func validateExplicitVersionManifest(selected string, m *update.Manifest) error {
-	selected = normalizeUpdateChannel(selected)
-	if !desktopVersionRE.MatchString(m.Version) {
-		return fmt.Errorf("%s manifest has invalid release version %q", selected, m.Version)
-	}
-	return validateManifestAssetsOnly(selected, m)
 }
 
 // fetchManifestAnchored tries each anchor URL in order, accepting the first one
