@@ -54,10 +54,15 @@ function flushTimers(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function flushAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
 async function waitFor(label: string, predicate: () => boolean) {
   for (let i = 0; i < 30; i += 1) {
     if (predicate()) return;
     await act(async () => {
+      await flushAnimationFrame();
       await flushTimers();
     });
   }
