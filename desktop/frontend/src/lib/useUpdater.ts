@@ -241,10 +241,6 @@ function useUpdaterInternal(): Updater {
 
   const apply = useCallback((info: UpdateInfo) => {
     const selectedChannel = normalizedChannel(info.channel);
-    if (selectedChannel !== "stable") {
-      setStatus(updateError("update check returned a retired release channel"));
-      return;
-    }
     const active = operationRef.current;
     if (isBusyOperation(active.kind) || (active.channel && active.channel !== selectedChannel)) return;
     if (!info.canSelfUpdate) {

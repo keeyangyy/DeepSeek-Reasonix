@@ -57,8 +57,12 @@ const (
 var fetchAttemptTimeout = 5 * time.Second
 
 var (
-	stableDesktopVersionRE = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
-	sha256RE               = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	// desktopVersionRE is the version shape this line publishes: a release
+	// (vX.Y.Z) or one of its pre-releases (vX.Y.Z-beta.N). The line runs a
+	// single update channel — the anchor always describes the newest release,
+	// beta or not — so both shapes are accepted wherever a version is read.
+	desktopVersionRE = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[0-9]+)?$`)
+	sha256RE         = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 type requiredDesktopAsset struct {
@@ -285,11 +289,14 @@ func normalizeVersion(v string) (string, bool) {
 	return semver.Canonical(v), true
 }
 
-// validateManifestChannel rejects every prerelease. The selected value remains
-// in the signature for compatibility with existing callers.
+// validateManifestChannel accepts both version shapes this line publishes. The
+// single-channel design means the anchor describes whatever was published most
+// recently — a release or one of its pre-releases — so a prerelease is no
+// longer a reason to reject a manifest. The selected value stays in the
+// signature for compatibility with existing callers.
 func validateManifestChannel(selected string, m *update.Manifest) error {
 	_ = selected
-	if !stableDesktopVersionRE.MatchString(m.Version) {
+	if !desktopVersionRE.MatchString(m.Version) {
 		return fmt.Errorf("official manifest has invalid release version %q", m.Version)
 	}
 	return nil
