@@ -4,13 +4,13 @@
     "commented-code": 0,
     "complexity": 1894,
     "essay": 1916,
-    "file-size": 102772,
+    "file-size": 102765,
     "function-size": 8280,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 116,
-    "test-file-size": 68861
+    "test-file-size": 68860
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -324,7 +324,7 @@
     },
     "desktop/updater.go": {
       "essay": 2,
-      "file-size": 590
+      "file-size": 583
     },
     "desktop/updater_app.go": {
       "essay": 4
@@ -338,7 +338,7 @@
       "test-file-size": 553
     },
     "desktop/updater_test.go": {
-      "test-file-size": 734
+      "test-file-size": 733
     },
     "desktop/updater_windows.go": {
       "essay": 1
