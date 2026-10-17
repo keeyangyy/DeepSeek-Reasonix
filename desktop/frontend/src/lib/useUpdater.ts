@@ -34,6 +34,10 @@ export interface Updater {
   versions: UpdateVersionList | null;
   /** Load the version list without superseding an active operation. */
   listVersions: () => Promise<void>;
+  /** True while a version list request is in flight. */
+  versionsLoading: boolean;
+  /** Set when the version list could not be loaded; the panel offers a retry. */
+  versionsError: string;
   /** Install one version the list offered — an older or pre-release build. */
   applyVersion: (version: string) => void;
   openDownload: () => void;
@@ -266,30 +270,32 @@ function useUpdaterInternal(): Updater {
   }, []);
 
   const [versions, setVersions] = useState<UpdateVersionList | null>(null);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState("");
+  const listRequestRef = useRef(0);
 
-  // listVersions loads the version list the Settings panel shows. It reuses the
-  // check operation kind so a check and a list load cannot both own the state
-  // machine, and it publishes the list itself rather than a status line.
+  // listVersions loads the version list the Settings panel shows. It keeps its
+  // own request sequence instead of the check/apply operation: reading the
+  // catalog must not be dropped because a background check or a focus refresh
+  // is in flight, and an older answer must not overwrite a newer one.
   const listVersions = useCallback(async () => {
-    if (isBusyOperation(operationRef.current.kind)) return;
-    const operation = beginOperation("stable", "checking");
-    setStatus({ kind: "checking" });
+    const kind = operationRef.current.kind;
+    if (kind === "applying" || kind === "abandoning") return;
+    const seq = listRequestRef.current + 1;
+    listRequestRef.current = seq;
+    setVersionsLoading(true);
     try {
       const list = await app.ListUpdateVersions("stable");
-      if (!isCurrentOperation(operation)) return;
-      completeOperation(operation);
+      if (listRequestRef.current !== seq) return;
       setVersions(list);
-      if (list?.err) {
-        setStatus(updateError(list.err));
-        return;
-      }
-      setStatus({ kind: "idle" });
+      setVersionsError(list?.err ?? "");
     } catch (e) {
-      if (!isCurrentOperation(operation)) return;
-      completeOperation(operation);
-      setStatus(updateError(errMsg(e)));
+      if (listRequestRef.current !== seq) return;
+      setVersionsError(errMsg(e));
+    } finally {
+      if (listRequestRef.current === seq) setVersionsLoading(false);
     }
-  }, [beginOperation, completeOperation, isCurrentOperation]);
+  }, []);
 
   // applyVersion runs the same download -> verify -> install -> relaunch
   // sequence as apply, but for a version the user picked from the list. Versions
@@ -353,7 +359,7 @@ function useUpdaterInternal(): Updater {
     setStatus({ kind: "idle" });
   }, []);
 
-  return { status, check, refresh, apply, versions, listVersions, applyVersion, openDownload, abandonPending, reset };
+  return { status, check, refresh, apply, versions, versionsLoading, versionsError, listVersions, applyVersion, openDownload, abandonPending, reset };
 }
 
 export function UpdaterProvider({ children }: { children: ReactNode }) {

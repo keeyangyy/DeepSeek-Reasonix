@@ -23,10 +23,10 @@ export interface UpdateVersionList {
 }
 
 // previewVersionList is the browser-dev stand-in for the backend's catalog
-// fetch: the newest five of this line's real releases — exactly what
-// `catalogfilter -recent 5 -recent-stable 3` yields today — so the Settings
-// panel can be previewed without a published catalog. canSelfUpdate mirrors a
-// real portable install, which is what makes the rows offer an install action.
+// fetch: this line's real releases exactly as `catalogfilter -recent 5
+// -recent-stable 3` yields them today, so the Settings panel can be previewed
+// without a published catalog. canSelfUpdate mirrors a real portable install,
+// which is what makes the rows offer an install action.
 export function previewVersionList(current: string): UpdateVersionList {
   const entry = (
     version: string,
@@ -45,6 +45,8 @@ export function previewVersionList(current: string): UpdateVersionList {
     canSelfUpdate: true,
     installMode: "portable",
     entries: [
+      entry("v1.38.54-beta.4", "beta", "2026-10-17T06:45:52Z"),
+      entry("v1.38.54-beta.3", "beta", "2026-10-16T18:07:51Z"),
       entry("v1.38.54-beta.2", "beta", "2026-10-16T12:41:11Z"),
       entry("v1.38.54-beta.1", "beta", "2026-10-14T07:37:23Z"),
       entry("v1.38.53", "stable", "2026-10-12T05:42:11Z"),

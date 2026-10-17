@@ -16351,6 +16351,11 @@ body > .mermaid-diagram--fullscreen {
   font-size: var(--font-caption);
 }
 
+.updates-control__channel--stable {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
 .updates-control__channel--beta {
   border-color: var(--accent);
   color: var(--accent);

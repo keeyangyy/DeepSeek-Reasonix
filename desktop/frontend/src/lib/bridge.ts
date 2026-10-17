@@ -5177,7 +5177,7 @@ function makeMockApp(): AppBindings {
       await this.SetAutoApproveTools(on);
     },
     async Version() {
-      return "v1.38.53"; // dev preview: pretend the newest published stable build
+      return "v1.38.54-beta.4"; // dev preview: pretend the newest published beta build
     },
     async CheckUpdate(channel: string) {
       void channel;
@@ -5185,8 +5185,8 @@ function makeMockApp(): AppBindings {
       // Updater methods remain mocked for explicit updater-flow tests.
       return {
         available: false,
-        current: "v1.0.0",
-        latest: "v1.0.0",
+        current: "v1.38.54-beta.4",
+        latest: "v1.38.54-beta.4",
         notes: "",
         channel: "stable",
         canSelfUpdate: false,
