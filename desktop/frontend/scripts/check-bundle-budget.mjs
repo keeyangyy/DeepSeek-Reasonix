@@ -308,7 +308,11 @@ for (const path of localeChunks) {
   // move just past the previous ceiling, so retain the next one-decimal one.
   // The folded-work index setting adds three labels per dialect (the switch
   // and its hints); measured chunks move past the prior ceilings again.
-  const budget = name.startsWith("zh-TW-") ? 63.5 * 1024 : 62.7 * 1024;
+  // The reasoning-expansion tier labels, the reasoning-language off option and
+  // the update-panel status strings add the next tier: measured zh 64206 B
+  // (62.702 KiB) and zh-TW 65019 B (63.495 KiB). Keep the next one-decimal
+  // ceiling per dialect; zh only moved by 3 B, so its ratchet is rounding.
+  const budget = name.startsWith("zh-TW-") ? 63.6 * 1024 : 62.8 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -460,6 +464,10 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // types plus the browser-preview catalog it renders, the three locale strings,
 // and the row CSS — adds 2.1 KiB raw (2434.7 KiB measured locally). Widen the
 // raw ceiling to 2435.2; every gzip and chunk budget stays put.
-const rawInitialBudgetKiB = 2_435.2;
+// 2026-10-17: the reasoning-expansion tier labels, the reasoning-language off
+// option and the update panel's decoupled list loading add 2.3 KiB raw
+// (2437.5 KiB measured locally). Widen the raw ceiling to 2438; the gzip and
+// chunk budgets stay put apart from the locale ratchet above.
+const rawInitialBudgetKiB = 2_438;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
