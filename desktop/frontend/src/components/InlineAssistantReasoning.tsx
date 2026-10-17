@@ -1,7 +1,13 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useWorkProcessPresentation } from "../lib/sessionExperience";
-import { useDefaultCollapsed } from "../lib/defaultCollapsedPreference";
+import { useReasoningExpansionPolicy } from "../lib/reasoningExpansionPolicy";
+import {
+  defaultReasoningExpansionOpen,
+  expansionPreferenceChanged,
+  reconcileReasoningExpansion,
+  type ReasoningExpansionInput,
+} from "../lib/reasoningExpansionState";
 import type { AssistantItem } from "../lib/transcriptRows";
 import { useT } from "../lib/i18n";
 import { LiveStreamContext } from "./LiveStreamContext";
@@ -16,47 +22,69 @@ import { useReasoningScrollFollow } from "../lib/useReasoningScrollFollow";
 export function InlineAssistantReasoning({
   item,
   autoFollowActive,
+  isLatestReasoning,
   onManualOpen,
 }: {
   item: AssistantItem;
   autoFollowActive?: boolean;
+  /** Set by the row model: this is the newest reasoning block of the session. */
+  isLatestReasoning?: boolean;
   onManualOpen?: () => void;
 }) {
   const t = useT();
   const beginUserResize = useTranscriptUserResizeIntent();
   const live = useContext(LiveStreamContext);
   const presentation = useWorkProcessPresentation();
-  const defaultCollapsed = useDefaultCollapsed();
+  const policy = useReasoningExpansionPolicy();
   const shown = live?.id === item.id ? { reasoning: live.reasoning, streaming: true, reasoningComplete: live.reasoningComplete } : item;
   const running = shown.streaming && !shown.reasoningComplete;
   const followActive = autoFollowActive ?? shown.streaming;
-  const [open, setOpen] = useState(
-    () => !defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && followActive)),
-  );
+  // "This block is the one streaming right now" is an OWNERSHIP fact: the live
+  // stream names the item it feeds. The component's own `streaming` flag alone
+  // cannot separate a live block from one that stopped but was not cleared yet,
+  // and it cannot see whether a newer block has taken over.
+  const producing = live?.id === item.id && !live.reasoningComplete;
+  // Which block is the newest comes from the row model's global ordering, so a
+  // block inside a multi-segment turn knows it is no longer the latest one.
+  const isLatest = isLatestReasoning ?? false;
+  const expansion: ReasoningExpansionInput = {
+    experience: presentation.experience,
+    policy,
+    producing,
+    isLatest,
+    keepExpandedAfterCompletion: presentation.keepExpandedAfterCompletion,
+    showWhileRunning: presentation.showWhileRunning,
+  };
+  const [open, setOpen] = useState(() => defaultReasoningExpansionOpen(expansion));
   const userOverridden = useRef(false);
-  const previousRunning = useRef(running);
-  const previousFollowActive = useRef(followActive);
-  const previousExperience = useRef(presentation.experience);
-  const previousCollapsed = useRef(defaultCollapsed);
+  const previousProducing = useRef(producing);
+  const previousLatest = useRef(isLatest);
+  const previousPreference = useRef({ experience: presentation.experience, policy });
   useEffect(() => {
-    const modeChanged = previousExperience.current !== presentation.experience;
-    const collapsedChanged = previousCollapsed.current !== defaultCollapsed;
-    const wasRunning = previousRunning.current;
-    const wasFollowActive = previousFollowActive.current;
-    previousExperience.current = presentation.experience;
-    previousCollapsed.current = defaultCollapsed;
-    previousRunning.current = running;
-    previousFollowActive.current = followActive;
-    if (modeChanged || collapsedChanged) {
+    const preferenceChanged = expansionPreferenceChanged(previousPreference.current, { experience: presentation.experience, policy });
+    previousPreference.current = { experience: presentation.experience, policy };
+    const wasProducing = previousProducing.current;
+    const wasLatest = previousLatest.current;
+    previousProducing.current = producing;
+    previousLatest.current = isLatest;
+    if (preferenceChanged) {
+      // A preference or experience switch re-applies the defaults across the
+      // transcript and drops manual choices, so everything lands in one state.
       userOverridden.current = false;
-      setOpen(!defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && followActive)));
-    } else if (running && !wasRunning && presentation.showWhileRunning && !defaultCollapsed) {
-      userOverridden.current = false;
-      setOpen(true);
-    } else if (!presentation.keepExpandedAfterCompletion && !followActive && wasFollowActive && !userOverridden.current) {
-      setOpen(false);
+      setOpen(defaultReasoningExpansionOpen(expansion));
+      return;
     }
-  }, [defaultCollapsed, followActive, presentation, running]);
+    if (producing && !wasProducing) {
+      // A new thinking block just took over: open it and forget an earlier
+      // manual choice on THIS block. Older blocks fold because the model marks
+      // only the newest one — no token-driven churn is involved.
+      userOverridden.current = false;
+    }
+    // A manual toggle outranks the policy for as long as the preference stays.
+    if (userOverridden.current) return;
+    const next = reconcileReasoningExpansion({ open, userOverridden: false, wasProducing, wasLatest }, expansion);
+    if (next.open !== open) setOpen(next.open);
+  }, [expansion, isLatest, open, policy, producing, presentation.experience, presentation.keepExpandedAfterCompletion, presentation.showWhileRunning]);
   const toggle = useCallback(() => {
     beginUserResize();
     userOverridden.current = true;

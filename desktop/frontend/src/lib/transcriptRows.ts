@@ -383,7 +383,7 @@ type TranscriptRowContent =
   | { kind: "older-history"; key: string }
   | { kind: "user"; key: string; item: UserItem; turn: number | undefined }
   | { kind: "process-header"; key: string; segment: SegmentModel; open: boolean }
-  | { kind: "reasoning"; key: string; item: AssistantItem; segmentKey: string; autoFollowActive?: boolean }
+  | { kind: "reasoning"; key: string; item: AssistantItem; segmentKey: string; autoFollowActive?: boolean; isLatestReasoning?: boolean }
   | { kind: "tool"; key: string; item: ToolItem }
   | { kind: "tool-batch"; key: string; items: ToolItem[] }
   | { kind: "tool-group"; key: string; items: ToolItem[]; groupKind: ToolGroupKind }
@@ -491,6 +491,7 @@ function processBodyRows(
   creationMode: boolean,
   sessionExperience: SessionExperience,
   subcallsByParent: ReadonlyMap<string, readonly ToolItem[]>,
+  newestReasoningId?: string,
 ): TranscriptRowWithLayout[] {
   const rows: TranscriptRowWithLayout[] = [];
   let roBatch: ToolItem[] = [];
@@ -585,6 +586,7 @@ function processBodyRows(
           item: it as AssistantItem,
           segmentKey: segment.key,
           autoFollowActive: segment.foldActive,
+          isLatestReasoning: newestReasoningId !== undefined && it.id === newestReasoningId,
           layoutVariant: resolveReasoningLayoutVariant(
             sessionExperience,
             segment.foldActive,
@@ -638,6 +640,21 @@ export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: 
   // Transcript always supplies the canonical sessionExperience.
   const renderExperience = options.sessionExperience ?? "standard";
   const subcallsByParent = options.subcallsByParent ?? new Map<string, readonly ToolItem[]>();
+  // Which reasoning row is the newest of the WHOLE session is a MODEL fact
+  // (identity + global row order), never a row's own `streaming` flag: a
+  // stopped-but-uncleared block still reports streaming, and a block inside a
+  // multi-segment or multi-turn history cannot see that a newer block exists.
+  // It is computed once across every model so an older turn's last block is
+  // never mistaken for the newest one, and it is what lets "only the newest is
+  // expanded" survive streaming token updates.
+  let newestReasoningId: string | undefined;
+  for (const model of models) {
+    for (const segment of model.segments) {
+      for (const item of segment.displayItems) {
+        if (item.kind === "assistant") newestReasoningId = item.id;
+      }
+    }
+  }
   for (let modelIndex = models.length - 1; modelIndex >= 0; modelIndex -= 1) {
     const model = models[modelIndex];
     const modelRows: TranscriptRowWithLayout[] = [];
@@ -663,7 +680,7 @@ export function buildTranscriptRowBlocks(models: readonly TurnModel[], options: 
           modelRows.push({ kind: "process-header", key: `ph:${segment.key}`, segment, open, layoutVariant: "static" });
           headerAdded = true;
         }
-        if (open) modelRows.push(...processBodyRows({ ...segment, displayItems: visible }, options.creationMode, renderExperience, subcallsByParent));
+        if (open) modelRows.push(...processBodyRows({ ...segment, displayItems: visible }, options.creationMode, renderExperience, subcallsByParent, newestReasoningId));
       };
       for (const item of segment.orderedItems) {
         if (outsideItems.has(item)) {

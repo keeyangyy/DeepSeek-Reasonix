@@ -136,8 +136,11 @@ const warningTurn: Item[] = [
       { kind: "assistant", id: "a8", text: "", reasoning: "got cut off", streaming: false, workDurationMs: 3_000 },
     ]);
     ok(container.querySelector(".turn-collapse--open"), "fold with nothing outside stays expanded");
-    ok(container.querySelector(".reasoning-summary")?.textContent === "got cut off", "an open fold shows a lightweight reasoning summary");
-    ok(!container.querySelector(".turn-collapse__body .md"), "an open fold keeps reasoning Markdown lazy");
+    // Under the default "newest only" expansion policy this turn's sole — and
+    // therefore newest — reasoning block stays expanded once the generation
+    // ends, so the full Markdown mounts instead of the one-line summary.
+    ok(Boolean(container.querySelector(".turn-collapse__body .md")), "the newest reasoning block keeps its full Markdown after the turn ends");
+    ok(!container.querySelector(".reasoning-summary"), "an expanded newest block renders no duplicate summary");
 
     await render(harness, [
       { kind: "user", id: "u6", text: "ask" },
@@ -436,8 +439,12 @@ const warningTurn: Item[] = [
       { kind: "user", id: "u-no-summary", text: "inspect" },
       { kind: "assistant", id: "a-no-summary", text: "", reasoning: "hidden preview", streaming: false },
     ]);
-    ok(Boolean(harness.container.querySelector(".reasoning-summary")), "stale summary-off storage cannot hide the Standard preview");
-    ok(!harness.container.querySelector(".turn-collapse__body .md"), "Standard completed previews keep Markdown lazy");
+    // The stale boolean "summary off" key belongs to a removed preference; it
+    // must never hide reasoning under the current policy. Under the default
+    // "newest only" policy this turn's sole — and therefore newest — block
+    // stays expanded once the turn ends, so the preview is not suppressed but
+    // rendered in full rather than as a one-line summary.
+    ok(Boolean(harness.container.querySelector(".turn-collapse__body .md")), "stale summary-off storage cannot hide the Standard preview");
     ok(Boolean(harness.container.querySelector(".turn-collapse__reasoning-head")), "the Standard reasoning toggle remains accessible");
   } finally {
     await harness.unmount();

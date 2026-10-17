@@ -38,8 +38,10 @@ function normalizeExperience(value: ExperienceInput): SessionExperience {
  * `follow-turn` is the long-standing behavior: a fold of the running turn
  * stays open and a settled turn folds closed. `collapsed` closes every fold,
  * and `active-only` keeps just the segment that still produces output open.
- * Deep — and an explicitly pinned reasoning fold — always shows the process,
- * so the policy only refines the default (standard) experience.
+ * `always-expanded` keeps every fold open, settled or not, and is the only
+ * policy that survives the turn ending. Deep — and an explicitly pinned
+ * reasoning fold — always shows the process, so the policy only refines the
+ * default (standard) experience.
  */
 export function defaultFoldOpen(
   segment: {
@@ -55,6 +57,7 @@ export function defaultFoldOpen(
 ): boolean {
   const normalized = normalizeExperience(experience);
   if (normalized === "deep" || segment.keepReasoningExpanded === true) return true;
+  if (policy === "always-expanded") return true;
   if (policy === "collapsed") return false;
   if (policy === "active-only") return segment.selfRunning ?? segment.hasRunningWork;
   return !segment.hasOutsideContent || segment.foldActive === true || segment.hasRunningWork;
@@ -156,8 +159,8 @@ export function reconcileFoldEntries(
     if (segment.hasRunningWork) {
       // A fresh run clears the previous manual toggle; while the turn runs the
       // fold follows the policy unless the user toggled it during THIS run.
-      // "follow-turn" opens every segment of the running turn; "active-only"
-      // opens just the segment still producing output.
+      // "follow-turn" and "always-expanded" open every segment of the running
+      // turn; "active-only" opens just the segment still producing output.
       const userOverridden = entry.running ? entry.userOverridden : false;
       const open = userOverridden ? entry.open : policy === "follow-turn" ? true : autoOpen(segment);
       if (open !== entry.open || userOverridden !== entry.userOverridden || !entry.running) {
@@ -166,6 +169,9 @@ export function reconcileFoldEntries(
       continue;
     }
     if (entry.running) {
+      // The turn just finished. "follow-turn" folds a segment that had outside
+      // content, while every other policy applies its own default — including
+      // "always-expanded", which is the only one that keeps settled work open.
       const open = entry.userOverridden
         ? entry.open
         : policy !== "follow-turn"
