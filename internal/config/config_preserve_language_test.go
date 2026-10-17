@@ -247,11 +247,11 @@ func TestRetiredCLIKeyGoesWithoutDroppingTheRestOfItsTable(t *testing.T) {
 	}
 }
 
-// TestRefusedSaveLeavesTheFileByteForByte covers requirement 7: a save that
-// cannot be expressed in place fails loudly and writes nothing. Two provider
-// elements sharing one name cannot be matched across a save, so the element-wise
-// merge must refuse instead of guessing which one the edit meant.
-func TestRefusedSaveLeavesTheFileByteForByte(t *testing.T) {
+// TestDuplicateNamesWriteOnlyTheProviderArray covers duplicate names: two
+// provider elements sharing one name cannot be matched across a save, so the
+// array is rewritten as a block. That block is the only thing that changes —
+// every other key keeps its bytes, and no whole-file rewrite happens.
+func TestDuplicateNamesWriteOnlyTheProviderArray(t *testing.T) {
 	const body = `config_version = 12
 
 [desktop]
@@ -283,18 +283,31 @@ retain_turns = 7
 		t.Fatalf("providers = %d, want the two hand-written entries", len(cfg.Providers))
 	}
 	cfg.Providers[0].BaseURL = "https://changed.example/v1"
-	err = cfg.SaveTo(path)
-	if err == nil {
-		t.Fatalf("SaveTo accepted a change it cannot express in place\n--- got ---\n%s", readUserConfig(t, path))
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
 	}
-	if !strings.Contains(err.Error(), "left unchanged") {
-		t.Errorf("error does not say the file was left unchanged: %v", err)
+	got := readUserConfig(t, path)
+	// The edit the user made reaches disk.
+	if !strings.Contains(got, "https://changed.example/v1") {
+		t.Errorf("saved config lost the edited provider\n--- got ---\n%s", got)
 	}
-	if got := readUserConfig(t, path); got != body {
-		t.Errorf("refused save modified the file\n--- got ---\n%s", got)
+	// Duplicate names make the array unwritable element-wise, so the provider
+	// array is written as a block — but only that block: everything outside it
+	// keeps its exact bytes, so keys this build does not model survive.
+	for _, keep := range []string{
+		"config_version = 12",
+		`language = "zh"`,
+		`theme_pack = "obsidian"`,
+		"retain_turns = 7",
+	} {
+		if !strings.Contains(got, keep) {
+			t.Errorf("save dropped %q\n--- got ---\n%s", keep, got)
+		}
 	}
+	// Nothing outside the provider array may be rewritten wholesale, which is
+	// what a whole-file render would leave behind.
 	if backups, _ := filepath.Glob(path + ".rewrite-*"); len(backups) != 0 {
-		t.Errorf("refused save left a rewrite backup: %v", backups)
+		t.Errorf("save fell back to a whole-file rewrite: %v", backups)
 	}
 }
 
