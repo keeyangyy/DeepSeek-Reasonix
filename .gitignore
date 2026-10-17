@@ -31,6 +31,9 @@ mem.prof
 /desktop/frontend/sourcemaps/
 /desktop/frontend/wailsjs/
 /desktop/frontend/package.json.md5
+# Local frontend build/dependency cache (dist + node_modules) left by an older
+# frontend workspace; never tracked on this line.
+/desktop/frontend-next/
 
 # Environment / local config (reasonix.example.toml is the shared template)
 .env
