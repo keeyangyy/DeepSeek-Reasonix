@@ -101,31 +101,37 @@ func TestSavingOneSettingKeepsForeignTablesAndBytes(t *testing.T) {
 	requireLinesSameExcept(t, userConfigWithForeignTables, got, `theme = "dark"`, `theme = "light"`)
 }
 
-// TestSavingUserConfigKeepsForeignTablesOnFallback covers the path taken when an
-// edit cannot be expressed key by key: the whole render is written, the tables
-// this build does not decode are carried over, and the prior bytes are kept.
-func TestSavingUserConfigKeepsForeignTablesOnFallback(t *testing.T) {
+// TestSavingUserConfigDroppingTopLevelKeyStaysInPlace covers the language=auto
+// case: clearing a top-level key is now expressible key by key, so the file is
+// edited in place and nothing else — including tables this build does not
+// decode — is touched. It must not fall back to a whole render.
+func TestSavingUserConfigDroppingTopLevelKeyStaysInPlace(t *testing.T) {
 	const body = "config_version = 12\nlanguage = \"en\"\n\n[checkpoints]\nretain_turns = 7\n"
 	path := seedUserConfig(t, body)
 
 	cfg := LoadForEdit(path)
-	cfg.Language = "" // dropping a top-level key has no key-by-key form
+	cfg.Language = ""
 	if err := cfg.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
 	}
 
 	got := readUserConfig(t, path)
+	if strings.Contains(got, "language") {
+		t.Errorf("top-level language survived the save\n--- got ---\n%s", got)
+	}
 	if !strings.Contains(got, "[checkpoints]\nretain_turns = 7") {
-		t.Errorf("fallback dropped a table it does not decode\n--- got ---\n%s", got)
+		t.Errorf("in-place save dropped a table it does not decode\n--- got ---\n%s", got)
 	}
 	backups, err := filepath.Glob(path + ".rewrite-*")
 	if err != nil {
 		t.Fatalf("glob backups: %v", err)
 	}
-	if len(backups) == 0 {
-		t.Errorf("a whole-render save must keep the prior bytes beside the file")
-	} else if prior := readUserConfig(t, backups[0]); prior != body {
-		t.Errorf("backup is not the prior bytes:\n%s", prior)
+	if len(backups) != 0 {
+		t.Errorf("dropping a top-level key must not rewrite the whole file, found %v", backups)
+	}
+	want := strings.Replace(body, "language = \"en\"\n", "", 1)
+	if got != want {
+		t.Errorf("save changed more than the dropped key\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
 

@@ -4,12 +4,11 @@
 package config
 
 import (
-	"log/slog"
+	"fmt"
 	"os"
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -18,9 +17,14 @@ import (
 
 // saveUserIncrementalResolved writes the user config the way the project config
 // is written: only the keys this save changed are rewritten and every other byte
-// of the file stays as it was. A save that cannot be shown to load back as c
-// falls back to the whole render, with the prior bytes kept beside it and every
-// top-level table this build does not decode carried over verbatim.
+// of the file stays as it was.
+//
+// It never replaces an existing file with a whole render. The user config is
+// shared with the CLI and Studio lines and with hand edits, so a whole render
+// would silently drop every key this build does not model — including keys the
+// build decodes but does not render. A save that cannot be expressed key by key
+// therefore fails with the file left exactly as it was; the caller reports that
+// error instead of pretending the setting was stored.
 func (c *Config) saveUserIncrementalResolved(logicalPath, resolvedPath string) error {
 	full := RenderTOMLForScope(c, RenderScopeUser)
 	raw, err := fileencoding.ReadFileUTF8(resolvedPath)
@@ -28,20 +32,37 @@ func (c *Config) saveUserIncrementalResolved(logicalPath, resolvedPath string) e
 		if !os.IsNotExist(err) {
 			return err
 		}
+		// First save: there is no user content to lose.
 		return writeConfigFileResolved(resolvedPath, full, configFilePerm(logicalPath))
 	}
 	text := string(raw)
 	if strings.TrimSpace(text) == "" {
 		return writeConfigFileResolved(resolvedPath, full, configFilePerm(logicalPath))
 	}
-	if base, err := loadUserConfigFromText(logicalPath, text); err == nil {
-		body, ok := patchUserConfigText(text, base, c, full)
-		if ok && userConfigRendersAs(logicalPath, body, full) {
-			return writeConfigFileResolved(resolvedPath, body, configFilePerm(logicalPath))
-		}
+	body, err := patchExistingUserConfig(logicalPath, text, c, full)
+	if err != nil {
+		return err
 	}
-	keepPriorUserConfig(logicalPath, resolvedPath, text)
-	return writeConfigFileResolved(resolvedPath, carryUnknownUserTables(text, full), configFilePerm(logicalPath))
+	return writeConfigFileResolved(resolvedPath, body, configFilePerm(logicalPath))
+}
+
+// patchExistingUserConfig is the in-place edit of an existing user config. It
+// returns an error — never a substitute body — when the save cannot be applied
+// to the text as it stands, so one setting change can never take the rest of the
+// file with it.
+func patchExistingUserConfig(logicalPath, text string, next *Config, full string) (string, error) {
+	base, err := loadUserConfigFromText(logicalPath, text)
+	if err != nil {
+		return "", fmt.Errorf("save user config %s: this build cannot read the existing file, so it was left unchanged: %w", logicalPath, err)
+	}
+	body, ok := patchUserConfigText(text, base, next, full)
+	if !ok {
+		return "", fmt.Errorf("save user config %s: this change has no key-by-key form, so the file was left unchanged", logicalPath)
+	}
+	if !userConfigRendersAs(logicalPath, body, full) {
+		return "", fmt.Errorf("save user config %s: the edited file would not read back as intended, so it was left unchanged", logicalPath)
+	}
+	return body, nil
 }
 
 // saveScopedConfig writes one config scope: the user scope rewrites only the
@@ -79,24 +100,22 @@ func loadUserConfigFromText(path, text string) (*Config, error) {
 }
 
 // userConfigRendersAs reports whether body loads and then renders exactly as
-// want, which is what makes an in-place patch safe to write.
+// want would once it has been through the same load. Loading normalizes the
+// config (legacy migrations, official-model defaults), so comparing a loaded
+// body against an unloaded render would report a difference for every value the
+// loader derives. Normalizing both sides compares what the save actually
+// decided, which is what makes an in-place patch safe to write.
 func userConfigRendersAs(path, body, want string) bool {
+	wantCfg, err := loadUserConfigFromText(path, want)
+	if err != nil {
+		return false
+	}
+	normalizedWant := RenderTOMLForScope(wantCfg, RenderScopeUser)
 	cfg, err := loadUserConfigFromText(path, body)
 	if err != nil {
 		return false
 	}
-	return RenderTOMLForScope(cfg, RenderScopeUser) == want
-}
-
-// keepPriorUserConfig writes the bytes a whole-render save is about to replace
-// next to them, so a setting this build could not carry stays recoverable.
-func keepPriorUserConfig(logicalPath, resolvedPath, text string) {
-	backup := resolvedPath + ".rewrite-" + time.Now().Format("20060102-150405")
-	if err := os.WriteFile(backup, []byte(text), configFilePerm(logicalPath)); err != nil {
-		slog.Warn("config: back up the prior user config", "path", resolvedPath, "err", err)
-		return
-	}
-	slog.Warn("config: saved by whole render, prior bytes kept", "path", resolvedPath, "backup", backup)
+	return RenderTOMLForScope(cfg, RenderScopeUser) == normalizedWant
 }
 
 // userConfigKey addresses one entry of a user config: the table it lives in
@@ -168,15 +187,52 @@ func stripRetiredUserConfigLines(body string) string {
 	return body
 }
 
-// stripLegacyCLIUpdateChannelLines drops the retired [cli] table. The whole-file
-// render never emits it, so leaving the table (or a dangling empty header) on
-// disk would claim a live setting that no longer exists.
+// stripLegacyCLIUpdateChannelLines drops only the retired [cli].update_channel
+// key. The whole-file render never emits it, so leaving it on disk would claim a
+// live setting that no longer exists — but the rest of [cli] and any sub-table
+// belong to another line or to the user, so they stay.
 func stripLegacyCLIUpdateChannelLines(raw string) (string, bool) {
 	stripped, changed := stripTOMLKeyLines(raw, "cli", "update_channel")
-	if !tomlBodyHasSection(stripped, "cli") {
-		return stripped, changed
+	if !changed {
+		return raw, false
 	}
-	return removeTOMLSection(stripped, "cli"), true
+	// A [cli] header with nothing left under it is only noise now.
+	if !tomlSectionHasContent(stripped, "cli") {
+		return removeTOMLSection(stripped, "cli"), true
+	}
+	return stripped, true
+}
+
+// tomlSectionHasContent reports whether the table still holds a key or a
+// sub-table after the retired keys are gone.
+func tomlSectionHasContent(body, section string) bool {
+	spans := tomlLineSpans(body)
+	structural := tomlStructuralLineMask(spans)
+	inSection := false
+	for i, span := range spans {
+		if !structural[i] {
+			continue
+		}
+		if name, isArray, ok := tomlEditSectionHeader(span.text); ok {
+			if inSection {
+				// A sub-table of this section is content; any other header ends
+				// the section with nothing found.
+				if strings.HasPrefix(name, section+".") {
+					return true
+				}
+				return false
+			}
+			inSection = !isArray && name == section
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		if trimmed := strings.TrimSpace(span.text); trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			return true
+		}
+	}
+	return false
 }
 
 // userConfigChangedIDs lists the addresses the two renders disagree on, in a
@@ -258,21 +314,95 @@ func sortedUserConfigNames(table map[string]any) []string {
 // the rest of its table — comments included — untouched.
 func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (string, bool) {
 	body = dropInlinePathSection(body, nextRender, entry.key)
+	if entry.key.section != "" {
+		var ok bool
+		if body, ok = expandShadowingInlineTable(body, entry.key.section); !ok {
+			return "", false
+		}
+	}
 	if entry.table {
 		block := userConfigRenderTableBlock(nextRender, entry.key.section)
 		if block == "" {
 			return "", false
 		}
-		return replaceTOMLSection(body, entry.key.section, block), true
+		// Elements keep the keys this build does not model; refuse when they
+		// cannot be matched by name instead of replacing them wholesale.
+		patched := replaceTOMLSection(body, entry.key.section, block)
+		return carryArrayElementFields(body, patched, entry.key.section)
 	}
 	line := userConfigRenderKeyLine(nextRender, entry.key)
 	if line == "" {
-		return "", false
+		// The render may spell this path as an inline key of its parent, so
+		// write that key and drop the sub-table it replaces.
+		parent, name, split := splitUserConfigSection(entry.key.section)
+		if !split {
+			return "", false
+		}
+		line = userConfigRenderKeyLine(nextRender, userConfigKey{section: parent, name: name})
+		if line == "" {
+			return "", false
+		}
+		body = removeTOMLSection(body, entry.key.section)
+		return upsertTOMLSectionKey(body, parent, name, line), true
 	}
 	if entry.key.section == "" {
 		return mergeTOMLTopLevelFields(body, line), true
 	}
 	return upsertTOMLSectionKey(body, entry.key.section, entry.key.name, line), true
+}
+
+// expandShadowingInlineTable rewrites a table the file spells as one top-level
+// inline value (ui = { theme = "dark" }) as the [ui] table the render writes.
+// Writing the table without removing the inline key would define the same path
+// twice; dropping the inline key without writing its other entries would lose
+// the ones this build does not model.
+func expandShadowingInlineTable(body, section string) (string, bool) {
+	if section == "" || !tomlBodyHasTopLevelKey(body, section) {
+		return body, true
+	}
+	tree, ok := decodeUserConfigTree(body)
+	if !ok {
+		return "", false
+	}
+	value, present := tree[section]
+	if !present {
+		return body, true
+	}
+	var b strings.Builder
+	if err := toml.NewEncoder(&b).Encode(map[string]any{section: value}); err != nil {
+		return "", false
+	}
+	body, ok = removeTOMLTopLevelField(body, section)
+	if !ok {
+		return "", false
+	}
+	if !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	return body + "\n" + b.String(), true
+}
+
+// splitUserConfigSection splits "agent.subagent_models" into the parent table
+// and the key inside it. Quoted or dotted leaf keys are declined: this fallback
+// only covers plain table paths.
+func splitUserConfigSection(section string) (parent, name string, ok bool) {
+	idx := strings.LastIndex(section, ".")
+	if idx <= 0 || idx == len(section)-1 {
+		return "", "", false
+	}
+	parent, name = section[:idx], section[idx+1:]
+	if strings.ContainsAny(name, ".\"") {
+		return "", "", false
+	}
+	return parent, name, true
+}
+
+func decodeUserConfigTree(text string) (map[string]any, bool) {
+	var tree map[string]any
+	if _, err := toml.Decode(text, &tree); err != nil {
+		return nil, false
+	}
+	return tree, true
 }
 
 // dropInlinePathSection removes a section that names a path the render writes
@@ -291,14 +421,16 @@ func dropInlinePathSection(body, nextRender string, key userConfigKey) string {
 	return removeTOMLSection(body, path)
 }
 
-// removeUserConfigEntry drops one entry from body. Removing a top-level key is
-// not supported: a save that wants one gone takes the whole-render path.
+// removeUserConfigEntry drops one entry from body. It reports false when the
+// entry has no in-place form here, which makes the caller stop rather than
+// rewrite the whole file: a key of the user's that the build does not know must
+// never be collateral damage of one setting change.
 func removeUserConfigEntry(body string, key userConfigKey) (string, bool) {
 	switch {
 	case key.section == "" && key.name == "":
-		return removeTOMLSection(body, key.section), true
-	case key.section == "":
 		return "", false
+	case key.section == "":
+		return removeTOMLTopLevelField(body, key.name)
 	case key.name != "" && tomlBodyHasSection(body, key.section+"."+key.name):
 		// The entry is spelled as its own table here rather than a key inside
 		// the parent, so removing it means dropping that whole table.
@@ -339,102 +471,45 @@ func userConfigRenderKeyLine(render string, key userConfigKey) string {
 
 // userConfigRenderTableBlock returns the region render writes for one table,
 // taken verbatim so an array of tables keeps its [[name]] headers and every
-// element.
+// element. Sub-tables the render nests under the same path ([[remote.hosts]]
+// with [[remote.hosts.forwards]], [network] with [network.proxy]) belong to the
+// region: leaving them out would drop them when the region replaces the table.
 func userConfigRenderTableBlock(render, section string) string {
 	start, end := -1, -1
+	lastContent := -1
 	for _, span := range tomlLineSpans(render) {
 		name, _, ok := tomlEditSectionHeader(span.text)
-		if !ok {
-			continue
-		}
-		if name != section {
-			if start >= 0 {
+		if ok {
+			if start >= 0 && name != section && !strings.HasPrefix(name, section+".") {
 				end = span.start
 				break
+			}
+			if name == section || strings.HasPrefix(name, section+".") {
+				if start < 0 {
+					start = span.start
+				}
+				lastContent = span.end
 			}
 			continue
 		}
 		if start < 0 {
-			start = span.start
+			continue
+		}
+		trimmed := strings.TrimSpace(span.text)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			lastContent = span.end
 		}
 	}
 	if start < 0 {
 		return ""
 	}
 	if end < 0 {
-		end = len(render)
+		// Stop at the last line that belongs to the table. Comments after it
+		// describe whatever the renderer writes next, not this table.
+		end = lastContent
+	}
+	if end <= start {
+		return ""
 	}
 	return render[start:end]
-}
-
-// carryUnknownUserTables appends to render every top-level table of text the
-// render does not write, verbatim. This build decodes neither [checkpoints] nor
-// [browser], and dropping them would change what another line does.
-func carryUnknownUserTables(text, render string) string {
-	known := map[string]bool{}
-	for _, block := range userConfigTopLevelBlocks(render) {
-		known[block.name] = true
-	}
-	represented := representedUserConfigPaths(render)
-	out := render
-	for _, block := range userConfigTopLevelBlocks(text) {
-		if known[block.name] || represented[block.name] {
-			continue
-		}
-		if !strings.HasSuffix(out, "\n") {
-			out += "\n"
-		}
-		out += "\n" + block.text
-	}
-	return out
-}
-
-type userConfigBlock struct {
-	name string
-	text string
-}
-
-// representedUserConfigPaths lists the table paths the render already defines,
-// including a table it writes inside its parent (subagent_models as an inline
-// table under [agent]). A table carried from the original with one of these
-// names would define the same key twice and make the file invalid TOML.
-func representedUserConfigPaths(render string) map[string]bool {
-	entries, ok := flattenUserConfigKeys(render)
-	if !ok {
-		return nil
-	}
-	out := make(map[string]bool, len(entries))
-	for _, entry := range entries {
-		if entry.key.section != "" {
-			out[entry.key.section] = true
-		}
-	}
-	return out
-}
-
-// userConfigTopLevelBlocks splits body into its top-level table blocks, each
-// holding its header, its keys and the comments below it.
-func userConfigTopLevelBlocks(body string) []userConfigBlock {
-	var blocks []userConfigBlock
-	var current *userConfigBlock
-	var b strings.Builder
-	for _, span := range tomlLineSpans(body) {
-		name, _, ok := tomlEditSectionHeader(span.text)
-		if ok {
-			if current != nil {
-				current.text = b.String()
-				blocks = append(blocks, *current)
-			}
-			b.Reset()
-			current = &userConfigBlock{name: name}
-		}
-		if current != nil {
-			b.WriteString(span.text)
-		}
-	}
-	if current != nil {
-		current.text = b.String()
-		blocks = append(blocks, *current)
-	}
-	return blocks
 }
