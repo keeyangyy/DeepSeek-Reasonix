@@ -6994,7 +6994,7 @@ function UpdatesSection({
   applySettings: (fn: () => Promise<void>) => Promise<boolean>;
 }) {
   const t = useT();
-  const { status, check, apply: applyUpdate, versions, listVersions, applyVersion, openDownload, abandonPending } = useUpdater();
+  const { status, check, apply: applyUpdate, listVersions, openDownload, abandonPending } = useUpdater();
   const [version, setVersion] = useState("");
   useEffect(() => {
     app.Version().then(setVersion).catch(() => {});
@@ -7077,7 +7077,7 @@ function UpdatesSection({
               type="button"
               disabled={settingsBusy || updaterBusy}
               aria-label={t("updater.checkButton")}
-              onClick={() => void check()}
+              onClick={() => { void check(); void listVersions(); }}
             >
               <RefreshCw className={status.kind === "checking" ? "updates-control__spinner" : undefined} size={14} aria-hidden="true" />
             </button>
@@ -7108,7 +7108,7 @@ function UpdatesSection({
           <ExternalLink size={13} aria-hidden="true" />
         </button>
       </div>
-      {versions && <UpdateVersionList list={versions} busy={settingsBusy || updaterBusy} onInstall={applyVersion} />}
+      <UpdateVersionList settingsBusy={settingsBusy} />
       {status.kind === "error" && (
         <div
           className="banner banner--update banner--error"
