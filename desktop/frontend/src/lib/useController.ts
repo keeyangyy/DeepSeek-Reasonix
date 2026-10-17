@@ -4507,9 +4507,18 @@ export function useController() {
     let cleared: { sessionPath: string; sessionRevision?: number; sessionDigest?: string; sessionGeneration: number };
     try {
       cleared = tabId ? await app.ClearSessionForTab(tabId) : await app.ClearSession();
-    } catch {
-      if (tabId) void loadSessionDataForTab(tabId, false, "startup", { preserveCachedHistory: true });
-      return;
+    } catch (err) {
+      // A refused clear is not "nothing happened": the controller may already
+      // have rotated (its transition callback republishes the tab's path) and
+      // only a follow-up step failed. Re-read the authoritative session
+      // identity instead of assuming the old transcript is still live, and
+      // rethrow so the clear-context surface warns the user — returning here
+      // silently reported success for a clear that never completed.
+      if (tabId) {
+        await refreshMetaForTab(tabId).catch(() => {});
+        await loadSessionDataForTab(tabId, false, "startup", { preserveCachedHistory: true }).catch(() => {});
+      }
+      throw err;
     }
     if (tabId) bumpSessionLoadSeq(tabId);
     invalidateCache();
@@ -4530,7 +4539,7 @@ export function useController() {
       dispatchTo(tabId, { type: "reset" });
       dispatchTo(tabId, { type: "history", messages: [] });
     }
-  }, [activeTabId, bumpCheckpointRefreshSeq, bumpSessionLoadSeq, dispatchTo, loadSessionDataForTab, waitForTabReady]);
+  }, [activeTabId, bumpCheckpointRefreshSeq, bumpSessionLoadSeq, dispatchTo, loadSessionDataForTab, refreshMetaForTab, waitForTabReady]);
 
   const listSessions = useCallback(async (): Promise<SessionMeta[]> => {
     const page = await app.ListHistorySessions({ scope: "all", workspaceRoot: "", status: "all", timeFilter: "all", query: "", cursor: "", limit: 200 });
