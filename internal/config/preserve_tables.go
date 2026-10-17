@@ -24,6 +24,26 @@ type arrayElement struct {
 // It reports false when any element is unnamed or two share a name: those cannot
 // be matched across a save, and the caller must not invent a match.
 func arrayElements(body, section string) ([]arrayElement, bool) {
+	elems, ok := splitArrayElements(body, section)
+	if !ok {
+		return nil, false
+	}
+	seen := make(map[string]bool, len(elems))
+	for i := range elems {
+		name, ok := arrayElementName(elems[i].text)
+		if !ok || seen[name] {
+			return nil, false
+		}
+		seen[name] = true
+		elems[i].name = name
+	}
+	return elems, true
+}
+
+// splitArrayElements splits the elements of [[section]] without asking for an
+// identity key. Callers that only need "what would be lost" use this; callers
+// that match elements across a save use arrayElements.
+func splitArrayElements(body, section string) ([]arrayElement, bool) {
 	spans := tomlLineSpans(body)
 	structural := tomlStructuralLineMask(spans)
 	var starts []int
@@ -65,15 +85,6 @@ func arrayElements(body, section string) ([]arrayElement, bool) {
 		elem := arrayElement{start: spans[idx].start, end: end}
 		elem.text = body[elem.start:elem.end]
 		elems = append(elems, elem)
-	}
-	seen := make(map[string]bool, len(elems))
-	for i := range elems {
-		name, ok := arrayElementName(elems[i].text)
-		if !ok || seen[name] {
-			return nil, false
-		}
-		seen[name] = true
-		elems[i].name = name
 	}
 	return elems, true
 }
@@ -179,8 +190,23 @@ func elementOwnKeyLines(block string) map[string]string {
 // element by element, leaving the caller to refuse the save rather than write a
 // lossy one.
 func carryArrayElementFields(body, next, section string) (string, bool) {
+	return carryArrayElementFieldsExcept(body, next, section, nil)
+}
+
+// carryArrayElementFieldsExcept is carryArrayElementFields with the element keys
+// this save removed on purpose. A key the render no longer writes is only a
+// foreign field when the save did not drop it: carrying back a key the save
+// deleted would put it on disk again and make the round-trip guard refuse the
+// whole edit.
+func carryArrayElementFieldsExcept(body, next, section string, dropped map[string]bool) (string, bool) {
 	oldElems, ok := arrayElements(body, section)
 	if !ok {
+		// No identity key means the array can still be replaced whole, as long
+		// as the render writes back every field the file holds. A shared key
+		// stays refused: it is ambiguous.
+		if arrayElementsHaveNoIdentity(body, section) && arrayReplaceKeepsEveryField(body, next, section) {
+			return next, true
+		}
 		return "", false
 	}
 	if len(oldElems) == 0 {
@@ -194,7 +220,7 @@ func carryArrayElementFields(body, next, section string) (string, bool) {
 	for _, elem := range newElems {
 		block := strings.TrimRight(elem.text, "\n")
 		if old, found := findArrayElement(oldElems, elem.name); found {
-			block = appendMissingElementKeys(block, old.text)
+			block = appendMissingElementKeys(block, old.text, dropped)
 		}
 		blocks = append(blocks, block)
 	}
@@ -211,14 +237,62 @@ func findArrayElement(elems []arrayElement, name string) (arrayElement, bool) {
 	return arrayElement{}, false
 }
 
+// arrayElementsHaveNoIdentity reports whether an array's elements carry no
+// identity key at all (bot routes, remote projects key on nothing). Such a
+// table cannot be matched element by element, but replacing it whole can still
+// be safe; a table whose elements share one key stays refused.
+func arrayElementsHaveNoIdentity(body, section string) bool {
+	elems, ok := splitArrayElements(body, section)
+	if !ok || len(elems) == 0 {
+		return false
+	}
+	for _, elem := range elems {
+		if _, ok := arrayElementName(elem.text); ok {
+			return false
+		}
+	}
+	return true
+}
+
+// arrayReplaceKeepsEveryField reports whether the target render writes every
+// field the file's elements hold, so replacing the array whole cannot drop a
+// field this build does not model.
+func arrayReplaceKeepsEveryField(body, next, section string) bool {
+	oldElems, ok := splitArrayElements(body, section)
+	if !ok {
+		return false
+	}
+	newElems, ok := splitArrayElements(next, section)
+	if !ok {
+		return false
+	}
+	writable := map[string]bool{}
+	for _, elem := range newElems {
+		for key := range elementOwnKeyLines(elem.text) {
+			writable[key] = true
+		}
+	}
+	for _, elem := range oldElems {
+		for key := range elementOwnKeyLines(elem.text) {
+			if !writable[key] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // appendMissingElementKeys writes into block, just before its first sub-table,
 // every own key the old element had and block does not.
-func appendMissingElementKeys(block, oldBlock string) string {
+func appendMissingElementKeys(block, oldBlock string, dropped map[string]bool) string {
 	have := elementOwnKeyLines(block)
 	missing := elementOwnKeyLines(oldBlock)
 	names := make([]string, 0, len(missing))
 	for name := range missing {
 		if _, exists := have[name]; exists {
+			continue
+		}
+		if dropped[name] {
 			continue
 		}
 		names = append(names, name)

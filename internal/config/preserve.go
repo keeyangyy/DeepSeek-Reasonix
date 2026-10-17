@@ -26,24 +26,104 @@ import (
 // therefore fails with the file left exactly as it was; the caller reports that
 // error instead of pretending the setting was stored.
 func (c *Config) saveUserIncrementalResolved(logicalPath, resolvedPath string) error {
-	full := RenderTOMLForScope(c, RenderScopeUser)
 	raw, err := fileencoding.ReadFileUTF8(resolvedPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
 		// First save: there is no user content to lose.
-		return writeConfigFileResolved(resolvedPath, full, configFilePerm(logicalPath))
+		return writeConfigFileResolved(resolvedPath, RenderTOMLForScope(c, RenderScopeUser), configFilePerm(logicalPath))
 	}
 	text := string(raw)
 	if strings.TrimSpace(text) == "" {
-		return writeConfigFileResolved(resolvedPath, full, configFilePerm(logicalPath))
+		return writeConfigFileResolved(resolvedPath, RenderTOMLForScope(c, RenderScopeUser), configFilePerm(logicalPath))
 	}
+	full := renderUserConfigForSave(c, text)
 	body, err := patchExistingUserConfig(logicalPath, text, c, full)
 	if err != nil {
 		return err
 	}
 	return writeConfigFileResolved(resolvedPath, body, configFilePerm(logicalPath))
+}
+
+// renderUserConfigForSave renders what the save should write. Loading a user
+// config injects an official built-in provider the file never declared (a
+// DeepSeek profile derived from legacy aliases). That belongs to the running
+// process, not to the user's file: writing it would add a provider nobody asked
+// for, and leaving it in the target while the loader injects it again makes the
+// read-back guard refuse every save that touches provider access. Only an
+// official built-in can be injected; a provider the save itself added stays.
+func renderUserConfigForSave(c *Config, fileText string) string {
+	full := RenderTOMLForScope(c, RenderScopeUser)
+	declared, ok := declaredProviderNames(fileText)
+	if !ok {
+		return full
+	}
+	elems, ok := arrayElements(full, "providers")
+	if !ok || len(elems) == 0 {
+		return full
+	}
+	// Only an official built-in profile can be injected by the loader. Any other
+	// provider the save added is the user's own and must be written.
+	injected := make(map[string]bool, 1)
+	for _, p := range c.Providers {
+		name := strings.TrimSpace(p.Name)
+		if name == "" || declared[name] || officialProviderKind(&p) == "" {
+			continue
+		}
+		injected[name] = true
+	}
+	if len(injected) == 0 {
+		return full
+	}
+	kept := make([]arrayElement, 0, len(elems))
+	for _, elem := range elems {
+		if !injected[elem.name] {
+			kept = append(kept, elem)
+		}
+	}
+	if len(kept) == len(elems) {
+		return full
+	}
+	if len(kept) == 0 {
+		return full[:elems[0].start] + full[elems[len(elems)-1].end:]
+	}
+	blocks := make([]string, 0, len(kept))
+	for _, elem := range kept {
+		blocks = append(blocks, strings.TrimRight(elem.text, "\n"))
+	}
+	rebuilt := strings.Join(blocks, "\n\n") + "\n\n"
+	// Replace the whole array region, not just the kept elements' span: a
+	// dropped element after the last kept one would otherwise come back with
+	// the tail the slice appends.
+	return full[:elems[0].start] + rebuilt + full[elems[len(elems)-1].end:]
+}
+
+// declaredProviderNames lists the provider names the file itself declares. It
+// reports false when the file cannot be read as a plain provider list, which
+// leaves the caller with the unmodified render.
+func declaredProviderNames(text string) (map[string]bool, bool) {
+	tree, ok := decodeUserConfigTree(text)
+	if !ok {
+		return nil, false
+	}
+	raw, present := tree["providers"]
+	if !present {
+		return map[string]bool{}, true
+	}
+	elems, ok := raw.([]map[string]any)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]bool, len(elems))
+	for _, elem := range elems {
+		name, _ := elem["name"].(string)
+		if name = strings.TrimSpace(name); name == "" {
+			return nil, false
+		}
+		out[name] = true
+	}
+	return out, true
 }
 
 // patchExistingUserConfig is the in-place edit of an existing user config. It
@@ -115,7 +195,8 @@ func userConfigRendersAs(path, body, want string) bool {
 	if err != nil {
 		return false
 	}
-	return RenderTOMLForScope(cfg, RenderScopeUser) == normalizedWant
+	got := RenderTOMLForScope(cfg, RenderScopeUser)
+	return got == normalizedWant
 }
 
 // userConfigKey addresses one entry of a user config: the table it lives in
@@ -159,13 +240,83 @@ func patchUserConfigText(text string, base, next *Config, nextRender string) (st
 			body = patched
 			continue
 		}
-		patched, ok := upsertUserConfigEntry(body, nextRender, entry)
+		patched, ok := upsertUserConfigEntry(body, nextRender, entry, droppedElementKeys(before, after, entry.key.section))
 		if !ok {
 			return "", false
 		}
 		body = patched
 	}
 	return stripRetiredUserConfigLines(body), true
+}
+
+// droppedElementKeys lists, for one array-of-tables section, the element keys
+// the save intentionally removed: keys present in the base render for an element
+// that is still there, and absent from the next render. Those are deletions the
+// save decided on, not fields this build fails to model, so the carry-over step
+// must not write them back.
+func droppedElementKeys(before, after map[string]userConfigEntry, section string) map[string]bool {
+	entry, ok := after[userConfigKey{section: section}.id()]
+	if !ok || !entry.table {
+		return nil
+	}
+	beforeEntry, hadBefore := before[userConfigKey{section: section}.id()]
+	if !hadBefore || !beforeEntry.table {
+		return nil
+	}
+	oldElems, ok := sessionOwnElementKeys(beforeEntry.value)
+	if !ok {
+		return nil
+	}
+	newElems, ok := sessionOwnElementKeys(entry.value)
+	if !ok {
+		return nil
+	}
+	dropped := map[string]bool{}
+	for name, keys := range oldElems {
+		kept, present := newElems[name]
+		if !present {
+			continue
+		}
+		for key := range keys {
+			if !kept[key] {
+				dropped[key] = true
+			}
+		}
+	}
+	if len(dropped) == 0 {
+		return nil
+	}
+	return dropped
+}
+
+// sessionOwnElementKeys indexes one array-of-tables value by element identity,
+// then by that element's own key names. Elements are matched the same way
+// carryArrayElementFields matches them: on their `name` (providers, plugins) or
+// `id` (bot connections).
+func sessionOwnElementKeys(value any) (map[string]map[string]bool, bool) {
+	elems, ok := value.([]map[string]any)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]map[string]bool, len(elems))
+	for _, elem := range elems {
+		name := ""
+		for _, key := range []string{"name", "id"} {
+			if v, ok := elem[key].(string); ok {
+				name = v
+				break
+			}
+		}
+		if name == "" {
+			return nil, false
+		}
+		keys := make(map[string]bool, len(elem))
+		for key := range elem {
+			keys[key] = true
+		}
+		out[name] = keys
+	}
+	return out, true
 }
 
 // stripRetiredUserConfigLines drops the retired keys a whole render drops by
@@ -312,7 +463,7 @@ func sortedUserConfigNames(table map[string]any) []string {
 // upsertUserConfigEntry writes one entry into body from the lines nextRender
 // gives it. A table is replaced whole; a scalar is written at its key, leaving
 // the rest of its table — comments included — untouched.
-func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (string, bool) {
+func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry, dropped map[string]bool) (string, bool) {
 	body = dropInlinePathSection(body, nextRender, entry.key)
 	if entry.key.section != "" {
 		var ok bool
@@ -328,7 +479,7 @@ func upsertUserConfigEntry(body, nextRender string, entry userConfigEntry) (stri
 		// Elements keep the keys this build does not model; refuse when they
 		// cannot be matched by name instead of replacing them wholesale.
 		patched := replaceTOMLSection(body, entry.key.section, block)
-		return carryArrayElementFields(body, patched, entry.key.section)
+		return carryArrayElementFieldsExcept(body, patched, entry.key.section, dropped)
 	}
 	line := userConfigRenderKeyLine(nextRender, entry.key)
 	if line == "" {
