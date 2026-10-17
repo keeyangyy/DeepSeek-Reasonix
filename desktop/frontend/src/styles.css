@@ -5285,6 +5285,14 @@ button.reasoning-summary:focus-visible {
 }
 .reasoning__body,
 .turn-collapse__inline-reasoning {
+  /* Expanded reasoning must use the message region's available width, not the
+     intrinsic width of the text. `.turn-collapse__reasoning-phase` is a flex
+     column with `align-items: flex-start` so the compact heading keeps its
+     content width; without an explicit cross-axis size the body shrinks to fit
+     its text and short reasoning renders in a narrow box. Stretching only the
+     body (margin/padding/border included via border-box) keeps the heading
+     compact and leaves no horizontal overflow. */
+  align-self: stretch;
   max-height: min(40vh, 480px);
   overflow-x: hidden;
   overflow-y: auto;
