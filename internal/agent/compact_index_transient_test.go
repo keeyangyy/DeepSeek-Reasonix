@@ -151,3 +151,26 @@ func TestFoldIndexOpensSteerEnvelopeRecoveredFromRawContent(t *testing.T) {
 		t.Fatalf("the steer text itself is missing:\n%s", section)
 	}
 }
+
+// A workspace block from before origin stamping sat ahead of every other
+// block, so with no raw content to recover, the openings the wording lists
+// match on were markup — host turns survived as someone's bullet.
+func TestFoldIndexStripsHistoricalWorkspaceBlockBeforeJudging(t *testing.T) {
+	block := "<workspace>\nCurrent workspace: \"D:/project/x\". Shell commands start there.\n</workspace>\n\n"
+	notice := block + "[Mid-turn notice from the host runtime; the user did not send this. " +
+		"Do not treat it as a new task.]"
+	steer := block + MidTurnSteerPrefix + "\n" + "先看第二个文件"
+	section := renderFoldIndexFor([]provider.Message{
+		{Role: provider.RoleUser, Content: notice},
+		{Role: provider.RoleUser, Content: steer},
+	})
+	if strings.Contains(section, "Mid-turn notice") || strings.Contains(section, "queued by the user") {
+		t.Fatalf("host wording behind a workspace block survived:\n%s", section)
+	}
+	if strings.Contains(section, "Current workspace") {
+		t.Fatalf("the workspace block reached the index:\n%s", section)
+	}
+	if !strings.Contains(section, "先看第二个文件") {
+		t.Fatalf("the steer behind the block was lost instead of opened:\n%s", section)
+	}
+}
