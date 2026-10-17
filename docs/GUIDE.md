@@ -64,7 +64,7 @@ default_model = "deepseek-flash"   # executor; set [agent].planner_model to add 
 show_turn_usage = false             # hide per-request token/cost receipts in the TUI; default true
 
 [agent]
-reasoning_language = "auto"      # visible reasoning text: auto|zh|en
+reasoning_language = "auto"      # visible reasoning text: auto|zh|en|off (off injects nothing)
 # plan_mode_read_only_commands = ["gh issue view"]   # legacy compatibility only; Plan bash now uses Permissions
 # planner_model = "deepseek-pro"      # optional low-frequency planner
 # subagent_model = "deepseek-pro"     # optional default for runAs=subagent skills
@@ -1417,8 +1417,9 @@ before the workflow switches to implementation. Tool calls made while drafting
 still use the current Permissions and Sandbox. Legacy `agent.auto_plan` and
 `agent.auto_plan_classifier` values are ignored and removed from the user config
 during upgrade. The visible reasoning language can be changed with
-`/reasoning-language auto|zh|en` in the
-session, or `reasonix config reasoning-language auto|zh|en` in a shell/script.
+`/reasoning-language auto|zh|en|off` in the
+session, or `reasonix config reasoning-language auto|zh|en|off` in a shell/script.
+`off` injects no thinking-language instruction at all.
 Pass `--local`
 to the reasoning-language shell command only when you intentionally want a
 project-local override.

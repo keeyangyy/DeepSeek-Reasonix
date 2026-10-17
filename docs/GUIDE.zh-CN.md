@@ -58,7 +58,7 @@ default_model = "deepseek-flash"   # 执行器；设 [agent].planner_model 可�
 show_turn_usage = false             # 隐藏 TUI 每轮 token/费用回执；默认 true
 
 [agent]
-reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
+reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en|off（off 不注入）
 # plan_mode_read_only_commands = ["gh issue view"]   # 仅兼容旧配置；Plan bash 现由 Permissions 决定
 # planner_model = "deepseek-pro"      # 可选的低频规划器
 # vision_model = "auto"                # 可选；文本模型先用同服务商视觉模型生成隐藏图片摘要
@@ -1080,9 +1080,9 @@ minimal preset 不是任务复杂度模式。
 `Shift+Tab` 切换到 Plan。Reasonix 先生成计划，待用户批准后工作流才切换到实施；规划期间的
 工具调用仍遵守当前 Permissions 与 Sandbox。旧的 `agent.auto_plan` 与
 `agent.auto_plan_classifier` 会被忽略，并在升级时从用户配置中移除。可见思考语言可通过以下方式修改：
-会话里用 `/reasoning-language auto|zh|en`，shell/脚本里用
-`reasonix config reasoning-language auto|zh|en`。只有明确想为
-reasoning-language 写项目级覆盖时，才给 shell 命令加 `--local`。
+会话里用 `/reasoning-language auto|zh|en|off`，shell/脚本里用
+`reasonix config reasoning-language auto|zh|en|off`。设为 `off` 时不注入任何思考语言指令；
+只有明确想为 reasoning-language 写项目级覆盖时，才给 shell 命令加 `--local`。
 
 桌面端“协作方式”菜单里的计划模式与目标模式的使用方法与注意事项，
 见 [`COLLABORATION_MODES.zh-CN.md`](./COLLABORATION_MODES.zh-CN.md)。没有自动

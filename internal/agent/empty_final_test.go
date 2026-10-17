@@ -63,6 +63,37 @@ func TestRunPrefixesReasoningLanguageOnReasoningOnlyCompletion(t *testing.T) {
 	}
 }
 
+func TestRunWithReasoningLanguageOffSendsNoBlockToProvider(t *testing.T) {
+	prov := &mockProvider{name: "p", streams: [][]provider.Chunk{
+		{
+			{Type: provider.ChunkText, Text: "done"},
+			{Type: provider.ChunkDone},
+		},
+	}}
+	a := New(prov, tool.NewRegistry(), NewSession(""), Options{ReasoningLanguage: "off"}, event.Discard)
+
+	// A Chinese prompt is exactly the case auto wraps, so it proves off reaches
+	// the actual provider request rather than only the controller's Compose.
+	const prompt = "解释 AuthHandler 的 panic"
+	if err := a.Run(context.Background(), prompt); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(prov.requests) != 1 {
+		t.Fatalf("provider requests = %d, want 1", len(prov.requests))
+	}
+	got := lastUser(prov.requests[0])
+	if strings.Contains(got, "<reasoning-language>") {
+		t.Fatalf("provider user turn = %q, want no reasoning-language block under off", got)
+	}
+	if got != prompt {
+		t.Fatalf("provider user turn = %q, want %q", got, prompt)
+	}
+	// The final-answer contract must stay independent of the thinking setting.
+	if strings.Contains(got, "<response-language>") {
+		t.Fatalf("off reasoning language must not add a response-language block: %q", got)
+	}
+}
+
 func TestRunRequiresVisibleFinalOnlyWhenExplicitlyRequested(t *testing.T) {
 	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
 		{{Type: provider.ChunkReasoning, Text: "thinking 1"}, {Type: provider.ChunkDone}},

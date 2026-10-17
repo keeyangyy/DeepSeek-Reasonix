@@ -296,7 +296,7 @@ type Agent struct {
 	// executorHandoffGuard is enabled by Coordinator only for the executor agent.
 	executorHandoffGuard bool
 	responseLanguage     atomic.Value // string: auto|zh|en
-	reasoningLanguage    atomic.Value // string: auto|zh|en
+	reasoningLanguage    atomic.Value // string: auto|zh|en|off
 
 	requireVisibleFinal bool // internal callers require final Content
 	continuationPolicy  ContinuationPolicy

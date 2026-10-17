@@ -409,7 +409,7 @@ default_model = "deepseek"
 
 [agent]
 temperature = 0.0
-reasoning_language = "auto"
+reasoning_language = "auto"                 # 可见思考过程语言：auto|zh|en|off
 
 [[providers]]
 name           = "deepseek"

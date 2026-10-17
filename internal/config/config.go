@@ -632,29 +632,7 @@ func NormalizeLanguage(lang string) string {
 	}
 }
 
-// ReasoningLanguage normalizes agent.reasoning_language. Empty means auto:
-// visible reasoning follows the conversation language already described by the
-// stable LanguagePolicy. Legacy "default" is treated as auto.
-func (c *Config) ReasoningLanguage() string {
-	if c == nil {
-		return "auto"
-	}
-	return NormalizeReasoningLanguage(c.Agent.ReasoningLanguage)
-}
-
-// NormalizeReasoningLanguage returns one of auto|zh|en.
-func NormalizeReasoningLanguage(lang string) string {
-	switch strings.ToLower(strings.TrimSpace(lang)) {
-	case "", "auto", "follow", "conversation", "detect", "default", "model", "model-default", "model_default", "provider":
-		return "auto"
-	case "zh", "cn", "chinese", "中文":
-		return "zh"
-	case "en", "english":
-		return "en"
-	default:
-		return "auto"
-	}
-}
+// ReasoningLanguage and NormalizeReasoningLanguage live in reasoning_language.go.
 
 // DesktopTelemetry reports whether the desktop sends the anonymous launch ping.
 // It carries no conversation, key, or file data — see desktop/README.md.
@@ -1285,8 +1263,8 @@ type AgentConfig struct {
 	// choice.
 	AutoPlan string `toml:"auto_plan"`
 	// ReasoningLanguage controls the preferred language for visible reasoning
-	// text. Empty/auto follows the conversation language. Applied as transient
-	// turn context, not the stable prompt.
+	// text. Empty/auto follows the conversation language; off injects no
+	// preference and drops thinking-language guidance from the stable prompt.
 	ReasoningLanguage string `toml:"reasoning_language"`
 	// Deprecated compatibility field paired with AutoPlan. Old TOML remains
 	// readable, but loading clears it and rendering omits it.
@@ -1795,13 +1773,7 @@ Keep changes focused and responses concise.`
 // prompts, so custom personas cannot accidentally remove the `ask` UI contract.
 const UserDecisionPolicy = `User-owned choices: when a consequential decision has no safe, obvious default, call the ask tool so the user can choose. Otherwise proceed with a sensible reversible default. Do not ask in prose when ask is available. In non-interactive runs, state the assumption and take the safest reversible path.`
 
-// LanguagePolicy is the auto fallback appended to the system prompt when no
-// concrete UI language is resolved. It is static English text, so it stays part
-// of the cache-stable prefix and avoids per-turn language injection.
-const LanguagePolicy = `Reply in the same language the user is using in their most recent message: ` +
-	`if they write in Chinese answer in Chinese, in English answer in English, and switch ` +
-	`whenever they switch. Let this also guide the language you think in. Always keep code, ` +
-	`identifiers, file paths, shell commands, and technical terms in their original form — never translate them.`
+// Language policy constants live in reasoning_language.go.
 
 // Default returns the built-in default configuration.
 func Default() *Config {
