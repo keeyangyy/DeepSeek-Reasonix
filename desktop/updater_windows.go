@@ -221,7 +221,29 @@ func stageWindowsUpdateHelperCopy(dir string, data []byte) (string, error) {
 	if err := staged.Close(); err != nil {
 		return "", err
 	}
+	pruneWindowsUpdateHelperCopies(dir, dst)
 	return dst, nil
+}
+
+// pruneWindowsUpdateHelperCopies keeps only the copy just staged. Every update
+// used to leave one behind (roughly 9 MB each, never removed), so the update
+// cache grew with the release count. A copy that is still held by a running
+// helper cannot be deleted yet; that is expected and is retried on the next
+// update rather than failing the upgrade.
+func pruneWindowsUpdateHelperCopies(dir, keep string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, "reasonix-update-helper-") || !strings.HasSuffix(name, ".exe") {
+			continue
+		}
+		if path := filepath.Join(dir, name); !strings.EqualFold(path, keep) {
+			_ = os.Remove(path)
+		}
+	}
 }
 
 func claimVerifiedWindowsUpdateHelperExecution(path string, expectedSHA256 [sha256.Size]byte) (func(), error) {

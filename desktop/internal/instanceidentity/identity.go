@@ -60,3 +60,20 @@ func UpdateEnvironment(base []string, home string) []string {
 }
 
 func UpdateID() string { return os.Getenv(UpdateEnvironmentKey) }
+
+// WithoutUpdateEnvironment removes the handoff-only variables from an
+// environment. The updater hands them to the helper so it can prove which data
+// home it is restarting into; the desktop that the helper starts must not carry
+// them, or every shell it spawns inherits a REASONIX_HOME nobody configured and
+// the process behaves like an isolated runtime.
+func WithoutUpdateEnvironment(entries []string) []string {
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(key, "REASONIX_HOME") || strings.EqualFold(key, UpdateEnvironmentKey) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
+}
