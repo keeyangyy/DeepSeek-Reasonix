@@ -83,8 +83,23 @@ func buildFoldIndex(region []provider.Message, keptAt func(int) bool, origin fun
 			if keptAt != nil && keptAt(i) {
 				continue // held verbatim; the projection still shows it
 			}
+			// A user-role message may be host runtime state rather than someone
+			// speaking; addressing it names a turn no reader would claim.
+			if IsHostGeneratedUserMessage(m) {
+				continue
+			}
+			// Injected blocks outrun the subject budget and evict the typed
+			// words: preview, title and rewind already strip through one
+			// source of truth, and so now does the index.
+			if text, ok := SteerText(m.Content); ok {
+				m.Content = text // quote the steer, not its envelope
+			}
+			typed := UserPreviewText(UserMessageText(m))
+			if typed == "" {
+				continue // nothing but injection
+			}
 			out = append(out, foldIndexEntry{
-				Canonical: origin(i), Kind: "you", Subject: quotedOpening(m.Content),
+				Canonical: origin(i), Kind: "you", Subject: quotedOpening(typed),
 				Note: "summary only", rank: rankDroppedUserTurn,
 			})
 		case m.Role == provider.RoleTool:
