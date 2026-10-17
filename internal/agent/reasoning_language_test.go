@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -79,5 +80,41 @@ func TestWithReasoningLanguageAutoUsesRawSourceOverReferencedContext(t *testing.
 	}
 	if strings.Contains(got, "use English") {
 		t.Fatalf("referenced English code should not make auto prefer English:\n%s", got)
+	}
+}
+
+func TestWithReasoningLanguageOffInjectsNothing(t *testing.T) {
+	// off must be a true no-op: the same Chinese prompt that auto wraps stays
+	// byte-identical, and no substitute instruction is emitted.
+	chinese := "解释 AuthHandler 的 panic"
+	if got := WithReasoningLanguage(chinese, "off"); got != chinese {
+		t.Fatalf("off reasoning language altered the prompt:\n got %q\nwant %q", got, chinese)
+	}
+	if block := ReasoningLanguageBlock("off"); block != "" {
+		t.Fatalf("ReasoningLanguageBlock(off) = %q, want empty", block)
+	}
+	if resolved := ResolveReasoningLanguage("off", chinese); resolved != "off" {
+		t.Fatalf("ResolveReasoningLanguage(off) = %q, want off", resolved)
+	}
+}
+
+func TestWithReasoningLanguageOffLeavesExistingBlocksAlone(t *testing.T) {
+	// Leading blocks produced by an older setting are historical content: off
+	// must not strip or rewrite them, only stop adding new ones.
+	alreadyPrefixed := ReasoningLanguageBlock("zh") + "\n\n解释这个模块"
+	if got := WithReasoningLanguageForSource(alreadyPrefixed, "off", "解释这个模块"); got != alreadyPrefixed {
+		t.Fatalf("off rewrote an existing leading block:\n got %q\nwant %q", got, alreadyPrefixed)
+	}
+}
+
+func TestReasoningLanguageContextCarriesOff(t *testing.T) {
+	ctx := WithReasoningLanguagePreference(context.TODO(), "OFF")
+	if got := ReasoningLanguageFromContext(ctx); got != "off" {
+		t.Fatalf("ReasoningLanguageFromContext = %q, want off", got)
+	}
+	// A live change back to auto must clear the stored off value.
+	ctx = WithReasoningLanguagePreference(ctx, "auto")
+	if got := ReasoningLanguageFromContext(ctx); got != "auto" {
+		t.Fatalf("ReasoningLanguageFromContext = %q, want auto", got)
 	}
 }

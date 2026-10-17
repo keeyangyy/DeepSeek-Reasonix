@@ -10,13 +10,16 @@
 
 ## 为什么需要它
 
-有些用户希望可见思考过程更稳定地使用中文或英文，即使任务本身混合了多种语言。这个设置把这种偏好显式化，同时不改稳定 system prompt，也不改工具 schema。
+有些用户希望可见思考过程更稳定地使用中文或英文，即使任务本身混合了多种语言。这个设置把这种偏好显式化，不改工具 schema，也不动其他提示词。
 
-取值只有三种：
+取值有四种：
 
 - `auto`：用户原始提问明显为中文时锚定中文，并忽略 `@file` 等注入的引用内容；英文或不确定时不额外注入语言指令。官方 DeepSeek-V4-Pro 是例外：`auto` 会把可见思考钉在英文，避免覆盖该模型的 agent 人设。
 - `zh`：可见思考过程优先使用简体中文。
 - `en`：可见思考过程优先使用英文。
+- `off`：完全不注入思考语言指令。不会生成 `<reasoning-language>` block，也不做任何自动判断。
+
+`off` 不是“另一种偏好”，而是关闭：它同时移除 system prompt 里那句常驻的思考语言引导，但保留最终回答语言策略、其余 system prompt 与工具 schema。
 
 ## 桌面端
 
@@ -26,7 +29,9 @@
 设置 -> 模型 -> 使用 -> Agent 运行 -> 思考语言
 ```
 
-桌面端设置会写入用户级默认值。项目仍然可以通过 `./reasonix.toml` 覆盖。
+四个选项依次是「自动」「中文」「English」「不注入」。桌面端设置会写入用户级默认值；项目仍然可以通过 `./reasonix.toml` 覆盖。
+
+切换后，当前打开的会话在下一条消息立即使用新设置；已经发出的历史消息保持原样，不会被重写。
 
 ## CLI 与 TUI
 
@@ -36,12 +41,13 @@
 reasonix config reasoning-language auto
 reasonix config reasoning-language zh
 reasonix config reasoning-language en
+reasonix config reasoning-language off
 ```
 
 默认写入用户配置。要写入当前项目的覆盖配置：
 
 ```bash
-reasonix config reasoning-language --local zh
+reasonix config reasoning-language --local off
 ```
 
 在 `reasonix` 内可以用斜杠命令：
@@ -50,6 +56,7 @@ reasonix config reasoning-language --local zh
 /reasoning-language auto
 /reasoning-language zh
 /reasoning-language en
+/reasoning-language off
 ```
 
 斜杠命令会写入用户级设置，并立即更新当前 chat controller，后续 turn 生效。它不会改写当前项目的 `reasonix.toml`；如果要写项目级覆盖，请使用带 `--local` 的 shell 命令。
@@ -66,7 +73,7 @@ reasonix run "解释这个模块"
 
 ```toml
 [agent]
-reasoning_language = "auto" # auto|zh|en
+reasoning_language = "auto" # auto|zh|en|off
 ```
 
 这个设置的配置优先级是：
@@ -75,15 +82,33 @@ reasoning_language = "auto" # auto|zh|en
 ./reasonix.toml > 用户 config.toml > 内置默认值
 ```
 
+旧配置完全兼容：空值、`auto`、`default`、`model` 等旧写法仍然归一为 `auto`，行为不变。`off` 也接受 `none`、`disabled`、`never` 作为别名，配置文件里统一写成 `off`。
+
 目前没有为它提供命令行 flag。它更像用户偏好或项目偏好，不适合作为每次运行都传一次的任务参数。
+
+## 生效范围
+
+| 位置 | 是否受此设置影响 |
+|---|---|
+| 主代理的思考语言 block | 是 |
+| 子代理、planner 等派生运行 | 是，通过 context 继承 |
+| 斜杠命令、steer、空回复重试、继续运行提示 | 是 |
+| system prompt 中的思考语言引导 | 仅 `off` 移除 |
+| 最终回答语言 `response_language` | 否 |
+| 工具 schema 与工具顺序 | 否 |
+| 已被历史记录的消息 | 否，不会重写 |
+
+`off` 对 system prompt 的改动属于会话构建期行为：新会话、新标签页或重启后生效。当前正在运行的会话切到 `off` 后，后续消息立即不再注入 block，但已固化的 system prompt 保持不变——这与“历史消息不被重写”是同一条约束。
 
 ## 缓存影响
 
 `auto` 仍然对缓存友好。用户原始提问明显是中文时，Reasonix 会为这一轮加入同样很小的 `<reasoning-language>` 临时 block；英文或信号不明确时不注入，只复用已有的稳定语言策略。`@file` 等注入的引用内容不会参与这个自动判断。
 
-当设置为 `zh` 或 `en` 时，Reasonix 总是会把一个很小的 `<reasoning-language>` 临时 block 放进本次 user turn。所有模式下，它都不会改变工具 schema 的字节或顺序。官方 DeepSeek-V4-Pro 还会在 system prompt 开头稳定写入一句 agent 人设；其他模型的 system prompt 不变。
+当设置为 `zh` 或 `en` 时，Reasonix 总是会把一个很小的 `<reasoning-language>` 临时 block 放进本次 user turn。所有模式下，它都不会改变工具 schema 的字节或顺序。
 
-因此它能在表达明确偏好的同时，尽量保持高 prompt-cache 命中率。
+`off` 不注入任何临时 block，因此也不会产生额外的 per-turn 前缀。它只可能在下次构建会话时改变 system prompt 的一句引导，缓存会在那一次构建后重新稳定。
+
+官方 DeepSeek-V4-Pro 在 `auto`/`zh`/`en` 下仍会在 system prompt 开头稳定写入一句 agent 人设；`off` 时保留人设句本身，只去掉其中的英文思考要求。
 
 ## 边界
 
@@ -93,3 +118,4 @@ reasoning_language = "auto" # auto|zh|en
 - 如果用户在某次提问中明确要求最终回答使用某种语言，最终回答仍以用户要求为准。
 - 可见思考的语言主要由两个信号锚定：本轮第一段思考的语言，以及工具调用循环中回传给模型的既有思考段落的语言。注入的语言 block 的作用点是让第一段思考落在偏好语言上；第一段站稳后，后续段落通常会自我维持。
 - 在被另一种语言主导的长回合里（例如大量英文构建日志、代码或工具输出），后续某一段思考仍可能漂移；一旦漂移，本轮剩余部分通常保持漂移后的语言，中途重申偏好也只能部分拉回。这是模型行为的边界，该设置保持尽力而为。
+- `off` 只是不注入任何指令，不等于让模型"用英文思考"或"用中文思考"：模型仍会按自己的默认倾向和本轮提问语言自然选择。若要观察某个固定偏好，应显式选择 `zh` 或 `en`。

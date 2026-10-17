@@ -603,7 +603,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	if st, ok := outputstyle.Resolve(cfg.Agent.OutputStyle, outputstyle.Dirs()); ok {
 		sysPrompt = outputstyle.Apply(sysPrompt, st)
 	}
-	sysPrompt = appendCorePolicies(sysPrompt)
+	sysPrompt = appendCorePolicies(sysPrompt, cfg.ReasoningLanguage())
 	sysPrompt += "\n\n" + sessioncontext.PolicyBlock()
 	sessionContextStatic := sessioncontext.Sections{Workspace: currentWorkspacePromptLine(root)}
 	// Execution modes no longer exist. Host obligations are fact-driven and
@@ -667,7 +667,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			sysPrompt += "\n\n" + skill.InvocationPolicyBlock()
 		}
 	}
-	sysPrompt = config.ApplyOfficialDeepSeekV4ProPersona(sysPrompt, entry)
+	sysPrompt = config.ApplyOfficialDeepSeekV4ProPersonaForReasoning(sysPrompt, entry, cfg.ReasoningLanguage())
 
 	reg := tool.NewRegistry()
 	writeRoots := cfg.WriteRootsForRoot(root)

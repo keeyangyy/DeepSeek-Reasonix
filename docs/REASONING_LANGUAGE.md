@@ -15,9 +15,9 @@ still wins for the final answer.
 
 Some users read visible reasoning more comfortably in Chinese or English even
 when the task itself mixes languages. This setting makes that preference
-explicit without changing the stable system prompt or tool definitions.
+explicit without changing tool definitions or unrelated prompt text.
 
-The setting is intentionally small:
+The setting has four values:
 
 - `auto` anchors visible reasoning to Chinese when the raw user prompt is
   clearly Chinese, ignoring injected reference context such as `@file` contents;
@@ -26,6 +26,13 @@ The setting is intentionally small:
   override that model's agent persona.
 - `zh` asks visible reasoning to prefer Simplified Chinese.
 - `en` asks visible reasoning to prefer English.
+- `off` injects no thinking-language instruction at all: no
+  `<reasoning-language>` block is generated and no automatic detection runs.
+
+`off` is a real off switch, not another preference. It also drops the single
+standing thinking-language sentence from the system prompt, while keeping the
+final-answer language policy, the rest of the system prompt, and every tool
+schema untouched.
 
 ## Desktop
 
@@ -35,8 +42,12 @@ Open:
 Settings -> Models -> Usage -> Agent runtime -> Thinking language
 ```
 
-The desktop setting writes the user-level default. A project can still override
-it with `./reasonix.toml`.
+The four choices are Auto, 中文, English, and No injection. The desktop setting
+writes the user-level default; a project can still override it with
+`./reasonix.toml`.
+
+Changing it applies to the next message in already-open sessions. Historical
+messages are never rewritten.
 
 ## CLI And TUI
 
@@ -46,12 +57,13 @@ For shell scripts or one-off configuration:
 reasonix config reasoning-language auto
 reasonix config reasoning-language zh
 reasonix config reasoning-language en
+reasonix config reasoning-language off
 ```
 
 By default this writes the user config. To write a project-local override:
 
 ```bash
-reasonix config reasoning-language --local zh
+reasonix config reasoning-language --local off
 ```
 
 Inside `reasonix`, use the slash command:
@@ -60,6 +72,7 @@ Inside `reasonix`, use the slash command:
 /reasoning-language auto
 /reasoning-language zh
 /reasoning-language en
+/reasoning-language off
 ```
 
 The slash command writes the user-level setting and updates the current chat
@@ -78,7 +91,7 @@ User or project config:
 
 ```toml
 [agent]
-reasoning_language = "auto" # auto|zh|en
+reasoning_language = "auto" # auto|zh|en|off
 ```
 
 Resolution order for this setting:
@@ -87,9 +100,31 @@ Resolution order for this setting:
 ./reasonix.toml > user config.toml > built-in defaults
 ```
 
+Existing configs stay compatible: empty values, `auto`, `default`, `model`, and
+other legacy spellings still normalize to `auto` with unchanged behavior. `off`
+also accepts `none`, `disabled`, and `never` as aliases; the config file always
+records `off`.
+
 There is currently no command-line flag for this setting. Prefer config because
 the value is a user or project preference rather than a per-invocation task
 argument.
+
+## Scope
+
+| Surface | Affected |
+|---|---|
+| Main agent thinking-language block | yes |
+| Sub-agents, planner, and other derived runs | yes, inherited via context |
+| Slash command, steer, empty-final retry, continuation nudges | yes |
+| Thinking-language guidance in the system prompt | removed only by `off` |
+| Final-answer language (`response_language`) | no |
+| Tool schemas and tool ordering | no |
+| Messages already in history | no, never rewritten |
+
+The system-prompt part of `off` is a session-build-time change: it applies to
+new sessions, new tabs, or after a restart. An already-running session stops
+injecting blocks on its next message immediately, but its established system
+prompt stays as-is. That is the same constraint as "history is not rewritten".
 
 ## Cache Behavior
 
@@ -101,12 +136,15 @@ for this auto decision.
 
 When set to `zh` or `en`, Reasonix always adds a small transient
 `<reasoning-language>` block to the user turn. In all modes, this does not
-change tool schema bytes or ordering. Official DeepSeek-V4-Pro also prepends a
-stable first-line persona to the system prompt; other models leave the system
-prompt unchanged.
+change tool schema bytes or ordering.
 
-This keeps high prompt-cache hit rate intact while still letting an explicit
-preference affect the next model call.
+`off` adds no transient block at all, so it creates no extra per-turn prefix. It
+can change one sentence of the system prompt at the next session build, after
+which the cache stabilizes again.
+
+Official DeepSeek-V4-Pro still gets a stable first-line persona in `auto`,
+`zh`, and `en`. With `off` the persona sentence stays but its English-thinking
+clause is removed.
 
 ## Boundaries
 
@@ -126,3 +164,7 @@ preference affect the next model call.
   once it drifts, the rest of the turn usually stays in the drifted language,
   and restating the preference mid-turn recovers it only partially. This is a
   model-behavior boundary; the setting stays best-effort by design.
+- `off` only removes the instruction. It does not force English or Chinese
+  thinking: the model still follows its own default tendency and the language of
+  the current request. Choose `zh` or `en` when you want an observable fixed
+  preference.

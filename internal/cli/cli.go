@@ -2702,7 +2702,7 @@ func formatCompactRatioPercent(ratio float64) string {
 
 func configUsage() {
 	fmt.Print(`Usage:
-  reasonix config reasoning-language [--local] [auto|zh|en]
+  reasonix config reasoning-language [--local] [auto|zh|en|off]
   reasonix config compact-ratio [--local] [30..85]
   reasonix config currency [auto|CNY|USD]
   reasonix config telemetry [auto|on|off]
@@ -2789,7 +2789,7 @@ func configAutoPlanCompatibilityUsage() {
 
 func configReasoningLanguageUsage() {
 	fmt.Print(`Usage:
-  reasonix config reasoning-language [--local] [auto|zh|en]
+  reasonix config reasoning-language [--local] [auto|zh|en|off]
 `)
 }
 

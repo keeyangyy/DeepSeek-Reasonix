@@ -2,8 +2,16 @@ package boot
 
 import "reasonix/internal/config"
 
-func appendCorePolicies(prompt string) string {
-	for _, policy := range []string{config.UserDecisionPolicy, config.WorkPracticePolicy, config.LanguagePolicy} {
+// appendCorePolicies appends the host-owned policies to the system prompt.
+// reasoningLanguage only affects the language policy: "off" drops the
+// thinking-language sentence while keeping the final-answer language contract
+// and every other policy byte-identical.
+func appendCorePolicies(prompt, reasoningLanguage string) string {
+	for _, policy := range []string{
+		config.UserDecisionPolicy,
+		config.WorkPracticePolicy,
+		config.LanguagePolicyForReasoning(reasoningLanguage),
+	} {
 		prompt += "\n\n" + policy
 	}
 	return prompt

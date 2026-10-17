@@ -982,7 +982,7 @@ function providerModelFetchFallbackMessage(error: unknown, t: ReturnType<typeof 
 
 function normalizeReasoningLanguage(lang: string | undefined): string {
   const v = String(lang ?? "").trim().toLowerCase();
-  return v === "zh" || v === "en" ? v : "auto";
+  return v === "zh" || v === "en" || v === "off" ? v : "auto";
 }
 
 function normalizeBotQueueMode(mode: unknown): string {
@@ -4401,7 +4401,7 @@ export function ModelsSection({ s, busy, apply, backgroundApply, subtab, onboard
           <SettingsSection className="model-runtime-preferences" title={t("settings.runtimePreferences")}>
             <SettingsField label={t("settings.reasoningLanguage")} hint={t("settings.reasoningLanguageHint")}>
               <SettingsOptions layout="field" className="set-seg" role="radiogroup" aria-label={t("settings.reasoningLanguage")}>
-                {(["auto", "zh", "en"] as const).map((lang) => (
+                {(["auto", "zh", "en", "off"] as const).map((lang) => (
                   <button
                     key={lang}
                     type="button"

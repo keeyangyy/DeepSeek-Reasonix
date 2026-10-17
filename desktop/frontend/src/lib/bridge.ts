@@ -5137,7 +5137,7 @@ function makeMockApp(): AppBindings {
       settings.agent = { ...settings.agent, foldIndex: Boolean(enabled) };
     },
     async SetReasoningLanguage(lang: string) {
-      const normalized = lang === "zh" || lang === "en" ? lang : "auto";
+      const normalized = lang === "zh" || lang === "en" || lang === "off" ? lang : "auto";
       settings.agent = { ...settings.agent, reasoningLanguage: normalized };
     },
     // ── Heartbeat mock ──

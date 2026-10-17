@@ -9,15 +9,17 @@ import (
 type reasoningLanguageContextKey struct{}
 type responseLanguageContextKey struct{}
 
-// NormalizeReasoningLanguage returns one of auto|zh|en for runtime-only visible
-// reasoning preferences. Keep this local to agent so sub-agents can inherit the
-// preference without depending on config.
+// NormalizeReasoningLanguage returns one of auto|zh|en|off for runtime-only
+// visible reasoning preferences. Keep this local to agent so sub-agents can
+// inherit the preference without depending on config.
 func NormalizeReasoningLanguage(lang string) string {
 	switch strings.ToLower(strings.TrimSpace(lang)) {
 	case "zh", "cn", "chinese", "中文":
 		return "zh"
 	case "en", "english":
 		return "en"
+	case "off", "none", "disabled", "never":
+		return "off"
 	default:
 		return "auto"
 	}
@@ -51,7 +53,8 @@ func ResponseLanguageBlock(lang string) string {
 }
 
 // ReasoningLanguageBlock is transient user-turn context. It deliberately does
-// not belong in the stable system prompt or tool schemas.
+// not belong in the stable system prompt or tool schemas. "off" returns an
+// empty block: it must not be translated into a different instruction.
 func ReasoningLanguageBlock(lang string) string {
 	switch NormalizeReasoningLanguage(lang) {
 	case "zh":
@@ -63,14 +66,17 @@ func ReasoningLanguageBlock(lang string) string {
 	case "en":
 		return "<reasoning-language>\nVisible reasoning/thinking text preference: use English when the provider exposes reasoning text. Keep code, identifiers, file paths, shell commands, and untranslated technical terms in their original form. This preference does not override an explicit user request for the final answer language.\n</reasoning-language>"
 	default:
+		// auto and off both emit nothing here: auto relies on per-turn
+		// inference below, while off disables the feature outright.
 		return ""
 	}
 }
 
 // ResolveReasoningLanguage returns the concrete visible-reasoning language for
-// a turn. Explicit zh/en settings win; auto anchors clear Chinese user prompts
-// and otherwise stays provider-default to preserve the historical no-injection
-// behaviour for English and ambiguous turns.
+// a turn. Explicit zh/en settings win; off stays off and never enters Chinese
+// auto-inference; auto anchors clear Chinese user prompts and otherwise stays
+// provider-default to preserve the historical no-injection behaviour for
+// English and ambiguous turns.
 func ResolveReasoningLanguage(lang, source string) string {
 	mode := NormalizeReasoningLanguage(lang)
 	if mode != "auto" {
@@ -195,7 +201,8 @@ func WithReasoningLanguage(content, lang string) string {
 // WithReasoningLanguageForSource prefixes content using source as the language
 // signal for auto mode. Callers that expand @references should pass the raw
 // user prompt as source so referenced English code or logs do not override the
-// user's actual conversation language.
+// user's actual conversation language. "off" returns content untouched: it
+// adds no block and rewrites nothing already present.
 func WithReasoningLanguageForSource(content, lang, source string) string {
 	block := reasoningLanguageBlockForSource(lang, source)
 	if block == "" || hasLeadingInjectedBlock(content, "reasoning-language") {
@@ -271,8 +278,8 @@ func ResponseLanguageFromContext(ctx context.Context) string {
 
 // WithReasoningLanguagePreference carries the runtime preference to spawned
 // tools, especially sub-agents whose first user turn is created outside the
-// parent controller. It stores auto explicitly so live zh/en -> auto changes
-// clear stale boot-time preferences in child paths.
+// parent controller. It stores auto and off explicitly so live changes clear
+// stale boot-time preferences in child paths.
 func WithReasoningLanguagePreference(ctx context.Context, lang string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -280,7 +287,7 @@ func WithReasoningLanguagePreference(ctx context.Context, lang string) context.C
 	return context.WithValue(ctx, reasoningLanguageContextKey{}, NormalizeReasoningLanguage(lang))
 }
 
-// ReasoningLanguageFromContext returns auto|zh|en.
+// ReasoningLanguageFromContext returns auto|zh|en|off.
 func ReasoningLanguageFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return "auto"
