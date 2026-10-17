@@ -82,6 +82,7 @@ eq(activeSegment.turnActive, true, "the last segment of the running turn is turn
     { policy: "follow-turn", open: [true, true] },
     { policy: "collapsed", open: [false, false] },
     { policy: "active-only", open: [false, true] },
+    { policy: "always-expanded", open: [true, true] },
   ];
   for (const entry of cases) {
     const folds = reconcileFoldEntries(EMPTY_FOLDS, runningStates, "standard", false, entry.policy);
@@ -95,10 +96,11 @@ eq(activeSegment.turnActive, true, "the last segment of the running turn is turn
 {
   eq(settledStates[0].hasRunningWork, false, "a settled turn clears the turn-level activity");
   eq(settledStates[1].selfRunning, false, "a settled turn clears the segment-level activity");
-  for (const policy of ["follow-turn", "collapsed", "active-only"] as const) {
+  for (const policy of ["follow-turn", "collapsed", "active-only", "always-expanded"] as const) {
     const folds = reconcileFoldEntries(EMPTY_FOLDS, settledStates, "standard", false, policy);
-    eq(folds?.get(settledSegment.key)?.open, false, `${policy}: a completed turn folds its segments`);
-    eq(folds?.get(activeSegment.key)?.open, false, `${policy}: a completed turn folds its last segment`);
+    const expected = policy === "always-expanded";
+    eq(folds?.get(settledSegment.key)?.open, expected, `${policy}: a completed turn ${expected ? "keeps" : "folds"} its segments`);
+    eq(folds?.get(activeSegment.key)?.open, expected, `${policy}: a completed turn ${expected ? "keeps" : "folds"} its last segment`);
   }
 }
 

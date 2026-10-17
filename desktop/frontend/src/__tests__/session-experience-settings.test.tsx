@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import { SessionExperienceSettings } from "../components/SessionExperienceSettings";
 import { LocaleProvider } from "../lib/i18n";
 import { getSessionExperience } from "../lib/sessionExperience";
-import { getDefaultCollapsed } from "../lib/defaultCollapsedPreference";
+import { getReasoningExpansionPolicy } from "../lib/reasoningExpansionPolicy";
 import { getProcessFoldPolicy } from "../lib/processFoldPolicy";
 import type { SettingsView } from "../lib/types";
 
@@ -43,7 +43,7 @@ const root = createRoot(document.getElementById("root")!);
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")];
 try {
   await act(async () => root.render(<LocaleProvider><SettingsHost /></LocaleProvider>));
-  assert.equal(buttons().length, 7, "standard/deep, start-collapsed and the three process-fold policies");
+  assert.equal(buttons().length, 9, "standard/deep, the three expansion policies and the four process-fold policies");
   assert.equal(buttons()[0].getAttribute("aria-checked"), "true");
   await act(async () => buttons()[1].click());
   assert.equal(getSessionExperience(), "deep");
@@ -59,37 +59,51 @@ try {
   assert.equal(buttons()[1].getAttribute("aria-checked"), "true");
   assert.deepEqual(writes, ["deep", "standard"]);
 
-  // Start-collapsed is a local preference: clicking the second switch button
-  // toggles the stored value without touching the backend contract.
-  assert.equal(getDefaultCollapsed(), false);
-  await act(async () => buttons()[3].click());
-  assert.equal(getDefaultCollapsed(), true);
-  await act(async () => buttons()[2].click());
-  assert.equal(getDefaultCollapsed(), false);
-
-  // Process folding follows the same shape: a local three-mode policy that
-  // never widens the backend contract. While Deep is active it is inert, so
-  // its buttons are disabled and the stored default stays untouched.
+  // Both inner-item controls are inert while Deep is active: Deep already
+  // keeps work expanded, so the choice cannot be changed and the stored
+  // default stays untouched. Buttons 2-4 are all-collapsed / latest-only /
+  // all-expanded, and 5-8 are collapsed / active-only / follow-turn /
+  // always-expanded.
+  assert.equal(getReasoningExpansionPolicy(), "latest-only");
+  assert.equal(buttons()[3].getAttribute("aria-checked"), "true", "latest-only is the default for a fresh install");
   assert.equal(getProcessFoldPolicy(), "follow-turn");
-  assert.equal(buttons()[4].getAttribute("aria-checked"), "true");
-  assert.ok(buttons().slice(4).every(button => button.disabled), "Deep disables the fold policy choice");
+  assert.equal(buttons()[7].getAttribute("aria-checked"), "true", "follow-turn stays the default");
+  assert.ok(buttons().slice(2).every(button => button.disabled), "Deep disables both inner-item controls");
 
   backend = { ...backend, sessionExperience: undefined };
   await act(async () => reload());
   assert.equal(getSessionExperience(), "standard");
   assert.equal(buttons()[0].getAttribute("aria-checked"), "true");
+
+  // The expansion policy is a local three-state preference: clicking its
+  // buttons changes the stored value without touching the backend contract.
+  await act(async () => buttons()[2].click());
+  assert.equal(getReasoningExpansionPolicy(), "all-collapsed");
+  assert.equal(buttons()[2].getAttribute("aria-checked"), "true");
+  await act(async () => buttons()[3].click());
+  assert.equal(getReasoningExpansionPolicy(), "latest-only");
+  await act(async () => buttons()[4].click());
+  assert.equal(getReasoningExpansionPolicy(), "all-expanded");
+  assert.equal(buttons()[4].getAttribute("aria-checked"), "true");
+
+  // Process folding follows the same shape: a local four-mode policy that
+  // never widens the backend contract either.
   await act(async () => buttons()[5].click());
   assert.equal(getProcessFoldPolicy(), "collapsed");
   assert.equal(buttons()[5].getAttribute("aria-checked"), "true");
   await act(async () => buttons()[6].click());
   assert.equal(getProcessFoldPolicy(), "active-only");
   assert.equal(buttons()[6].getAttribute("aria-checked"), "true");
-  await act(async () => buttons()[4].click());
+  await act(async () => buttons()[8].click());
+  assert.equal(getProcessFoldPolicy(), "always-expanded");
+  assert.equal(buttons()[8].getAttribute("aria-checked"), "true");
+  await act(async () => buttons()[7].click());
   assert.equal(getProcessFoldPolicy(), "follow-turn");
-  assert.equal(buttons()[4].getAttribute("aria-checked"), "true");
-  assert.deepEqual(writes, ["deep", "standard"], "the fold policy never reaches the backend");
+  assert.equal(buttons()[7].getAttribute("aria-checked"), "true");
+  assert.deepEqual(writes, ["deep", "standard"], "neither local preference ever reaches the backend");
   assert.equal(buttons()[0].tabIndex, 0, "both segment buttons remain keyboard reachable");
   assert.equal(buttons()[1].tabIndex, 0);
-  assert.equal(buttons()[4].disabled, false, "leaving Deep re-enables the fold policy choice");
-  console.log("session experience controls: success, failure snapshot, busy state, legacy backend, fold policy and keyboard reachability passed");
+  assert.equal(buttons()[5].disabled, false, "leaving Deep re-enables the fold policy choice");
+  assert.equal(buttons()[2].disabled, false, "leaving Deep re-enables the expansion policy choice");
+  console.log("session experience controls: success, failure snapshot, busy state, legacy backend, expansion policy, fold policy and keyboard reachability passed");
 } finally { await act(async () => root.unmount()); dom.window.close(); }

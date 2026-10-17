@@ -5,8 +5,13 @@ import { app } from "../lib/bridge";
 import { useT } from "../lib/i18n";
 import { useCommittedCommand } from "../lib/useCommittedCommand";
 import { applySessionExperience, getSessionExperience, type SessionExperience } from "../lib/sessionExperience";
-import { getDefaultCollapsed, setDefaultCollapsed } from "../lib/defaultCollapsedPreference";
 import { getProcessFoldPolicy, setProcessFoldPolicy, type ProcessFoldPolicy } from "../lib/processFoldPolicy";
+import {
+  getReasoningExpansionPolicy,
+  setReasoningExpansionPolicy,
+  REASONING_EXPANSION_POLICIES,
+  type ReasoningExpansionPolicy,
+} from "../lib/reasoningExpansionPolicy";
 import { hydrateReasoningDisplayMode } from "../lib/reasoningDisplayPreference";
 import type { SettingsView } from "../lib/types";
 import { SettingsField, SettingsSection } from "./SettingsForm";
@@ -17,18 +22,28 @@ type Props = {
   apply: (write: () => Promise<unknown>) => Promise<boolean>;
 };
 
-const PROCESS_FOLD_POLICIES = ["follow-turn", "collapsed", "active-only"] as const;
+// Both inner-item controls run least → most expanded, so the three rows read in
+// the same direction: session experience, then default folding, then process
+// folding.
+const PROCESS_FOLD_POLICIES = ["collapsed", "active-only", "follow-turn", "always-expanded"] as const;
 const PROCESS_FOLD_POLICY_LABEL_KEYS: Record<ProcessFoldPolicy,
-  "settings.processFoldPolicy.followTurn" | "settings.processFoldPolicy.collapsed" | "settings.processFoldPolicy.activeOnly"> = {
-  "follow-turn": "settings.processFoldPolicy.followTurn",
+  "settings.processFoldPolicy.collapsed" | "settings.processFoldPolicy.activeOnly" | "settings.processFoldPolicy.followTurn" | "settings.processFoldPolicy.alwaysExpanded"> = {
   collapsed: "settings.processFoldPolicy.collapsed",
   "active-only": "settings.processFoldPolicy.activeOnly",
+  "follow-turn": "settings.processFoldPolicy.followTurn",
+  "always-expanded": "settings.processFoldPolicy.alwaysExpanded",
+};
+const EXPANSION_POLICY_LABEL_KEYS: Record<ReasoningExpansionPolicy,
+  "settings.defaultCollapsed.collapsed" | "settings.defaultCollapsed.latestOnly" | "settings.defaultCollapsed.expanded"> = {
+  "all-collapsed": "settings.defaultCollapsed.collapsed",
+  "latest-only": "settings.defaultCollapsed.latestOnly",
+  "all-expanded": "settings.defaultCollapsed.expanded",
 };
 
 export function SessionExperienceSettings({ snapshot, busy, apply }: Props) {
   const t = useT();
   const [mode, setMode] = useState<SessionExperience>(getSessionExperience);
-  const [startCollapsed, setStartCollapsed] = useState(getDefaultCollapsed);
+  const [expansionPolicy, setExpansionPolicy] = useState<ReasoningExpansionPolicy>(getReasoningExpansionPolicy);
   const [foldPolicy, setFoldPolicy] = useState<ProcessFoldPolicy>(getProcessFoldPolicy);
   const present = useCommittedCommand((next: SessionExperience) => {
     setMode(next);
@@ -52,13 +67,17 @@ export function SessionExperienceSettings({ snapshot, busy, apply }: Props) {
         </button>)}
       </SettingsOptions>
     </SettingsField>
-    <SettingsField label={t("settings.defaultCollapsed")} hint={t("settings.defaultCollapsedHint")} icon={<PanelBottom size={18} />}>
+    <SettingsField
+      label={t("settings.defaultCollapsed")}
+      hint={mode === "deep" ? t("settings.defaultCollapsed.deepHint") : t("settings.defaultCollapsedHint")}
+      icon={<PanelBottom size={18} />}
+    >
       <SettingsOptions layout="field" className="set-seg" role="radiogroup" aria-label={t("settings.defaultCollapsed")}>
-        {([false, true] as const).map(value => <button key={String(value)} type="button"
-          className={`set-seg__btn${startCollapsed === value ? " set-seg__btn--on" : ""}`} role="radio"
-          aria-checked={startCollapsed === value} disabled={busy}
-          onClick={() => { setStartCollapsed(value); setDefaultCollapsed(value); }}>
-          {t(value ? "settings.defaultCollapsed.on" : "settings.defaultCollapsed.off")}
+        {REASONING_EXPANSION_POLICIES.map(value => <button key={value} type="button"
+          className={`set-seg__btn${expansionPolicy === value ? " set-seg__btn--on" : ""}`} role="radio"
+          aria-checked={expansionPolicy === value} disabled={busy || mode === "deep"}
+          onClick={() => { setExpansionPolicy(value); setReasoningExpansionPolicy(value); }}>
+          {t(EXPANSION_POLICY_LABEL_KEYS[value])}
         </button>)}
       </SettingsOptions>
     </SettingsField>

@@ -44,7 +44,13 @@ import { isBatchedReadOnlyTool, isTerminalSubagentPhase, type Item, type Subagen
 import type { Translator } from "../lib/i18n";
 import { ReadOnlyBatch } from "./ReadOnlyBatch";
 import { useWorkProcessPresentation } from "../lib/sessionExperience";
-import { useDefaultCollapsed } from "../lib/defaultCollapsedPreference";
+import { useReasoningExpansionPolicy } from "../lib/reasoningExpansionPolicy";
+import {
+  defaultReasoningExpansionOpen,
+  expansionPreferenceChanged,
+  reconcileReasoningExpansion,
+  type ReasoningExpansionInput,
+} from "../lib/reasoningExpansionState";
 import { useTranscriptUserResizeIntent } from "./TranscriptLayoutIntentContext";
 import { resolveToolCardDefaultOpen } from "../lib/transcriptRowGeometry";
 import type { SearchSourcePresentation } from "../lib/searchSourcesPresentation";
@@ -249,18 +255,29 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
       })()
     : "";
   const presentation = useWorkProcessPresentation();
-  const defaultCollapsed = useDefaultCollapsed();
+  const policy = useReasoningExpansionPolicy();
   const hasSubagentPreview = Boolean(sp && ((sp.reasoning && presentation.showWhileRunning) || sp.text || sp.notice));
 
   // All tools default to collapsed. Sub-agent tools open while running so the
   // user sees nested calls; they collapse when done. Reasoning (AssistantMessage)
   // stays open for the same owner lifecycle instead of collapsing between the
-  // reasoning and response/tool phases. The default-collapsed preference keeps
-  // every card one line regardless of running state; manual expand still works.
+  // reasoning and response/tool phases. The expansion policy decides the
+  // default ("collapsed" / "newest only" / "expanded") and manual expand still
+  // wins; Deep keeps work expanded, so the policy is inert there.
   const subagentReasoningRunning = sp?.phase === "reasoning";
   const subagentActive = Boolean(sp) && item.status === "running";
   const liveFollow = presentation.showWhileRunning;
-  const defaultOpen = defaultCollapsed ? false : resolveToolCardDefaultOpen(item, nested.length, presentation);
+  const toolExpansion: ReasoningExpansionInput = {
+    experience: presentation.experience,
+    policy,
+    // A tool card is the newest work item exactly while it is the running one;
+    // a settled card is never the newest, so "newest only" folds it.
+    producing: item.status === "running",
+    isLatest: item.status === "running",
+    keepExpandedAfterCompletion: presentation.keepExpandedAfterCompletion,
+    showWhileRunning: liveFollow,
+  };
+  const defaultOpen = resolveToolCardDefaultOpen(item, nested.length, presentation) && defaultReasoningExpansionOpen(toolExpansion);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? defaultOpen;
   const openRef = useRef(open);
@@ -269,38 +286,50 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   // The sub-agent reasoning preview opens as a one-line summary; the full
   // Markdown only mounts after the user expands the reasoning section.
+  const subagentExpansion: ReasoningExpansionInput = {
+    ...toolExpansion,
+    producing: subagentReasoningRunning,
+    isLatest: subagentActive,
+  };
   const [subagentReasoningOpen, setSubagentReasoningOpen] = useState(
-    () => !defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && subagentActive)),
+    () => defaultReasoningExpansionOpen(subagentExpansion),
   );
   const subagentReasoningUserOverridden = useRef(false);
   const previousSubagentReasoningRunning = useRef(subagentReasoningRunning);
   const previousSubagentActive = useRef(subagentActive);
-  const previousExperience = useRef(presentation.experience);
-  const previousCollapsed = useRef(defaultCollapsed);
+  const previousPreference = useRef({ experience: presentation.experience, policy });
   useEffect(() => {
-    const modeChanged = previousExperience.current !== presentation.experience;
-    const collapsedChanged = previousCollapsed.current !== defaultCollapsed;
+    const preferenceChanged = expansionPreferenceChanged(previousPreference.current, { experience: presentation.experience, policy });
     const wasRunning = previousSubagentReasoningRunning.current;
     const wasActive = previousSubagentActive.current;
-    previousExperience.current = presentation.experience;
-    previousCollapsed.current = defaultCollapsed;
+    previousPreference.current = { experience: presentation.experience, policy };
     previousSubagentReasoningRunning.current = subagentReasoningRunning;
     previousSubagentActive.current = subagentActive;
-    if (modeChanged || collapsedChanged) {
+    if (preferenceChanged) {
+      // A preference or experience switch re-applies the defaults and drops
+      // manual choices so every card lands in one consistent state.
       subagentReasoningUserOverridden.current = false;
-      setSubagentReasoningOpen(!defaultCollapsed && (presentation.keepExpandedAfterCompletion || (presentation.showWhileRunning && subagentActive)));
+      setSubagentReasoningOpen(defaultReasoningExpansionOpen(subagentExpansion));
       return;
     }
     if ((subagentActive && !wasActive) || (subagentReasoningRunning && !wasRunning)) {
       subagentReasoningUserOverridden.current = false;
-      if (liveFollow && !defaultCollapsed) setSubagentReasoningOpen(true);
+      const next = reconcileReasoningExpansion(
+        { open: subagentReasoningOpen, userOverridden: false, wasProducing: wasRunning, wasLatest: wasActive },
+        subagentExpansion,
+      );
+      if (next.open !== subagentReasoningOpen) setSubagentReasoningOpen(next.open);
       return;
     }
     if (!presentation.showWhileRunning) return;
-    if (!subagentActive && wasActive && !presentation.keepExpandedAfterCompletion && !subagentReasoningUserOverridden.current) {
-      setSubagentReasoningOpen(false);
-    }
-  }, [defaultCollapsed, liveFollow, presentation, subagentActive, subagentReasoningRunning]);
+    // A manual toggle outranks the policy for as long as the preference stays.
+    if (subagentReasoningUserOverridden.current) return;
+    const next = reconcileReasoningExpansion(
+      { open: subagentReasoningOpen, userOverridden: false, wasProducing: wasRunning, wasLatest: wasActive },
+      subagentExpansion,
+    );
+    if (next.open !== subagentReasoningOpen) setSubagentReasoningOpen(next.open);
+  }, [policy, presentation, presentation.experience, presentation.keepExpandedAfterCompletion, presentation.showWhileRunning, subagentActive, subagentExpansion, subagentReasoningOpen, subagentReasoningRunning]);
   // Lazy-load full tool data from the backend when the card is expanded and
   // the in-memory copy was archived for memory efficiency.
   const [fullData, setFullData] = useState<{ args: string; output?: string; execution?: ToolItem["execution"]; mcpApp?: MCPAppPresentation } | null>(null);

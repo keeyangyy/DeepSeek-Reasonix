@@ -89,7 +89,7 @@ export function useTranscriptRowRenderer({
         turnStartAt={row.segment.turnActive ? turnStartAt : undefined}
       />;
       case "reasoning": return <div className="turn-collapse__body"><InlineAssistantReasoning
-        item={row.item} autoFollowActive={row.autoFollowActive}
+        item={row.item} autoFollowActive={row.autoFollowActive} isLatestReasoning={row.isLatestReasoning}
         onManualOpen={() => onReasoningManualOpen(row.segmentKey)}
       /></div>;
       case "tool": return <div className="turn-collapse__body"><ToolCard item={row.item} subcalls={subcallsByParent.get(row.item.id)} tabId={tabId} /></div>;

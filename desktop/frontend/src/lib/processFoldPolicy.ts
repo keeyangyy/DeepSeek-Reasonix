@@ -9,6 +9,11 @@
 //   active-only — only the group producing output right now stays open. A
 //                 group that already settled inside the running turn folds
 //                 immediately instead of waiting for the turn to end.
+//   always-expanded — every group stays open, including after the turn ends.
+//                 This is the only policy that keeps settled work visible; it
+//                 covers the folding half of Deep without touching Deep's
+//                 other dimensions (tool batches/groups, sub-agent
+//                 reasoning), which the policy never owned.
 //
 // Deliberately kept out of the backend SessionExperience contract (standard /
 // deep), like "start collapsed": this fork adds a local presentation
@@ -16,13 +21,13 @@
 // meaning (work stays expanded), so the policy is inert there.
 import { useSyncExternalStore } from "react";
 
-export type ProcessFoldPolicy = "follow-turn" | "collapsed" | "active-only";
+export type ProcessFoldPolicy = "follow-turn" | "collapsed" | "active-only" | "always-expanded";
 
 const PROCESS_FOLD_POLICY_KEY = "reasonix-process-fold-policy";
 const PROCESS_FOLD_POLICY_EVENT = "reasonix:process-fold-policy";
 
 function normalizePolicy(value: unknown): ProcessFoldPolicy {
-  return value === "collapsed" || value === "active-only" ? value : "follow-turn";
+  return value === "collapsed" || value === "active-only" || value === "always-expanded" ? value : "follow-turn";
 }
 
 function storedPolicy(): ProcessFoldPolicy {

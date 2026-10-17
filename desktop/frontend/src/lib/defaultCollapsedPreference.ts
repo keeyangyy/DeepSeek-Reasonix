@@ -1,55 +1,46 @@
-// defaultCollapsedPreference is a frontend-only preference: when enabled, the
-// transcript renders reasoning / tool / sub-agent work collapsed to one line by
-// default (no auto-expand while running). Manual expand/collapse per item is
-// unaffected — the preference only changes the initial/open-after-reset state.
+// defaultCollapsedPreference is now a THIN BOOLEAN VIEW over the three-state
+// reasoning expansion policy in reasoningExpansionPolicy.ts, which owns the
+// storage key ("reasonix-default-collapsed") and the event.
 //
-// Deliberately kept out of the backend SessionExperience contract (standard /
-// deep): this fork adds a "start collapsed" experience without widening the
-// official two-mode model, so the setting stays local and is trivially
-// reversible by clearing the key.
+// The boolean stays because older callers (and their tests) still ask
+// "should inner items start collapsed?":
+//
+//   getDefaultCollapsed() === true   ⟺  policy === "all-collapsed"
+//   getDefaultCollapsed() === false  ⟺  policy is "latest-only" or "all-expanded"
+//
+// New code should read the policy directly: it needs the third state to decide
+// whether only the newest item opens. Writing through this shim maps a boolean
+// back onto the two policies the boolean can express.
 import { useSyncExternalStore } from "react";
-
-const DEFAULT_COLLAPSED_KEY = "reasonix-default-collapsed";
-const DEFAULT_COLLAPSED_EVENT = "reasonix:default-collapsed";
-
-let current = typeof window !== "undefined" && typeof localStorage !== "undefined"
-  ? localStorage.getItem(DEFAULT_COLLAPSED_KEY) === "1"
-  : false;
-
-const listeners = new Set<() => void>();
-
-function emit(): void {
-  for (const listener of listeners) listener();
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(DEFAULT_COLLAPSED_EVENT, { detail: current }));
-  }
-}
+import {
+  getReasoningExpansionPolicy,
+  setReasoningExpansionPolicy,
+} from "./reasoningExpansionPolicy";
 
 export function getDefaultCollapsed(): boolean {
-  return current;
+  return getReasoningExpansionPolicy() === "all-collapsed";
 }
 
 export function setDefaultCollapsed(value: boolean): void {
-  const next = Boolean(value);
-  if (next === current) return;
-  current = next;
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(DEFAULT_COLLAPSED_KEY, next ? "1" : "0");
-  }
-  emit();
+  setReasoningExpansionPolicy(value ? "all-collapsed" : "all-expanded");
 }
 
 export function toggleDefaultCollapsed(): boolean {
-  const next = !current;
+  const next = !getDefaultCollapsed();
   setDefaultCollapsed(next);
   return next;
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
 export function useDefaultCollapsed(): boolean {
-  return useSyncExternalStore(subscribe, getDefaultCollapsed, getDefaultCollapsed);
+  // Same store and event as the policy, so a toggle re-renders every caller.
+  return useSyncExternalStore(
+    (listener) => {
+      if (typeof window === "undefined") return () => {};
+      const handler = () => listener();
+      window.addEventListener("reasonix:reasoning-expansion-policy", handler);
+      return () => window.removeEventListener("reasonix:reasoning-expansion-policy", handler);
+    },
+    getDefaultCollapsed,
+    getDefaultCollapsed,
+  );
 }

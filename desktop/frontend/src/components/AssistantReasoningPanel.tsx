@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useWorkProcessPresentation } from "../lib/sessionExperience";
-import { useDefaultCollapsed } from "../lib/defaultCollapsedPreference";
+import { useReasoningExpansionPolicy } from "../lib/reasoningExpansionPolicy";
+import {
+  defaultReasoningExpansionOpen,
+  expansionPreferenceChanged,
+  reconcileReasoningExpansion,
+  type ReasoningExpansionInput,
+} from "../lib/reasoningExpansionState";
 import { useCollapseAnimation } from "../lib/useCollapseAnimation";
 import { useT } from "../lib/i18n";
 import type { Item } from "../lib/useController";
@@ -28,41 +34,60 @@ export function AssistantReasoningPanel({
 }) {
   const t = useT();
   const presentation = useWorkProcessPresentation();
-  const defaultCollapsed = useDefaultCollapsed();
+  const policy = useReasoningExpansionPolicy();
   const running = item.streaming && !item.reasoningComplete;
   const followsWhileStreaming = presentation.showWhileRunning || expandWhileStreaming;
   const keepExpanded = presentation.keepExpandedAfterCompletion;
-  const [open, setOpen] = useState(
-    () => !defaultCollapsed && (defaultExpanded || keepExpanded || (followsWhileStreaming && item.streaming)),
-  );
+  const expansion: ReasoningExpansionInput = {
+    experience: presentation.experience,
+    policy,
+    // "Producing" here means THE TURN IS STILL RUNNING, not "this block's
+    // reasoning phase is unfinished": while the answer streams after the
+    // reasoning finished, the work process is still live and must stay open
+    // (the historical showWhileRunning contract). `item.streaming` is the
+    // turn-level liveness flag, which is a legitimate input for this panel.
+    //
+    // `isLatest` is a different fact and is deliberately NOT claimed here:
+    // it is a session-wide ordering fact only the row model can answer, and
+    // self-reporting it would keep every completed block open under
+    // "newest only". This panel has no row-model context, so it reports false
+    // and lets the turn-level producing flag carry the streaming behavior.
+    producing: item.streaming && followsWhileStreaming,
+    isLatest: false,
+    // `defaultExpanded` is the caller's "keep this panel open regardless"
+    // request. It maps onto the keep-expanded signal the state machine already
+    // understands, so it keeps its old meaning: never auto-close, never
+    // substitute the one-line summary.
+    keepExpandedAfterCompletion: keepExpanded || defaultExpanded,
+    showWhileRunning: followsWhileStreaming,
+  };
+  const [open, setOpen] = useState(() => defaultReasoningExpansionOpen(expansion));
   const bodyRef = useRef<HTMLDivElement>(null);
   const userOverridden = useRef(false);
   const previousStreaming = useRef(item.streaming);
-  const previousComplete = useRef(item.reasoningComplete ?? false);
-  const previousExperience = useRef(presentation.experience);
-  const previousCollapsed = useRef(defaultCollapsed);
+  const previousPreference = useRef({ experience: presentation.experience, policy });
 
   useEffect(() => {
     const wasStreaming = previousStreaming.current;
-    const wasComplete = previousComplete.current;
-    const complete = item.reasoningComplete ?? false;
-    const modeChanged = previousExperience.current !== presentation.experience;
-    const collapsedChanged = previousCollapsed.current !== defaultCollapsed;
+    const preferenceChanged = expansionPreferenceChanged(previousPreference.current, { experience: presentation.experience, policy });
     previousStreaming.current = item.streaming;
-    previousComplete.current = complete;
-    previousExperience.current = presentation.experience;
-    previousCollapsed.current = defaultCollapsed;
-    if (modeChanged || collapsedChanged) {
+    previousPreference.current = { experience: presentation.experience, policy };
+    if (preferenceChanged) {
+      // A preference or experience switch re-applies the defaults and drops
+      // manual choices so the panel lands in one consistent state.
       userOverridden.current = false;
-      setOpen(!defaultCollapsed && (defaultExpanded || keepExpanded || (followsWhileStreaming && item.streaming)));
-    } else if (item.streaming) {
-      if (!wasStreaming) userOverridden.current = false;
-      if (!defaultCollapsed && (defaultExpanded || keepExpanded)) setOpen(true);
-      else if (!defaultCollapsed && !userOverridden.current && followsWhileStreaming) setOpen(true);
-    } else if ((complete && !wasComplete) || wasStreaming) {
-      if (!defaultExpanded && !keepExpanded && !userOverridden.current) setOpen(false);
+      setOpen(defaultReasoningExpansionOpen(expansion));
+      return;
     }
-  }, [defaultCollapsed, defaultExpanded, followsWhileStreaming, keepExpanded, item.reasoningComplete, item.streaming, presentation.experience]);
+    if (item.streaming && !wasStreaming) userOverridden.current = false;
+    // A manual toggle outranks the policy for as long as the preference stays.
+    if (userOverridden.current) return;
+    const next = reconcileReasoningExpansion(
+      { open, userOverridden: false, wasProducing: wasStreaming, wasLatest: true },
+      expansion,
+    );
+    if (next.open !== open) setOpen(next.open);
+  }, [expansion, item.streaming, open, policy, presentation.experience]);
 
   const toggle = () => {
     userOverridden.current = true;
