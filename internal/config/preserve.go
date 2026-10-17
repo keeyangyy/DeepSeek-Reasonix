@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -236,10 +234,7 @@ func tomlSectionHasContent(body, section string) bool {
 		}
 		if name, isArray, ok := tomlEditSectionHeader(span.text); ok {
 			if inSection {
-				if strings.HasPrefix(name, section+".") {
-					return true
-				}
-				return false
+				return strings.HasPrefix(name, section+".")
 			}
 			inSection = !isArray && name == section
 			continue
@@ -253,14 +248,3 @@ func tomlSectionHasContent(body, section string) bool {
 	}
 	return false
 }
-
-func decodeUserConfigTree(text string) (map[string]any, bool) {
-	var tree map[string]any
-	if _, err := toml.Decode(text, &tree); err != nil {
-		return nil, false
-	}
-	return tree, true
-}
-
-var _ = sort.Strings
-var _ = reflect.DeepEqual

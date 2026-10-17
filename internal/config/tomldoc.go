@@ -90,13 +90,6 @@ type tomlDocBlock struct {
 	keys   []tomlDocKey
 }
 
-// tomlDocDotted is one dotted assignment (a.b = 1) with the key path it
-// declares and the lines it occupies.
-type tomlDocDotted struct {
-	segs        []string
-	first, last int
-}
-
 type tomlDoc struct {
 	lines  []string // each line keeps its terminator
 	blocks []tomlDocBlock
@@ -113,7 +106,6 @@ func parseTOMLDoc(text string) (*tomlDoc, bool) {
 		d.lines = append(d.lines, span.text)
 	}
 	d.blocks = []tomlDocBlock{{header: -1}}
-	var dotted []tomlDocDotted
 	type rawHeader struct {
 		segs  []string
 		array bool
@@ -150,11 +142,7 @@ func parseTOMLDoc(text string) (*tomlDoc, bool) {
 			if !ok {
 				return nil, false
 			}
-			// A dotted key (a.b = 1) belongs to the table its leading segments
-			// name; indexing it there keeps edits on the line it occupies
-			// instead of forcing a rewrite.
 			if len(segs) > 1 {
-				dotted = append(dotted, tomlDocDotted{segs: segs, first: i, last: last})
 				i = last
 				continue
 			}

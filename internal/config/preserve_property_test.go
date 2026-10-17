@@ -208,8 +208,7 @@ func checkRandomSave(t *testing.T, seed int64) {
 // TestRandomUserConfigSavesEditInPlace is the seeded sweep: a few hundred config
 // shapes, each saved once.
 func TestRandomUserConfigSavesEditInPlace(t *testing.T) {
-	for seed := int64(0); seed < 200; seed++ {
-		seed := seed
+	for seed := range int64(200) {
 		t.Run(fmt.Sprintf("seed-%03d", seed), func(t *testing.T) {
 			checkRandomSave(t, seed)
 		})
