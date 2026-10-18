@@ -6,20 +6,19 @@ import "strings"
 // workspace state. Real mutations are recorded from child evidence or the
 // underlying target tool after resolution (use_capability call).
 var nonMutationMetaTools = map[string]bool{
-	"run_skill":           true,
-	"read_skill":          true,
-	"read_only_skill":     true,
-	"task":                true,
-	"read_only_task":      true,
-	"parallel_tasks":      true,
-	"fleet":               true,
-	"explore":             true,
-	"research":            true,
-	"review":              true,
-	"security_review":     true,
-	"use_capability":      true,
-	"connect_tool_source": true,
-	"review_report":       true,
+	"run_skill":       true,
+	"read_skill":      true,
+	"read_only_skill": true,
+	"task":            true,
+	"read_only_task":  true,
+	"parallel_tasks":  true,
+	"fleet":           true,
+	"explore":         true,
+	"research":        true,
+	"review":          true,
+	"security_review": true,
+	"use_capability":  true,
+	"review_report":   true,
 }
 
 // IsNonMutationMetaTool reports whether toolName is a host meta tool that must

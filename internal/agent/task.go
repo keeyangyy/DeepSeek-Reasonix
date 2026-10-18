@@ -93,10 +93,6 @@ var subagentJobTools = []string{
 	"kill_shell",
 }
 
-var readOnlySubagentWorkflowTools = []string{
-	"connect_tool_source",
-}
-
 const subagentToolBoundarySummary = "Recursive agent/skill tools are exposed only while max_subagent_depth leaves another delegation layer; unsupported background job tools (parallel_tasks, wait, bash_output, kill_shell) are excluded; bash is exposed as foreground-only inside subagents."
 
 // maxConcurrentBackgroundTasks is the legacy writer-background fallback used
@@ -1402,7 +1398,6 @@ func ReadOnlySubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, name
 	}
 	exclude = append(exclude, subagentJobTools...)
 	exclude = append(exclude, plannerNonResearchTools...)
-	exclude = append(exclude, readOnlySubagentWorkflowTools...)
 	ex := make(map[string]bool, len(exclude))
 	for _, e := range exclude {
 		ex[e] = true

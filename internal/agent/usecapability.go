@@ -766,7 +766,7 @@ func (t *UseCapabilityTool) resolveCall(ctx context.Context, id string, args jso
 	if name, ok := strings.CutPrefix(id, "workflow:"); ok {
 		return t.resolveRegistryTool(ctx, strings.TrimSpace(name), "tool:"+strings.TrimSpace(name), args, base)
 	}
-	for _, prefix := range []string{"web:", "lsp:", "session:", "memory:"} {
+	for _, prefix := range capabilityCallPrefixes {
 		if rest, ok := strings.CutPrefix(id, prefix); ok {
 			return t.resolveRegistryTool(ctx, strings.TrimSpace(rest), id, args, base)
 		}

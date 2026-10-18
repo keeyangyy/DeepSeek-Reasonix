@@ -93,6 +93,13 @@ func (t *UseCapabilityTool) inspect(_ context.Context, id string) (string, error
 	cat := t.currentCatalog()
 	e, ok := cat.Lookup(id)
 	if !ok {
+		// resolveCall strips these prefixes before dispatching, so apply the same
+		// rule here instead of reporting a routable id as unknown.
+		if canonical := canonicalCapabilityID(id); canonical != id {
+			e, ok = cat.Lookup(canonical)
+		}
+	}
+	if !ok {
 		return "", fmt.Errorf("unknown capability_id %q", id)
 	}
 	payload := map[string]any{
@@ -124,9 +131,6 @@ func (t *UseCapabilityTool) inspect(_ context.Context, id string) (string, error
 
 func (t *UseCapabilityTool) decorateMCPInspect(payload map[string]any, e capability.Entry) {
 	server := e.Source
-	if server == "" {
-		server = e.ConnectName
-	}
 	if server == "" {
 		return
 	}

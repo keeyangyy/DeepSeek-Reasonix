@@ -1949,7 +1949,6 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		router = &capability.SemanticRouter{Provider: execProv, Sink: sink, Model: modelRef, Pricing: entry.Price, QuoteContext: quoteCtx, Audit: capAudit}
 	}
 	ctrl.WireCapabilityRouting(cfg.Plugins, capSpecs, router, capAudit)
-	ctrl.SetCapabilityProxyRouting(true)
 
 	// Provider-visible tool surface is identical for every role setting before
 	// the extension snapshot freezes registry schemas for cache diagnostics.

@@ -91,9 +91,6 @@ func (c *Controller) routeCapabilities(ctx context.Context, routeInput string) c
 	}
 	catalog := capability.BuildCatalog(opts)
 	decision := capability.Route(routeInput, catalog.Entries)
-	if c.capabilityProxy {
-		decision.CapabilityProxy = true
-	}
 
 	strong := false
 	for _, cand := range decision.Candidates {
@@ -106,9 +103,6 @@ func (c *Controller) routeCapabilities(ctx context.Context, routeInput string) c
 	if ambiguous && c.semanticRouter != nil {
 		before := len(decision.Candidates)
 		decision = c.semanticRouter.RouteSemantic(ctx, routeInput, catalog, decision)
-		if c.capabilityProxy {
-			decision.CapabilityProxy = true
-		}
 		if c.capabilityAudit != nil {
 			c.capabilityAudit.RecordRoute(true, len(decision.Candidates) == before)
 		}
@@ -133,16 +127,6 @@ func (c *Controller) WireCapabilityRouting(plugins []config.PluginEntry, specs [
 	c.capCachedTools, c.capCacheKeyOK = capability.LoadCachedToolsForSpecs(specs, c.mcpHostProfile())
 	c.semanticRouter = router
 	c.capabilityAudit = audit
-}
-
-// SetCapabilityProxyRouting directs unready MCP route candidates to
-// use_capability instead of connect_tool_source. Used by closed-loop routes and
-// dual-model Planner boots.
-func (c *Controller) SetCapabilityProxyRouting(v bool) {
-	if c == nil {
-		return
-	}
-	c.capabilityProxy = v
 }
 
 // SetCapabilityProxyTools registers a getter for live tools observed through
