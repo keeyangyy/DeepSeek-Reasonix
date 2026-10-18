@@ -5,7 +5,7 @@
 // rows count as dispatches, that the strip never composes a label itself, and
 // that a settled run drops off.
 
-import { isSubagentDispatch, isSubagentDispatchItem, splitSubagentLabel, subagentDispatchName } from "../lib/subagentInventory";
+import { isSubagentDispatch, isSubagentDispatchItem, splitSubagentLabel, subagentDispatchCount, subagentDispatchName } from "../lib/subagentInventory";
 import { subagentRunIsRunning } from "../lib/useSubagentRuns";
 import type { Item } from "../lib/useController";
 import type { SubagentRunView } from "../lib/types";
@@ -61,6 +61,47 @@ ok(subagentDispatchName({ name: "use_capability", capabilityId: "tool:read_only_
 ok(subagentDispatchName({ name: "bash" }) === undefined, "an ordinary tool is not a dispatch");
 ok(isSubagentDispatchItem(item({ name: "task" })), "a tool item with a dispatch name counts");
 ok(!isSubagentDispatchItem(item({ name: "bash" })), "a bash item does not count");
+
+// A proxy call records the action it took, and only "call" starts a run. Looking at
+// a sub-agent capability must not be charged as one, while a real call still is.
+ok(subagentDispatchName({
+  name: "use_capability", capabilityId: "tool:task",
+  args: '{"action":"inspect","capability_id":"tool:task"}',
+}) === undefined, "inspecting a sub-agent capability is not a dispatch");
+ok(subagentDispatchName({
+  name: "use_capability", capabilityId: "tool:task",
+  args: '{"action":"search","query":"agent"}',
+}) === undefined, "searching capabilities is not a dispatch");
+ok(subagentDispatchName({
+  name: "use_capability", capabilityId: "tool:task",
+  args: '{"action":"decline","capability_id":"tool:task","reason":"not needed"}',
+}) === undefined, "declining a capability is not a dispatch");
+ok(subagentDispatchName({
+  name: "use_capability", capabilityId: "tool:task",
+  args: '{"action":"call","capability_id":"tool:task","prompt":"go"}',
+}) === "task", "calling a sub-agent capability is a dispatch");
+// An archived row clips its args, so the JSON no longer parses; the action is still
+// readable in what survived, and must still be honoured rather than counted blind.
+ok(subagentDispatchName({
+  name: "use_capability", capabilityId: "tool:fleet",
+  args: '{"action":"inspect","capability_id":"tool:fleet","arguments":{"tasks":[{"des…',
+}) === undefined, "a clipped archived inspect is still not a dispatch");
+// A profile dispatched through the task namespace is a dispatch of its own.
+ok(subagentDispatchName({ name: "use_capability", resolvedName: "task", capabilityId: "task:worker" }) === "task", "a proxied task profile resolves to task");
+
+// One dispatch is not one agent when a fleet fans out; the header counts members.
+ok(subagentDispatchCount(item({ name: "task" })) === 1, "a direct task call counts as one");
+ok(subagentDispatchCount(item({
+  name: "fleet", args: '{"tasks":[{"description":"a"},{"description":"b"},{"description":"c"}]}',
+})) === 3, "a fleet of three counts as three");
+ok(subagentDispatchCount(item({
+  name: "use_capability", resolvedName: "parallel_tasks",
+  args: '{"action":"call","capability_id":"tool:parallel_tasks","arguments":{"tasks":[{"prompt":"a"},{"prompt":"b"}]}}',
+})) === 2, "a proxied parallel batch counts its members");
+ok(subagentDispatchCount(item({ name: "fleet", args: "" })) === 1, "an unreadable fleet still counts one");
+ok(subagentDispatchCount(item({
+  name: "use_capability", capabilityId: "tool:task", args: '{"action":"inspect","capability_id":"tool:task"}',
+})) === 0, "a proxied inspection contributes nothing to the count");
 
 // The run status decides whether the line exists. A settled run must not be
 // reported as running, which is what made the old strip linger after the work
