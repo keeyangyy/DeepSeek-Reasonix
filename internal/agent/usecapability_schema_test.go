@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,7 +10,7 @@ import (
 // The schema is a hand-written raw string literal, so a stray quote breaks the
 // tool contract at runtime while still compiling. Parse it here.
 func TestUseCapabilitySchemaIsValidJSON(t *testing.T) {
-	proxy := NewUseCapabilityTool(nil, nil, nil, nil, nil, nil, nil)
+	proxy := NewUseCapabilityTool(context.Background(), nil, nil, nil, nil, nil, nil)
 	raw := proxy.Schema()
 
 	var decoded map[string]any

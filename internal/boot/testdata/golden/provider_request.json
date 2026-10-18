@@ -500,7 +500,7 @@
             "type": "string"
           },
           "arguments": {
-            "description": "Raw MCP tool arguments for action=call",
+            "description": "Tool arguments for action=call: the target tool's own parameters. Skills take {\"arguments\":\"\u003ctask\u003e\"}.",
             "type": "object"
           },
           "capability_id": {
