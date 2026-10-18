@@ -391,8 +391,12 @@ await act(async () => {
 		[...document.querySelectorAll<HTMLButtonElement>(".prompt-shelf--ask .prompt-action")].find((b) => b.textContent?.includes("yes"))?.click();
 		await flush();
 	});
-	ok(tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "single-select submits immediately to the remote session");
-	ok(Boolean(document.querySelector(".prompt-shelf--ask")) && document.body.textContent?.includes("remote answer failed") === true && document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.disabled === false, "a failed immediate remote Ask answer preserves the card, surfaces the error, and re-enables retry");
+	// A single-select click on the last question only marks the answer, so the
+	// remote bridge must not have been called yet; submitting is its own action.
+	ok(!tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "a single-select click does not submit to the remote session");
+	await act(async () => { document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.click(); await flush(); });
+	ok(tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "confirm submits the marked answer to the remote session");
+	ok(Boolean(document.querySelector(".prompt-shelf--ask")) && document.body.textContent?.includes("remote answer failed") === true && document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.disabled === false, "a failed remote Ask answer preserves the card, surfaces the error, and re-enables retry");
 	failAnswer = false;
 	await act(async () => { document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.click(); await flush(); });
 	ok(tape.filter((entry) => entry.startsWith("answer:tab-remote-1:ask-7:")).length === 2 && !document.querySelector(".prompt-shelf--ask"), "a successful remote Ask retry resubmits the complete answer and clears the card");
