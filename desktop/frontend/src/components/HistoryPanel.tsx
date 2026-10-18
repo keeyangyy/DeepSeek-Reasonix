@@ -15,6 +15,7 @@ import { ModalCloseButton } from "./ModalCloseButton";
 import { HistoryFilterSelect } from "./HistoryFilterSelect";
 import { HistorySelectionBar } from "./HistorySelectionBar";
 import { normalizeRecoveryLineageView, userVisibleRecoveryVersions } from "../lib/sessionRecoveryVersions";
+import { useRemovalArm } from "../lib/removalArm";
 
 type HistoryScopeFilter = "all" | "project" | "global";
 type HistoryStatusFilter = "all" | "current" | "open";
@@ -83,9 +84,12 @@ export function HistoryPanel({
   const [menuSession, setMenuSession] = useState<SessionMeta | null>(null);
   const [menuPoint, setMenuPoint] = useState<ContextMenuPoint | null>(null);
   const [blankMenuPoint, setBlankMenuPoint] = useState<ContextMenuPoint | null>(null);
-  const [menuConfirmTarget, setMenuConfirmTarget] = useState<
-    { kind: "delete"; path: string } | { kind: "purge"; path: string } | { kind: "clear" } | null
-  >(null);
+  // Archiving is recoverable, so it runs on one click; only a purge - which is
+  // unrecoverable - waits for a second one, and its arm is released the moment the
+  // pointer goes elsewhere or it is left sitting. Clearing the whole trash keeps its
+  // own target because it is armed from the blank-space menu.
+  const [menuConfirmTarget, setMenuConfirmTarget] = useState<{ kind: "clear" } | null>(null);
+  const { isArmed: purgeArmed, disarm: disarmPurge, confirm: confirmPurge } = useRemovalArm();
   const [preview, setPreview] = useState<{
     path: string;
     title: string;
@@ -343,6 +347,7 @@ export function HistoryPanel({
     setMenuPoint(null);
     setBlankMenuPoint(null);
     setMenuConfirmTarget(null);
+    disarmPurge();
   };
   const deleteHistorySession = (s: SessionMeta) => {
     closeHistoryMenus();
@@ -373,17 +378,12 @@ export function HistoryPanel({
         {
           key: "purge",
           icon: <Trash2 size={13} />,
-          label:
-            menuConfirmTarget?.kind === "purge" && menuConfirmTarget.path === menuSession.path
-              ? tr("history.confirmPurge")
-              : tr("history.purgeSession"),
+          label: purgeArmed(menuSession.path) ? tr("history.confirmPurge") : tr("history.purgeSession"),
           danger: true,
           onSelect: () => {
-            if (presentation === "page" || (menuConfirmTarget?.kind === "purge" && menuConfirmTarget.path === menuSession.path)) {
-              purgeTrashSession(menuSession);
-            } else {
-              setMenuConfirmTarget({ kind: "purge", path: menuSession.path });
-            }
+            // A full page has room to show the target, so it keeps one-click purge.
+            if (presentation === "page") { purgeTrashSession(menuSession); return; }
+            confirmPurge(menuSession.path, () => purgeTrashSession(menuSession));
           },
         },
       ]
@@ -405,19 +405,11 @@ export function HistoryPanel({
                 {
                   key: "delete",
                   icon: <Archive size={13} />,
-                  label:
-                    menuConfirmTarget?.kind === "delete" && menuConfirmTarget.path === menuSession.path
-                      ? tr("history.confirmMoveToTrash")
-                      : tr("history.moveToTrash"),
+                  label: tr("history.moveToTrash"),
                   disabled: running,
-                  danger: menuConfirmTarget?.kind === "delete" && menuConfirmTarget.path === menuSession.path,
-                  onSelect: () => {
-                    if (menuConfirmTarget?.kind === "delete" && menuConfirmTarget.path === menuSession.path) {
-                      deleteHistorySession(menuSession);
-                    } else {
-                      setMenuConfirmTarget({ kind: "delete", path: menuSession.path });
-                    }
-                  },
+                  danger: true,
+                  // Recoverable, so one activation archives it, like the row icon.
+                  onSelect: () => deleteHistorySession(menuSession),
                 } as ContextMenuItem,
               ]),
         ]
@@ -442,10 +434,7 @@ export function HistoryPanel({
               onSelect: armClearTrash,
             },
           ];
-  const actionConfirmDelete =
-    selectedSession && menuConfirmTarget?.kind === "delete" && menuConfirmTarget.path === selectedSession.path;
-  const actionConfirmPurge =
-    selectedSession && menuConfirmTarget?.kind === "purge" && menuConfirmTarget.path === selectedSession.path;
+  const actionConfirmPurge = selectedSession !== null && purgeArmed(selectedSession.path);
   const actionConfirmClearTrash = isTrash && menuConfirmTarget?.kind === "clear";
 
   const openSelected = () => {
@@ -464,8 +453,8 @@ export function HistoryPanel({
   };
   const moveSelectedToTrash = () => {
     if (!selectedSession || running || isTrash || selectedSession.current) return;
-    if (actionConfirmDelete) deleteHistorySession(selectedSession);
-    else setMenuConfirmTarget({ kind: "delete", path: selectedSession.path });
+    // Recoverable, so one click archives it, like the row icon and the menu item.
+    deleteHistorySession(selectedSession);
   };
   const restoreSelected = () => {
     if (!selectedSession || !isTrash) return;
@@ -474,8 +463,9 @@ export function HistoryPanel({
   };
   const purgeSelected = () => {
     if (!selectedSession || !isTrash) return;
-    if (presentation === "page" || actionConfirmPurge) purgeTrashSession(selectedSession);
-    else setMenuConfirmTarget({ kind: "purge", path: selectedSession.path });
+    // A full page has room to show its target, so it keeps one-click purge.
+    if (presentation === "page") { purgeTrashSession(selectedSession); return; }
+    confirmPurge(selectedSession.path, () => purgeTrashSession(selectedSession));
   };
 
   const renderSessionItem = (session: SessionMeta) => {
@@ -798,7 +788,7 @@ export function HistoryPanel({
                         disabled={!selectedSession || running || selectedSession.current}
                         onClick={moveSelectedToTrash}
                       >
-                        {actionConfirmDelete ? tr("history.confirmMoveToTrash") : tr("history.moveToTrash")}
+                        {tr("history.moveToTrash")}
                       </button>
                     </>
                   )}

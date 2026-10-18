@@ -31063,6 +31063,46 @@ body > .mermaid-diagram--fullscreen {
   border-color: color-mix(in srgb, var(--danger, #e5484d) 45%, transparent);
 }
 
+/* A permanent delete that is waiting for its confirming click slides a hint out to
+   the left of the unchanged icon, so the row never looks idle while one is pending,
+   and the hint vanishing is how the release becomes visible. */
+.sidebar--workbench .project-tree__topic-action-hint,
+.app--classic .project-tree__topic-action-hint {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  margin-right: 4px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--danger, #e5484d) 45%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
+  color: var(--danger, #e5484d);
+  font-size: 11px;
+  white-space: nowrap;
+  animation: project-tree-removal-hint-in 140ms ease-out;
+}
+
+@keyframes project-tree-removal-hint-in {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .sidebar--workbench .project-tree__topic-action-hint,
+  .app--classic .project-tree__topic-action-hint {
+    animation: none;
+  }
+}
+
 .sidebar--workbench .project-tree__topic-action:disabled,
 .sidebar--workbench .project-tree__topic-action:disabled:hover,
 .app--classic .project-tree__topic-action:disabled,

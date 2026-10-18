@@ -8,28 +8,27 @@ type ProjectTreeSessionArchiveMenuProps = {
   sessionPath: string;
   blocked: boolean;
   busy: boolean;
-  confirmed: boolean;
   confirmedDelete: boolean;
-  onConfirm: () => void;
   onTrash: () => void;
-  onConfirmDelete: () => void;
   onPurge: () => void;
   onClose: () => void;
 };
 
+// Archiving a session publishes a recoverable trash entry, so it runs on the first
+// activation; only the unrecoverable delete waits for a confirming second one.
 export function ProjectTreeSessionArchiveMenu({
-  open, point, sessionPath, blocked, busy, confirmed, confirmedDelete,
-  onConfirm, onTrash, onConfirmDelete, onPurge, onClose,
+  open, point, sessionPath, blocked, busy, confirmedDelete,
+  onTrash, onPurge, onClose,
 }: ProjectTreeSessionArchiveMenuProps) {
   const t = useT();
   const items: ContextMenuItem[] = [
     {
       key: "trash-session",
       icon: <Archive className={busy ? "project-tree__archive-spinner" : undefined} size={13} />,
-      label: t(confirmed ? "history.confirmMoveToTrash" : "history.moveToTrash"),
+      label: t("history.moveToTrash"),
       disabled: !sessionPath || blocked || busy,
       danger: true,
-      onSelect: confirmed ? onTrash : onConfirm,
+      onSelect: onTrash,
     },
     {
       key: "purge-session",
@@ -37,7 +36,7 @@ export function ProjectTreeSessionArchiveMenu({
       label: t(confirmedDelete ? "history.confirmDeletePermanently" : "history.deletePermanently"),
       disabled: !sessionPath || blocked || busy,
       danger: true,
-      onSelect: confirmedDelete ? onPurge : onConfirmDelete,
+      onSelect: onPurge,
     },
   ];
   return <ContextMenu open={open} point={point} items={items} minWidth={178} ariaLabel={t("projectTree.topicActions")} onClose={onClose} />;
