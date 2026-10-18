@@ -136,7 +136,7 @@ console.log("\ntool data archiving on tool_result");
   } });
   const item = toolItems(s).find((tool) => tool.id === "capability-1");
   ok(item?.dataArchived === true, "completed capability data is archived");
-  eq(item?.subject, capabilityId, "collapsed capability subject remains on archived item");
+  eq(item?.subject, `call · ${capabilityId}`, "collapsed capability subject keeps action and id on the archived item");
 }
 
 // ── Test 5: Total string size reduction in a long session ──

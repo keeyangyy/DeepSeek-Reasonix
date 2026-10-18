@@ -58,7 +58,7 @@ import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
 import type { SearchSource } from "./searchSources";
 import { attachWebSearchOutput, historySearchAndAnswer } from "./searchTranscript";
-import { fileDiffFromWire, parseTodos, summarize, summarizeFileDiff, type ToolFileDiff } from "./tools";
+import { fileDiffFromWire, parseTodos, replaySubject, summarize, summarizeFileDiff, type ToolFileDiff } from "./tools";
 import { modeHasAutoApproveTools, normalizeMode, normalizeToolApprovalMode, type QualityFloor } from "./types";
 import type {
   BalanceInfo,
@@ -971,7 +971,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
           output,
           error,
           dataArchived: archived || undefined,
-          subject: tc.subject,
+          subject: replaySubject(tc.name, tc.arguments ?? "", tc.capabilityId, tc.subject),
           summary: summarizeFileDiff(fileDiff) || tc.summary,
           fileDiff,
           isShell: tc.name === "bash" || (tc.id || "").startsWith("shell-"),
