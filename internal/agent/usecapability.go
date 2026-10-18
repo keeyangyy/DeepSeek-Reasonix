@@ -632,7 +632,7 @@ func (*UseCapabilityTool) Schema() json.RawMessage {
 			"capability_id":{"type":"string","description":"Capability id such as skill:review, mcp-server:github, or mcp-tool:github/search_issues. Not required for action=list."},
 			"query":{"type":"string","description":"Local catalog query required for action=search. No process or network is started."},
 			"limit":{"type":"integer","minimum":1,"maximum":8,"default":5,"description":"Maximum search results; defaults to 5."},
-			"arguments":{"type":"object","description":"Raw MCP tool arguments for action=call"},
+			"arguments":{"type":"object","description":"Tool arguments for action=call: the target tool's own parameters. Skills take {\"arguments\":\"<task>\"}."},
 			"reason":{"type":"string","description":"Required non-empty reason when action=decline"}
 		},
 		"required":["action"],
@@ -766,7 +766,7 @@ func (t *UseCapabilityTool) resolveCall(ctx context.Context, id string, args jso
 	if name, ok := strings.CutPrefix(id, "workflow:"); ok {
 		return t.resolveRegistryTool(ctx, strings.TrimSpace(name), "tool:"+strings.TrimSpace(name), args, base)
 	}
-	for _, prefix := range []string{"web:", "lsp:", "session:", "memory:"} {
+	for _, prefix := range capabilityCallPrefixes {
 		if rest, ok := strings.CutPrefix(id, prefix); ok {
 			return t.resolveRegistryTool(ctx, strings.TrimSpace(rest), id, args, base)
 		}

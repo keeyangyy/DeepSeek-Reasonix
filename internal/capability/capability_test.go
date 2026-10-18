@@ -14,7 +14,7 @@ func TestRoutePrefersReviewSkillForReviewRequest(t *testing.T) {
 		Name:        "review",
 		Description: "review code for bugs",
 		Scope:       skill.ScopeBuiltin,
-	}}, []tool.ContractEntry{{Name: "run_skill"}})
+	}})
 
 	decision := Route("帮我看看这段代码有没有问题", entries)
 	if len(decision.Candidates) == 0 {
@@ -31,7 +31,7 @@ func TestRouteRequiresExplicitSkill(t *testing.T) {
 		Name:        "audit",
 		Description: "audit something",
 		Scope:       skill.ScopeProject,
-	}}, []tool.ContractEntry{{Name: "run_skill"}})
+	}})
 
 	decision := Route("请使用 audit skill 检查一下", entries)
 	if len(decision.Candidates) == 0 {
@@ -58,7 +58,7 @@ func TestRouteRespectsSkillAutoUseMetadata(t *testing.T) {
 			Triggers:    []string{"inspect"},
 			AutoUse:     "suggest",
 		},
-	}, []tool.ContractEntry{{Name: "run_skill"}})
+	})
 
 	decision := Route("please inspect this", entries)
 	if len(decision.Candidates) != 1 {
@@ -96,8 +96,8 @@ func TestRouteClosedLoopPromotesMatchedBuiltinSkills(t *testing.T) {
 		{ID: "skill:custom", Kind: KindSkill, Name: "custom", Source: string(skill.ScopeProject), AutoUse: AutoUseSuggest, Triggers: []string{"调用链"}},
 	}
 	decision := RouteClosedLoop("分析调用链", entries)
-	if !decision.ClosedLoop || len(decision.Candidates) != 2 {
-		t.Fatalf("delivery decision = %+v", decision)
+	if len(decision.Candidates) != 2 {
+		t.Fatalf("closed-loop decision = %+v", decision)
 	}
 	if decision.Candidates[0].Entry.ID != "skill:explore" || decision.Candidates[0].Policy != AutoUsePrefer {
 		t.Fatalf("built-in candidate was not promoted: %+v", decision.Candidates)
@@ -143,14 +143,12 @@ func TestRouteDoesNotFloodOneMCPServer(t *testing.T) {
 
 func TestRouteDoesNotPreferFailedCachedMCPTool(t *testing.T) {
 	entries := []Entry{{
-		ID:            "mcp-tool:github/search_issues",
-		Kind:          KindMCPTool,
-		Name:          "github/search_issues",
-		Source:        "github",
-		Status:        StatusFailed,
-		ConnectSource: "mcp",
-		ConnectName:   "github",
-		ToolName:      "mcp__github__search_issues",
+		ID:       "mcp-tool:github/search_issues",
+		Kind:     KindMCPTool,
+		Name:     "github/search_issues",
+		Source:   "github",
+		Status:   StatusFailed,
+		ToolName: "mcp__github__search_issues",
 	}}
 
 	decision := Route("用 mcp__github__search_issues 查一下相关反馈", entries)
@@ -159,23 +157,47 @@ func TestRouteDoesNotPreferFailedCachedMCPTool(t *testing.T) {
 	}
 }
 
-func TestRenderTransientBlockMentionsConnectSource(t *testing.T) {
+// A configured-but-not-ready candidate must be routed through the stable proxy.
+// connect_tool_source is retired and unregistered, so advertising it would hand
+// the model an instruction the current build cannot dispatch.
+func TestRenderTransientBlockNeverAdvertisesRetiredConnector(t *testing.T) {
 	decision := RouteDecision{Candidates: []RouteCandidate{{
 		Entry: Entry{
-			ID:            "skill:review",
-			Kind:          KindSkill,
-			Name:          "review",
-			Status:        StatusConfigured,
-			ConnectSource: "skills",
+			ID:     "skill:review",
+			Kind:   KindSkill,
+			Name:   "review",
+			Status: StatusConfigured,
 		},
 		Policy: AutoUsePrefer,
 		Reason: "matched",
 	}}}
 
 	block := RenderTransientBlock(decision)
-	for _, want := range []string{`<capability-route version="1">`, `source:skills`, `connect_tool_source`} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("block missing %q:\n%s", want, block)
-		}
+	if !strings.Contains(block, `<capability-route version="1">`) {
+		t.Fatalf("block missing envelope:\n%s", block)
+	}
+	if strings.Contains(block, "connect_tool_source") {
+		t.Fatalf("retired connector advertised again:\n%s", block)
+	}
+	if !strings.Contains(block, `use_capability(action="call", capability_id="skill:review"`) {
+		t.Fatalf("unreachable skill not routed through the proxy:\n%s", block)
+	}
+}
+
+// Ready candidates dispatch by their own id, so they need no follow-up
+// instruction and must not be pushed through the proxy.
+func TestRenderTransientBlockLeavesReadyCandidatesAlone(t *testing.T) {
+	decision := RouteDecision{Candidates: []RouteCandidate{{
+		Entry:  Entry{ID: "skill:review", Kind: KindSkill, Name: "review", Status: StatusReady},
+		Policy: AutoUsePrefer,
+		Reason: "matched",
+	}}}
+
+	block := RenderTransientBlock(decision)
+	if strings.Contains(block, "use_capability") || strings.Contains(block, "connect_tool_source") {
+		t.Fatalf("ready candidate got a needless instruction:\n%s", block)
+	}
+	if !strings.Contains(block, "- skill:review prefer: matched") {
+		t.Fatalf("ready candidate line malformed:\n%s", block)
 	}
 }

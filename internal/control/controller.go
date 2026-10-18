@@ -223,9 +223,6 @@ type Controller struct {
 	capCacheKeyOK   map[string]bool
 	semanticRouter  *capability.SemanticRouter
 	capabilityAudit *capability.Audit
-	// capabilityProxy directs unready MCP candidates to use_capability in the
-	// transient route block (Delivery and dual-model Planner).
-	capabilityProxy bool
 	// proxyToolsFn returns live tools observed through use_capability without
 	// entering the provider-visible registry (dual-model Planner).
 	proxyToolsFn func() map[string][]plugin.CachedTool

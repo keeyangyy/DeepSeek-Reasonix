@@ -53,8 +53,6 @@ type Entry struct {
 	NegativeTriggers []string
 	NeedsFreshData   bool
 	ToolName         string
-	ConnectSource    string
-	ConnectName      string
 	Requires         []string // capability IDs this skill depends on
 	Profiles         []string // deprecated frontmatter labels; diagnostics only
 	AutoStart        bool     // MCP: configured auto_start
@@ -69,29 +67,16 @@ type RouteCandidate struct {
 
 type RouteDecision struct {
 	Candidates []RouteCandidate
-	// ClosedLoop routes through use_capability; connect_tool_source is unregistered.
-	ClosedLoop bool
-	// CapabilityProxy directs unready MCP candidates to use_capability rather
-	// than connect_tool_source. True for closed-loop routes and for dual-model
-	// Planner boots that expose the stable proxy without the connector.
-	CapabilityProxy bool
 }
 
-func SkillEntries(skills []skill.Skill, tools []tool.ContractEntry) []Entry {
-	toolNames := map[string]bool{}
-	for _, t := range tools {
-		toolNames[t.Name] = true
-	}
-	skillToolReady := toolNames["run_skill"] || toolNames["read_skill"] || toolNames["read_only_skill"]
-
+// SkillEntries projects skills into route candidates. Skills have no connector
+// state: they are invoked through run_skill/read_skill (both reachable via
+// use_capability even when hidden from the provider schema), so every enabled
+// skill is ready. The former "configured, needs connect_tool_source" state was
+// tied to a retired connector and no longer exists.
+func SkillEntries(skills []skill.Skill) []Entry {
 	out := make([]Entry, 0, len(skills))
 	for _, sk := range skills {
-		status := StatusReady
-		connectSource := ""
-		if !skillToolReady {
-			status = StatusConfigured
-			connectSource = "skills"
-		}
 		auto := normalizeAutoUse(sk.AutoUse)
 		if auto == "" && len(sk.Triggers) > 0 {
 			auto = AutoUsePrefer
@@ -104,14 +89,13 @@ func SkillEntries(skills []skill.Skill, tools []tool.ContractEntry) []Entry {
 			Name:             sk.Name,
 			Description:      sk.Description,
 			Source:           string(sk.Scope),
-			Status:           status,
+			Status:           StatusReady,
 			Cost:             strings.TrimSpace(sk.Cost),
 			AutoUse:          auto,
 			Triggers:         cleanList(sk.Triggers),
 			NegativeTriggers: cleanList(sk.NegativeTriggers),
 			NeedsFreshData:   sk.NeedsFreshData,
 			ToolName:         "run_skill",
-			ConnectSource:    connectSource,
 			Requires:         cleanList(sk.Requires),
 			Profiles:         cleanList(sk.Profiles),
 		})
@@ -136,7 +120,6 @@ func ToolEntries(tools []tool.ContractEntry) []Entry {
 			e.Kind = KindMCPTool
 			e.Name = server + "/" + raw
 			e.Source = server
-			e.ConnectName = server
 		}
 		out = append(out, e)
 	}
@@ -184,7 +167,6 @@ func routeCandidates(input string, entries []Entry) []RouteCandidate {
 // execution. Custom skills keep their authored auto-use policy; only shipped
 // workflows with a concrete trigger match move from suggest to prefer.
 func PromoteClosedLoop(decision RouteDecision) RouteDecision {
-	decision.ClosedLoop = true
 	for i := range decision.Candidates {
 		candidate := &decision.Candidates[i]
 		if candidate.Policy == AutoUseSuggest && candidate.Entry.Kind == KindSkill && candidate.Entry.Source == string(skill.ScopeBuiltin) {
@@ -201,7 +183,7 @@ func PromoteClosedLoop(decision RouteDecision) RouteDecision {
 		}
 		return decision.Candidates[i].Entry.ID < decision.Candidates[j].Entry.ID
 	})
-	return RouteDecision{Candidates: limitRouteCandidates(decision.Candidates), ClosedLoop: true, CapabilityProxy: true}
+	return RouteDecision{Candidates: limitRouteCandidates(decision.Candidates)}
 }
 
 func limitRouteCandidates(candidates []RouteCandidate) []RouteCandidate {
@@ -223,6 +205,11 @@ func limitRouteCandidates(candidates []RouteCandidate) []RouteCandidate {
 	return append(strong, suggested...)
 }
 
+// RenderTransientBlock renders the <capability-route> block appended to a user
+// turn. Every instruction it emits must name a capability the current build can
+// actually dispatch: the stable proxy use_capability. The retired
+// connect_tool_source connector must never be advertised, so unreachable-state
+// candidates are directed to the proxy instead of a source-rewrite.
 func RenderTransientBlock(d RouteDecision) string {
 	if len(d.Candidates) == 0 {
 		return ""
@@ -233,37 +220,21 @@ func RenderTransientBlock(d RouteDecision) string {
 	b.WriteString("Relevant capabilities for this turn:\n")
 	for _, c := range d.Candidates {
 		e := c.Entry
-		proxyMCP := d.CapabilityProxy && (e.Kind == KindMCPTool || e.Kind == KindMCPServer)
-		target := e.ID
-		if !d.ClosedLoop && !proxyMCP && e.Status != StatusReady && e.ConnectSource != "" {
-			target = fmt.Sprintf("source:%s", e.ConnectSource)
-			if e.ConnectName != "" {
-				target += "/" + e.ConnectName
-			}
-		}
 		var line strings.Builder
-		fmt.Fprintf(&line, "- %s %s: %s", target, c.Policy, c.Reason)
+		fmt.Fprintf(&line, "- %s %s: %s", e.ID, c.Policy, c.Reason)
 		if e.Status != "" && e.Status != StatusReady {
 			fmt.Fprintf(&line, " (status=%s)", e.Status)
 		}
-		switch {
-		case d.ClosedLoop || proxyMCP:
-			// Closed-loop routes and dual-model Planner have no
-			// connect_tool_source for MCP; the stable proxy both connects and
-			// calls on demand, keeping the concrete capability id.
-			if e.Status != StatusReady {
-				switch e.Kind {
-				case KindMCPTool:
-					fmt.Fprintf(&line, "; call use_capability(action=\"call\", capability_id=%q, arguments={...}) — it connects the server on demand after approval", e.ID)
-				case KindMCPServer:
-					fmt.Fprintf(&line, "; call use_capability(action=\"call\", capability_id=%q) to connect it (after approval) and list its tools, then call a listed mcp-tool id", e.ID)
-				}
-			}
-		case e.ConnectSource != "":
-			if e.ConnectName != "" {
-				fmt.Fprintf(&line, "; first call connect_tool_source with source=%q name=%q", e.ConnectSource, e.ConnectName)
-			} else {
-				fmt.Fprintf(&line, "; first call connect_tool_source with source=%q", e.ConnectSource)
+		// Only candidates that cannot be dispatched as-is need a follow-up
+		// instruction; ready ones are called by their own capability id.
+		if e.Status != StatusReady {
+			switch e.Kind {
+			case KindMCPTool:
+				fmt.Fprintf(&line, "; call use_capability(action=\"call\", capability_id=%q, arguments={...}) — it connects the server on demand after approval", e.ID)
+			case KindMCPServer:
+				fmt.Fprintf(&line, "; call use_capability(action=\"call\", capability_id=%q) to connect it (after approval) and list its tools, then call a listed mcp-tool id", e.ID)
+			case KindSkill:
+				fmt.Fprintf(&line, "; call use_capability(action=\"call\", capability_id=%q, arguments={\"arguments\": \"<task>\"})", e.ID)
 			}
 		}
 		rendered := line.String()

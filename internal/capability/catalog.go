@@ -94,7 +94,7 @@ func BuildCatalog(opts CatalogOptions) Catalog {
 		}
 	}
 	entries = append(entries, toolEntries...)
-	entries = append(entries, SkillEntriesForCatalog(opts.Skills, opts.Tools)...)
+	entries = append(entries, SkillEntriesForCatalog(opts.Skills)...)
 	entries = append(entries, MCPServerEntries(opts)...)
 
 	// Deduplicate by ID, preferring ready over configured.
@@ -127,8 +127,8 @@ func BuildCatalog(opts CatalogOptions) Catalog {
 // profiles: economy|balanced|delivery values are parsed and retained for
 // diagnostics only; they never filter availability — the capability directory
 // is shared by every task.
-func SkillEntriesForCatalog(skills []skill.Skill, tools []tool.ContractEntry) []Entry {
-	out := SkillEntries(skills, tools)
+func SkillEntriesForCatalog(skills []skill.Skill) []Entry {
+	out := SkillEntries(skills)
 	for i := range out {
 		if i < len(skills) {
 			out[i].Requires = cleanList(skills[i].Requires)
@@ -159,15 +159,13 @@ func MCPServerEntries(opts CatalogOptions) []Entry {
 			status = StatusStale
 		}
 		e := Entry{
-			ID:            "mcp-server:" + name,
-			Kind:          KindMCPServer,
-			Name:          name,
-			Description:   "MCP server " + name,
-			Source:        name,
-			Status:        status,
-			ConnectSource: "mcp",
-			ConnectName:   name,
-			AutoStart:     p.ShouldAutoStart(),
+			ID:          "mcp-server:" + name,
+			Kind:        KindMCPServer,
+			Name:        name,
+			Description: "MCP server " + name,
+			Source:      name,
+			Status:      status,
+			AutoStart:   p.ShouldAutoStart(),
 		}
 		if reason, ok := opts.Failed[name]; ok && reason != "" {
 			e.FailureReason = reason
@@ -205,18 +203,16 @@ func MCPServerEntries(opts CatalogOptions) []Entry {
 				continue
 			}
 			out = append(out, Entry{
-				ID:            "mcp-tool:" + name + "/" + raw,
-				Kind:          KindMCPTool,
-				Name:          name + "/" + raw,
-				Description:   strings.TrimSpace(ct.Description),
-				Source:        name,
-				Status:        toolStatus,
-				ReadOnly:      ct.ReadOnly,
-				Destructive:   ct.Destructive,
-				ToolName:      plugin.ModelToolName(name, raw),
-				ConnectSource: "mcp",
-				ConnectName:   name,
-				AutoStart:     p.ShouldAutoStart(),
+				ID:          "mcp-tool:" + name + "/" + raw,
+				Kind:        KindMCPTool,
+				Name:        name + "/" + raw,
+				Description: strings.TrimSpace(ct.Description),
+				Source:      name,
+				Status:      toolStatus,
+				ReadOnly:    ct.ReadOnly,
+				Destructive: ct.Destructive,
+				ToolName:    plugin.ModelToolName(name, raw),
+				AutoStart:   p.ShouldAutoStart(),
 			})
 		}
 	}

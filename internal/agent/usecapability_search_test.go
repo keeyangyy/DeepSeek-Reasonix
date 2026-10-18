@@ -42,7 +42,7 @@ func TestSearchCapabilitiesRanksDeterministicallyAndStaysLocal(t *testing.T) {
 	reg := tool.NewRegistry()
 	catalog := func() capability.Catalog {
 		entries := make([]capability.Entry, 0, len(cached)+1)
-		entries = append(entries, capability.Entry{ID: "mcp-server:teamcity", Kind: capability.KindMCPServer, Name: "teamcity", Source: "teamcity", ConnectName: "teamcity"})
+		entries = append(entries, capability.Entry{ID: "mcp-server:teamcity", Kind: capability.KindMCPServer, Name: "teamcity", Source: "teamcity"})
 		for _, ct := range cached {
 			entries = append(entries, capability.Entry{
 				ID: "mcp-tool:teamcity/" + ct.Name, Kind: capability.KindMCPTool, Name: ct.Name,
@@ -108,7 +108,7 @@ func TestNewSessionSearchDoesNotRelistSharedHost(t *testing.T) {
 	}
 	runtime := NewMCPCapabilityRuntime(ctx, host, []plugin.Spec{spec}, tool.NewRegistry(), func() capability.Catalog {
 		return capability.Catalog{Entries: []capability.Entry{{
-			ID: "mcp-server:shared", Kind: capability.KindMCPServer, Name: "shared", Source: "shared", ConnectName: "shared",
+			ID: "mcp-server:shared", Kind: capability.KindMCPServer, Name: "shared", Source: "shared",
 		}, {
 			ID: "mcp-tool:shared/search", Kind: capability.KindMCPTool, Name: "search", Source: "shared", ReadOnly: true,
 		}}}
