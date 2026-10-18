@@ -16,6 +16,7 @@ import { topicActivityTime } from "../lib/session";
 import { useT, type Translator } from "../lib/i18n";
 import { PROJECT_COLOR_OPTIONS, projectColorValue } from "../lib/projectColors";
 import { projectTreeSessionArchiveTargetKey, projectTreeTopicArchiveTargetKey, projectTreeWithoutTopics, reloadProjectTreeTopics, useProjectTreeArchiveController, type ProjectTreeRefresh, type ProjectTreeRefreshOptions } from "../lib/projectTreeArchive";
+import { useRemovalArm } from "../lib/removalArm";
 import { topicShortcutLabel, type TopicShortcutEntry } from "../lib/topicShortcuts";
 import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { Tooltip } from "./Tooltip";
@@ -255,8 +256,6 @@ export function ProjectTree({
   const [projectDraft, setProjectDraft] = useState("");
   const [isolatingProject, setIsolatingProject] = useState<string | null>(null);
   const [worktreeAvailability, setWorktreeAvailability] = useState<Record<string, { available: boolean; reason?: string }>>({});
-  const [confirmArchiveTarget, setConfirmArchiveTarget] = useState<string | null>(null);
-  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<string | null>(null);
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<string | null>(null);
   const [dragProjectRoot, setDragProjectRoot] = useState<string | null>(null);
   const [dropProject, setDropProject] = useState<{ root: string; position: ProjectDropPosition } | null>(null);
@@ -277,17 +276,20 @@ export function ProjectTree({
   const [showAllTopics, setShowAllTopics] = useState<Set<string>>(new Set());
   const [hoverCard, setHoverCard] = useState<{ key: string; card: ProjectTreeTopicHoverCard; left: number; top: number } | null>(null);
   const [aiRenamingTopic, setAiRenamingTopic] = useState<string | null>(null);
+  // Archiving is recoverable, so one click does it, like pinning. Only a permanent
+  // delete arms for a second click, and the arm is released the moment the pointer
+  // goes elsewhere, times out, or a different target takes it.
+  const { isArmed: purgeArmed, disarm: disarmPurge, confirm: confirmPurge } = useRemovalArm();
   const hoverCardTimerRef = useRef<number | null>(null);
   const creatingRef = useRef(false);
   const closeMenu = useCallback(() => {
     setMenuNodeKey(null);
     setMenuProject(null);
     setMenuPoint(null);
-    setConfirmArchiveTarget(null);
-    setConfirmDeleteTarget(null);
+    disarmPurge();
     setConfirmRemoveProject(null);
     setWorkbenchHeaderMenu(null);
-  }, []);
+  }, [disarmPurge]);
   const topicLoadSeqRef = useRef<Record<string, number>>({});
   const topicLoadErrorRef = useRef<Record<string, string>>({});
   const refreshRef = useRef<ProjectTreeRefresh>(async () => {});
@@ -705,7 +707,7 @@ export function ProjectTree({
     event.stopPropagation();
     setMenuNodeKey(null);
     setMenuProject(null);
-    setConfirmArchiveTarget(null);
+    disarmPurge();
     setConfirmRemoveProject(null);
     setFilterMenuOpen(false);
     setMenuPoint(contextMenuPointFromEvent(event));
@@ -761,18 +763,18 @@ export function ProjectTree({
     }
   };
   const selectTopicRemoval = (mode: ProjectTreeRemovalMode, topicId: string, targetKey: string) => {
-    const purge = mode === "purge";
-    const armed = purge ? confirmDeleteTarget === targetKey : confirmArchiveTarget === targetKey;
-    const setArmed = purge ? setConfirmDeleteTarget : setConfirmArchiveTarget;
-    if (!armed) { setArmed(targetKey); return; }
-    setArmed(null);
-    void remoteSessionActions.remove(topicId, () => (purge ? purgeTopic(topicId) : trashTopic(topicId)));
+    const remove = (purge: boolean) =>
+      void remoteSessionActions.remove(topicId, () => (purge ? purgeTopic(topicId) : trashTopic(topicId)));
+    // Archiving lands in the trash and can be restored, so one click is enough.
+    // Only the unrecoverable delete waits for a second one on the same target.
+    if (mode === "trash") { remove(false); return; }
+    confirmPurge(targetKey, () => remove(true));
   };
   const startRenameTopic = (node: ProjectNode, label: string) => {
     setMenuNodeKey(null);
     setMenuProject(null);
     setMenuPoint(null);
-    setConfirmArchiveTarget(null);
+    disarmPurge();
     setEditingTopic(node.topicId ?? null);
     setTopicDraft(label);
   };
@@ -1159,7 +1161,7 @@ export function ProjectTree({
         setConfirmRemoveProject(null);
         setMenuPoint(contextMenuPointFromEvent(event));
         setMenuNodeKey(key);
-        setConfirmArchiveTarget(null);
+        disarmPurge();
       };
       const topicMenuItems: ContextMenuItem[] = [
         ...organization.topicMenuItems(node, t),
@@ -1188,10 +1190,11 @@ export function ProjectTree({
         },
         ...projectTreeRemovalMenuItems({
           blocked: archiveBlocked, busy: topicTrashing,
-          armed: { trash: confirmArchiveTarget === archiveTargetKey, purge: confirmDeleteTarget === archiveTargetKey },
+          armed: purgeArmed(archiveTargetKey),
           labels: {
-            trash: t("history.moveToTrash"), trashConfirm: t("history.confirmMoveToTrash"),
+            trash: t("history.moveToTrash"),
             purge: t("history.deletePermanently"), purgeConfirm: t("history.confirmDeletePermanently"),
+            purgeHint: t("history.purgeArmedHint"),
           },
           onSelect: (mode) => selectTopicRemoval(mode, topicId, archiveTargetKey),
         }),
@@ -1357,10 +1360,11 @@ export function ProjectTree({
               </Tooltip>
               {projectTreeRemovalButtons({
                 blocked: archiveBlocked, busy: topicTrashing,
-                armed: { trash: confirmArchiveTarget === archiveTargetKey, purge: confirmDeleteTarget === archiveTargetKey },
+                armed: purgeArmed(archiveTargetKey),
                 labels: {
-                  trash: t("projectTree.archiveTopic"), trashConfirm: t("history.confirmMoveToTrash"),
+                  trash: t("projectTree.archiveTopic"),
                   purge: t("projectTree.deleteTopic"), purgeConfirm: t("history.confirmDeletePermanently"),
+                  purgeHint: t("history.purgeArmedHint"),
                 },
                 onSelect: (mode) => selectTopicRemoval(mode, topicId, archiveTargetKey),
               })}
@@ -1369,9 +1373,9 @@ export function ProjectTree({
           {isSessionNode ? (
             <ProjectTreeSessionArchiveMenu
               open={topicMenuOpen} point={menuPoint} sessionPath={sessionPath} blocked={archiveBlocked || topicTrashing} busy={sessionTrashing}
-              confirmed={confirmArchiveTarget === archiveTargetKey} confirmedDelete={confirmDeleteTarget === archiveTargetKey}
-              onConfirm={() => setConfirmArchiveTarget(archiveTargetKey)} onTrash={() => { setConfirmArchiveTarget(null); void trashSession(sessionPath); }}
-              onConfirmDelete={() => setConfirmDeleteTarget(archiveTargetKey)} onPurge={() => { setConfirmDeleteTarget(null); void purgeSession(sessionPath); }} onClose={closeMenu} />
+              confirmedDelete={purgeArmed(archiveTargetKey)}
+              onTrash={() => void trashSession(sessionPath)}
+              onPurge={() => confirmPurge(archiveTargetKey, () => void purgeSession(sessionPath))} onClose={closeMenu} />
           ) : <ContextMenu open={topicMenuOpen} point={menuPoint} items={topicMenuItems} minWidth={178} ariaLabel={t("projectTree.topicActions")} onClose={closeMenu} />}
           {shortcutIndex > 0 && (
             <span className="project-tree__topic-shortcut" aria-hidden="true">
@@ -1449,7 +1453,7 @@ export function ProjectTree({
       event.preventDefault();
       event.stopPropagation();
       setMenuNodeKey(null);
-      setConfirmArchiveTarget(null);
+      disarmPurge();
       setMenuPoint(contextMenuPointFromEvent(event));
       setMenuProject({ key, root: projectRoot, path: projectPath, scope, label: projectLabel });
       setConfirmRemoveProject(null);
@@ -1463,7 +1467,6 @@ export function ProjectTree({
       }
     };
     const isolationAvailability = worktreeAvailability[projectRoot];
-    const activeTopicArchiveTarget = activeTopicId ? projectTreeTopicArchiveTargetKey(scope, projectRoot, activeTopicId) : "";
     const isolatedWorkspaceItems: ContextMenuItem[] = scope === "project"
       ? [{
           key: "isolated-delivery-workspace",
@@ -1578,16 +1581,11 @@ export function ProjectTree({
       {
         key: "archive-active-topic",
         icon: <Archive className={activeTopicId && trashingTopics.has(activeTopicId) ? "project-tree__archive-spinner" : undefined} size={13} />,
-        label: activeTopicArchiveTarget && confirmArchiveTarget === activeTopicArchiveTarget
-          ? t("history.confirmMoveToTrash")
-          : t("projectTree.archiveConversation"),
+        label: t("projectTree.archiveConversation"),
         disabled: !activeTopicInProject || !activeTopicId || activeTopicArchiveBlocked || Boolean(activeTopicId && trashingTopics.has(activeTopicId)),
         danger: true,
-        onSelect: () => {
-          if (!activeTopicId) return;
-          if (confirmArchiveTarget === activeTopicArchiveTarget) void trashTopic(activeTopicId);
-          else setConfirmArchiveTarget(activeTopicArchiveTarget);
-        },
+        // Archiving is recoverable, so one click archives it, like the row icon.
+        onSelect: () => { if (activeTopicId) void trashTopic(activeTopicId); },
       },
       ...(scope === "project"
         ? [

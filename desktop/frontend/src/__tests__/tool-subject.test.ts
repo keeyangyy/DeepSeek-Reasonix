@@ -24,12 +24,22 @@ eq(subjectOf("task", JSON.stringify({ description: "audit docs" })), "audit docs
 eq(subjectOf("run_skill", JSON.stringify({ name: "code-reviewer", arguments: "review this branch" })), "code-reviewer", "run_skill subject uses skill name");
 eq(
   subjectOf("use_capability", JSON.stringify({ action: "call", capability_id: "mcp-tool:github/search_issues" })),
-  "mcp-tool:github/search_issues",
-  "use_capability subject uses capability_id",
+  "call · mcp-tool:github/search_issues",
+  "use_capability subject leads with the action",
+);
+eq(
+  subjectOf("use_capability", JSON.stringify({ action: "inspect", capability_id: "mcp-tool:github/search_issues" })),
+  "inspect · mcp-tool:github/search_issues",
+  "a lookup reads differently from a call",
+);
+eq(
+  subjectOf("use_capability", JSON.stringify({ action: "search", query: "deploy" })),
+  "search · deploy",
+  "a search falls back to its query",
 );
 eq(
   subjectOf("use_capability", JSON.stringify({ action: "call" }), "mcp-tool:db/read"),
-  "mcp-tool:db/read",
+  "call · mcp-tool:db/read",
   "use_capability subject falls back to preserved capability metadata",
 );
 eq(subjectOf("use_capability", JSON.stringify({ action: "list" })), "list", "use_capability list falls back to action");

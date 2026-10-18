@@ -80,13 +80,32 @@ export function subjectOf(name: string, args: string, capabilityId?: string): st
     case "todo_write":
     case "exit_plan_mode":
       return ""; // these get dedicated cards, not a subject line
-    case "use_capability":
-      // Stable MCP proxy: show the capability id as the collapsed subject so
-      // Planner/Delivery cards read as "MCP · mcp-tool:server/tool".
-      return str(a, "capability_id") || capabilityId || str(a, "action");
+    case "use_capability": {
+      // The stable MCP proxy: say what it acted on and what it did with it. The id
+      // alone reads identically whether the agent called a tool or only looked one
+      // up, so the action leads and the id follows.
+      const target = str(a, "capability_id") || capabilityId || str(a, "query");
+      const action = str(a, "action");
+      if (!action) return target;
+      return target ? `${action} · ${target}` : action;
+    }
     default:
       return str(a, "path") || str(a, "file_path");
   }
+}
+
+// Collapsed subject for a replayed session. The proxy's action is part of what its
+// card must say, but the backend stored its subject under the older id-only rule, so
+// recompute here for the proxy and leave every other tool on the stored value. Doing
+// it in the frontend keeps the kernel's event format untouched.
+export function replaySubject(
+  name: string,
+  args: string,
+  capabilityId: string | undefined,
+  stored: string | undefined,
+): string | undefined {
+  if (name !== "use_capability") return stored;
+  return subjectOf(name, args, capabilityId) || stored;
 }
 
 // diffsFor returns the before/after pairs a writer tool's card renders inline:

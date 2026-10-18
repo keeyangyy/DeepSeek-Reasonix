@@ -171,6 +171,14 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
     setActive((i) => Math.min(i + 1, questions.length - 1));
   };
 
+  // A click answers the question it lands on. Mid-ask it walks forward as before;
+  // on the last question it only marks the choice, so the submit stays a deliberate
+  // action and a mis-click cannot send the whole answer set.
+  const advanceFromClick = () => {
+    if (submitting || isLast) return;
+    setActive((i) => Math.min(i + 1, questions.length - 1));
+  };
+
   const toggleOption = (question: WireAskQuestion, label: string) => {
     if (submitting) return;
     const cur = sel[question.id] ?? [];
@@ -228,7 +236,7 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
         const nextMode = { ...answerMode, [q.id]: "option" as const };
         setAnswerMode(nextMode);
         setSel(nextSel);
-        finishOrAdvance(nextSel, entry, nextMode);
+        advanceFromClick();
       }
     } else if (index === otherRowIndex) {
       const nextMode = { ...answerMode, [q.id]: "custom" as const };
@@ -240,7 +248,7 @@ function AskCardBody({ ask, onAnswer, onStop, draftKey }: AskCardProps & { draft
         entryInputRef.current?.focus();
         return;
       }
-      if (!q.multi) finishOrAdvance(nextSel, entry, nextMode);
+      if (!q.multi) advanceFromClick();
     }
   };
 

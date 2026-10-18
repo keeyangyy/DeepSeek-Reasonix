@@ -254,8 +254,11 @@ console.log("\nask card layout");
     await flushTimers(200);
   });
   eq(document.querySelector(".prompt-action__description-toggle"), null, "short selected descriptions do not show a redundant disclosure");
-  eq(answers.length, 1, "single-select click submits the answer immediately");
-  eq(answers.length, 1, "single-select click submits only once");
+  eq(answers.length, 0, "a click on the last question marks the answer without submitting");
+  eq(optionButtons[1].getAttribute("aria-selected"), "true", "the click marks the chosen option");
+  eq(document.querySelector<HTMLButtonElement>(".decision-confirm-bar__confirm")?.disabled, false, "the marked answer leaves confirm ready");
+  await clickConfirm();
+  eq(answers.length, 1, "confirm submits the marked answer exactly once");
   eq(answers[0]?.[0]?.selected?.[0], "Minimal repair", "submitted answer matches the selected option");
   await act(async () => {
     root.unmount();
@@ -525,7 +528,9 @@ console.log("\nask card layout");
     actions[1]?.click(); // Other reuses the same text as a custom answer.
     await flushTimers();
   });
-  eq(answers[0]?.[0]?.selected?.[0], "Keep this draft", "Other submits the shared input as a custom answer");
+  eq(answers.length, 0, "a click on Other marks the custom answer without submitting");
+  await clickConfirm();
+  eq(answers[0]?.[0]?.selected?.[0], "Keep this draft", "confirm submits the shared input as a custom answer");
   await act(async () => { root.unmount(); });
   dom.window.close();
 }
@@ -641,6 +646,8 @@ console.log("\nask card layout");
       .find((button) => button.textContent?.includes("Second B"))?.click();
     await flushTimers();
   });
+  eq(attempts, 0, "a click on the last question marks the answer without submitting");
+  await clickConfirm();
   eq(attempts, 1, "failed final submit is attempted exactly once");
   eq(document.querySelector(".ask-shelf__header-text--progress")?.textContent?.includes("2/2"), true, "failed final submit stays on question 2");
   eq(document.querySelector(".ask-shelf__crumbs")?.textContent?.includes("First B"), true, "failed final submit preserves the revised first answer");

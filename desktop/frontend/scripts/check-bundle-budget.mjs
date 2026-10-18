@@ -468,6 +468,11 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // option and the update panel's decoupled list loading add 2.3 KiB raw
 // (2437.5 KiB measured locally). Widen the raw ceiling to 2438; the gzip and
 // chunk budgets stay put apart from the locale ratchet above.
-const rawInitialBudgetKiB = 2_438;
+// 2026-10-18: the four interaction fixes — the ask last-question confirm path, the
+// arm lifecycle for pending purges (new module plus its hint row and CSS keyframe),
+// the action-aware sub-agent counting and the capability subject — measure 2439.0
+// KiB raw after trimming the new module down. Widen the raw ceiling to 2439.5 and
+// keep 0.5 KiB of toolchain headroom; gzip and chunk budgets stay put.
+const rawInitialBudgetKiB = 2_439.5;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
