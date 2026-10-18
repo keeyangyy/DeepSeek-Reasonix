@@ -70,11 +70,13 @@ await click(back());
 assert.equal(entry().value, "  because  ", "Back restores the shared input draft");
 await click(action("A"));
 await click(action("Done"));
+assert.equal(submitted.length, 0, "a click on the final question waits for the confirm action");
+await click(confirm());
 assert.deepEqual(submitted.at(-1), [
   { questionId: "single", selected: ["A", "补充：because"] },
   { questionId: "later", selected: ["Done"] },
 ]);
-console.log("  PASS  shared supplement is prefixed and single-select advances immediately");
+console.log("  PASS  shared supplement is prefixed, single-select advances mid-ask and confirms on the last");
 
 // Multi-select keeps its existing explicit-confirm flow; one supplement applies
 // once to the whole group, rather than creating one input per selected option.
@@ -91,8 +93,9 @@ await click(confirm());
 assert.deepEqual(submitted.at(-1), [{ questionId: "multi", selected: ["Red", "Blue", "补充：warm"] }]);
 console.log("  PASS  multi-select choices and one shared supplement submit together");
 
-// Other is an option: for single-select, its current text is submitted directly;
-// an empty click shows a prompt and leaves the same input ready for typing.
+// Other is an option: for single-select a click marks its current text and the
+// last question waits for the explicit confirm; an empty click shows a prompt and
+// leaves the same input ready for typing.
 await render({
   id: "ask-other-single",
   questions: [{ id: "choice", prompt: "Choose or write", options: [{ label: "Suggested" }] }],
@@ -102,11 +105,12 @@ await click(action("Other"));
 assert.equal(submitted.length, beforeEmptyOther, "empty Other does not submit");
 assert.ok(document.querySelector('[role="alert"]')?.textContent, "empty Other explains that an answer is required");
 await act(async () => setText(entry(), "my own answer"));
-const beforeOtherSubmit = submitted.length;
+const beforeOtherMark = submitted.length;
 await click(action("Other"));
-assert.equal(submitted.length, beforeOtherSubmit + 1, "choosing Other submits the current input");
+assert.equal(submitted.length, beforeOtherMark, "clicking Other marks the custom answer without submitting");
+await click(confirm());
 assert.deepEqual(submitted.at(-1), [{ questionId: "choice", selected: ["my own answer"] }]);
-console.log("  PASS  Other submits the shared input and validates empty input");
+console.log("  PASS  Other marks the shared input for confirm and validates empty input");
 
 // In multi-select, Other remains an alternative answer that uses the normal
 // explicit confirm action instead of submitting from a row click.
