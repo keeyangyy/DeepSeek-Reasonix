@@ -387,12 +387,8 @@ await act(async () => {
   ok(Boolean(dialog), "ask card renders");
   ok(dialog?.textContent?.includes("Deploy now?") === true, "ask prompt renders");
 	failAnswer = true;
-	await act(async () => {
-		[...document.querySelectorAll<HTMLButtonElement>(".prompt-shelf--ask .prompt-action")].find((b) => b.textContent?.includes("yes"))?.click();
-		await flush();
-	});
-	// A single-select click on the last question only marks the answer, so the
-	// remote bridge must not have been called yet; submitting is its own action.
+	await act(async () => { [...document.querySelectorAll<HTMLButtonElement>(".prompt-shelf--ask .prompt-action")].find((b) => b.textContent?.includes("yes"))?.click(); await flush(); });
+	// A click on the last question only marks it; submitting is its own action.
 	ok(!tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "a single-select click does not submit to the remote session");
 	await act(async () => { document.querySelector<HTMLButtonElement>(".prompt-shelf--ask .decision-confirm-bar__confirm")?.click(); await flush(); });
 	ok(tape.some((entry) => entry.startsWith("answer:tab-remote-1:ask-7")), "confirm submits the marked answer to the remote session");
