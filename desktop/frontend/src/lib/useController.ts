@@ -30,6 +30,7 @@ import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, filterS
 import { assistantHasContent, assistantRowForRebase, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems, stampAssistantMessageID } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
 import { frontendDiagnosticsActive, recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
+import { recordPageDiagnostic, recordWireDiagnostic } from "./frontendDiagnosticRows";
 import { uiPerfTracker } from "./uiPerf";
 import { getLocale, t } from "./i18n";
 import {
@@ -2724,51 +2725,20 @@ export function useController() {
     if (prev !== next) {
       states.set(tabId, next);
       // Row-level diagnostics (durable, active-only): tail rows, removed rows,
-      // and duplicate scan at page actions / turn edges. Values must stay
-      // whitespace-free (recorder drops whitespace-containing fields).
+      // duplicate scan, and the incoming page's own sequence at page actions.
+      // Kept in frontendDiagnosticRows.ts to respect this file's line budget.
       if (frontendDiagnosticsActive()) {
         const pageAction = action.type === "history_prepend" || action.type === "history_replace" ||
           action.type === "history_rebase";
         const turnEdge = action.type === "event" && (action.e.kind === "turn_done" || action.e.kind === "turn_started");
         if (pageAction || turnEdge) {
-          // Descriptors must satisfy the recorder's safeToken rule
-          // ([a-zA-Z0-9._:-]{1,64}); text is recorded as its length because
-          // non-ASCII content cannot pass that token charset.
-          const describe = (it: SignatureItem) => {
-            const status = typeof it.status === "string" && it.status ? `.${it.status}` : "";
-            const length = typeof it.text === "string" ? it.text.length : 0;
-            const id = it.id.slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "");
-            return `${it.kind.charAt(0)}.${id}${status}.${length}`;
-          };
-          const slots = (rows: readonly SignatureItem[]) => {
-            const described = rows.slice(0, 6).map(describe);
-            return Object.fromEntries(described.map((value, index) => [`r${index}`, value]));
-          };
-          recordFrontendDiagnostic("history", "items.tail", {
-            reason: action.type,
-            state: `cur:${(next.currentAssistant ?? "-").slice(0, 34).replace(/[^a-zA-Z0-9._:-]/g, "")}`,
-            total: next.items.length,
-            ...slots(next.items.slice(-6).reverse()),
-          });
-          if (pageAction) {
-            const nextIds = new Set(next.items.map((item) => item.id));
-            const removed = prev.items.filter((item) => !nextIds.has(item.id));
-            if (removed.length > 0) {
-              recordFrontendDiagnostic("history", "items.removed", {
-                reason: action.type,
-                total: removed.length,
-                ...slots(removed),
-              });
-            }
-          }
-          const dupes = duplicateItemRows(next.items);
-          if (dupes.length > 0) {
-            recordFrontendDiagnostic("history", "items.dupes", {
-              reason: action.type,
-              total: dupes.length,
-              ...slots(dupes),
-            });
-          }
+          const nextIds = new Set(next.items.map((item) => item.id));
+          recordPageDiagnostic(
+            action.type,
+            next,
+            pageAction ? (action as { items?: readonly SignatureItem[] }).items : undefined,
+            pageAction ? prev.items.filter((item) => !nextIds.has(item.id)) : [],
+          );
         }
       }
       // A tab with a live or in-flight turn is pinned out of transcript-store
@@ -3745,6 +3715,9 @@ export function useController() {
     });
     pendingTextBatchRef.current = textBatch;
     const handleWireEvent = (e: WireEvent) => {
+      // Segment/steer tracing: which attempt opened which assistant segment is
+      // what a misplaced reasoning block hinges on (see frontendDiagnosticRows).
+      if (frontendDiagnosticsActive()) recordWireDiagnostic(e as Parameters<typeof recordWireDiagnostic>[0]);
       // TEMP probe: confirm whether compaction events reach the wire handler at
       // all, and where they get dropped (epoch fence / acceptLive). Removed
       // after the switch-away compaction diagnosis is closed.
