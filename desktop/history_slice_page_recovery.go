@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"reasonix/internal/agent"
 	"reasonix/internal/control"
 )
+
+// historyReadModelRebuildBudget bounds the synchronous repair a failing page
+// request may perform. A user is waiting on it, so it must not run unbounded.
+const historyReadModelRebuildBudget = 30 * time.Second
 
 // rebuildHistoryReadModelOnPageFailure is the recovery hook for a page request
 // that just failed. It replays the authoritative event log to refresh the JSONL
@@ -35,6 +41,22 @@ func rebuildHistoryReadModelOnPageFailure(sessionPath, cause string) bool {
 			"path", path, "cause", cause, "err", err)
 		return false
 	}
+	// Re-align the sidecar, not just the derived read model: while the sidecar
+	// digest disagrees with the transcript every index build writes revision=0,
+	// so only RepairSessionListingProjection (which rewrites meta) can restore it.
+	ctx, cancel := context.WithTimeout(context.Background(), historyReadModelRebuildBudget)
+	defer cancel()
+	result, err := agent.RepairSessionListingProjection(ctx, path)
+	if err != nil {
+		slog.Warn("desktop: history page failed and sidecar re-alignment failed",
+			"path", path, "cause", cause, "err", err)
+		return false
+	}
+	if result.Status != agent.SessionListingRepairApplied && result.Status != agent.SessionListingRepairAlreadyCurrent {
+		slog.Warn("desktop: history page failed and sidecar re-alignment did not apply",
+			"path", path, "cause", cause, "status", string(result.Status))
+		return false
+	}
 	if err := agent.RepairSessionDisplayReadModel(path); err != nil {
 		slog.Warn("desktop: history page failed and read-model rebuild failed",
 			"path", path, "cause", cause, "err", err)
@@ -43,7 +65,8 @@ func rebuildHistoryReadModelOnPageFailure(sessionPath, cause string) bool {
 	// Record the cause so a future report of this symptom is diagnosable: the
 	// page failure itself is the only evidence, and it used to be discarded.
 	slog.Warn("desktop: history page failed and the read model was rebuilt",
-		"path", path, "cause", cause, "recovered", true)
+		"path", path, "cause", cause, "status", string(result.Status),
+		"ledgerRepaired", result.LedgerRepaired, "recovered", true)
 	return true
 }
 
