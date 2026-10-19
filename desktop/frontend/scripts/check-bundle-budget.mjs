@@ -479,6 +479,15 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // bytes to stay under it. Measured 2439.53 KiB after inlining the predicate (no
 // new module, smallest possible delta). Widen to 2440.0 and keep 0.5 KiB of
 // headroom again; gzip and chunk budgets stay put.
-const rawInitialBudgetKiB = 2_440;
+// 2026-10-19 (later): steer-overlap dedupe fits under 2440.0 by inlining the
+// tool-id predicate (2439.9 measured). Then the transcript-diagnostic capture
+// gains a row descriptor carrying messageID plus both text and reasoning
+// lengths, the incoming page's own row sequence, and stream_attempt/steer
+// tracing, in a new frontendDiagnosticRows module (measured 2440.8 KiB). That
+// detail is what a misplaced reasoning block needs — the old descriptor had no
+// messageID and read a tool-only round as an empty row. TEMPORARY: this is
+// field-diagnosis scaffolding; when the capture is retired, drop the ceiling
+// back to 2440 and reclaim the 0.8 KiB. gzip and chunk budgets stay put.
+const rawInitialBudgetKiB = 2_441.5;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
