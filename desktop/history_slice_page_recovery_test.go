@@ -3,71 +3,85 @@ package main
 import (
 	"encoding/hex"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"reasonix/internal/agent"
+	"reasonix/internal/provider"
 	"reasonix/internal/store"
 )
 
-// brokenSidecarFixture reproduces the captured production failure:
+// brokenSidecarSession reproduces the production failure the recovery hook
+// exists for:
 //
-//	meta  revision=990  digest=<transcript digest at last save>
-//	index revision=0    known=false    (content otherwise exact)
+//	meta  revision>=1  digest=<stale digest from an earlier save>
+//	index revision=0   known=false   (rows otherwise exact)
 //
-// The sidecar digest no longer matches the replayed transcript, so every index
-// build records revision=0 / revision_known=false and the index can never
-// validate — rebuilding it repeatedly does not help. The rows themselves are
-// fine; only the identity is unusable.
+// It is built by saving a normal session and then corrupting only the sidecar
+// digest. With meta and transcript digests disagreeing, every index build keeps
+// recording revision=0 / revision_known=false, so the index can never validate —
+// rebuilding the read model alone does not help.
 //
-// The capture lives under the repo tmp dir so the case is reproducible without
-// depending on the user's live session directory.
-func brokenSidecarFixture(t *testing.T) (sessionPath string) {
+// Built programmatically on purpose: an earlier version read the fixture from an
+// absolute path under tmp/, which silently skipped the test everywhere else.
+func brokenSidecarSession(t *testing.T) (sessionPath string) {
 	t.Helper()
 	_ = historySliceTestApp(t)
 	root := t.TempDir()
 	dir := desktopSessionDir(root)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+
+	msgs := []provider.Message{
+		{Role: provider.RoleUser, Content: "first question"},
+		{Role: provider.RoleAssistant, Content: "first answer"},
+		{Role: provider.RoleUser, Content: "second question"},
+		{Role: provider.RoleAssistant, Content: "second answer"},
 	}
+	_, sessionPath = saveHistorySliceSession(t, dir, "broken-sidecar.jsonl", msgs)
 
-	const captured = `D:/project/prj-github/tmp/DeepSeek-Reasonix/broken-session-20261019`
-	const base = "20261018-163839.879359400-axon-deepseek-flash"
-	for _, suffix := range []string{".jsonl", ".events.jsonl", ".display-index.json", ".jsonl.meta", ".turns.jsonl"} {
-		data, err := os.ReadFile(filepath.Join(filepath.FromSlash(captured), base+suffix))
-		if err != nil {
-			t.Skipf("captured session missing %s: %v", suffix, err)
-		}
-		dst := filepath.Join(dir, base+suffix)
-		if err := os.WriteFile(dst, data, 0o644); err != nil {
-			t.Fatalf("write %s: %v", suffix, err)
-		}
-		if suffix == ".jsonl" {
-			sessionPath = dst
-		}
-	}
-	return sessionPath
-}
-
-// The captured failure must become usable after the recovery hook runs.
-//
-// The essential assertion is the index IDENTITY, not merely that a rebuild
-// happened: an earlier attempt rebuilt the read model but the index still came
-// out with revision=0, so the page kept failing. Only re-aligning the sidecar
-// digest from the transcript makes the revision recoverable.
-func TestRebuildHistoryReadModelOnPageFailureRepairsStaleSidecarIdentity(t *testing.T) {
-	sessionPath := brokenSidecarFixture(t)
-
-	before, ok, err := agent.LoadBranchMeta(sessionPath)
+	// Confirm the healthy state first: the index must be valid as saved.
+	meta, ok, err := agent.LoadBranchMeta(sessionPath)
 	if err != nil || !ok {
 		t.Fatalf("load meta: ok=%v err=%v", ok, err)
 	}
-	beforeIdx, err := agent.LoadSessionDisplayIndex(store.SessionDisplayIndex(sessionPath))
-	if err != nil || beforeIdx == nil {
+	before, err := agent.LoadSessionDisplayIndex(store.SessionDisplayIndex(sessionPath))
+	if err != nil || before == nil {
 		t.Fatalf("load index: %v", err)
 	}
-	t.Logf("before: meta.rev=%d idx.rev=%d idx.known=%v", before.Revision, beforeIdx.Revision, beforeIdx.RevisionKnown)
+	if !before.RevisionKnown {
+		t.Fatalf("fixture did not start healthy: index revision_known already false")
+	}
+
+	// Corrupt ONLY the sidecar digest, leaving the transcript untouched. This is
+	// the shape seen in production: rows and byte counts are correct, the
+	// identity is not.
+	stale := strings.Repeat("ab", 32)
+	meta.ContentDigest = stale
+	meta.ListingContentDigest = stale
+	if err := agent.SaveBranchMeta(sessionPath, meta); err != nil {
+		t.Fatalf("rewrite meta: %v", err)
+	}
+
+	// Republishing the index from this state is exactly what the old repair did:
+	// it must come out with an unusable identity.
+	if err := agent.RepairSessionDisplayReadModel(sessionPath); err != nil {
+		t.Fatalf("publish index from stale sidecar: %v", err)
+	}
+	broken, err := agent.LoadSessionDisplayIndex(store.SessionDisplayIndex(sessionPath))
+	if err != nil || broken == nil {
+		t.Fatalf("reload index: %v", err)
+	}
+	if broken.RevisionKnown {
+		t.Skip("this build does not lose the index identity from a stale sidecar digest; the regression no longer reproduces")
+	}
+	t.Logf("reproduced: meta.rev=%d meta.dig=%s idx.rev=%d idx.known=%v",
+		meta.Revision, shortDigest(meta.ContentDigest), broken.Revision, broken.RevisionKnown)
+	return sessionPath
+}
+
+// After the recovery hook runs, the index must be usable again: its revision
+// must be known and must agree with the sidecar.
+func TestRebuildHistoryReadModelOnPageFailureRepairsStaleSidecarIdentity(t *testing.T) {
+	sessionPath := brokenSidecarSession(t)
 
 	if !rebuildHistoryReadModelOnPageFailure(sessionPath, "test-cause") {
 		t.Fatalf("recovery hook declined a repairable session")
@@ -81,22 +95,19 @@ func TestRebuildHistoryReadModelOnPageFailureRepairsStaleSidecarIdentity(t *test
 	if err != nil || idx == nil {
 		t.Fatalf("reload index: %v", err)
 	}
-	t.Logf("after : meta.rev=%d idx.rev=%d idx.known=%v", meta.Revision, idx.Revision, idx.RevisionKnown)
-
-	// The sidecar must now agree with the transcript, which is what makes the
-	// revision meaningful again.
 	msgs, state, repairable, err := agent.LoadSessionDisplayMessages(sessionPath)
 	if err != nil || !repairable {
 		t.Fatalf("transcript unreadable after recovery: repairable=%v err=%v", repairable, err)
 	}
+	t.Logf("after recovery: meta.rev=%d idx.rev=%d idx.known=%v", meta.Revision, idx.Revision, idx.RevisionKnown)
+
+	// The sidecar must agree with the transcript again.
 	if !strings.EqualFold(strings.TrimSpace(meta.ContentDigest), strings.TrimSpace(state.DigestHex)) {
 		t.Fatalf("sidecar digest not re-aligned: meta=%s transcript=%s", meta.ContentDigest, state.DigestHex)
 	}
-
-	// The decisive check: the index must validate against the sidecar identity.
-	// Before the fix this was always false because the index carried revision=0.
-	if idx.RevisionKnown != true {
-		t.Fatalf("index revision_known = false after recovery; the page would still fail")
+	// The decisive check: a usable identity. Before the fix this was always false.
+	if !idx.RevisionKnown {
+		t.Fatalf("index revision_known=false after recovery; the page would still fail")
 	}
 	if idx.Revision != meta.Revision {
 		t.Fatalf("index revision %d != sidecar revision %d", idx.Revision, meta.Revision)
@@ -104,7 +115,10 @@ func TestRebuildHistoryReadModelOnPageFailureRepairsStaleSidecarIdentity(t *test
 	if idx.MessageCount != len(msgs) {
 		t.Fatalf("index covers %d messages, transcript has %d", idx.MessageCount, len(msgs))
 	}
-	digest := parseHexDigest(t, meta.ContentDigest)
+	digest, err := decodeDigest(meta.ContentDigest)
+	if err != nil {
+		t.Fatalf("decode digest: %v", err)
+	}
 	info, err := os.Stat(sessionPath)
 	if err != nil {
 		t.Fatalf("stat transcript: %v", err)
@@ -124,7 +138,7 @@ func TestRebuildHistoryReadModelOnPageFailureRefusesForeignSchema(t *testing.T) 
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	path := filepath.Join(dir, "foreign.jsonl")
+	path := dir + string(os.PathSeparator) + "foreign.jsonl"
 	body := []byte(`{"schema_version":99,"type":"message","id":"x1"}` + "\n")
 	if err := os.WriteFile(path, body, 0o644); err != nil {
 		t.Fatalf("write transcript: %v", err)
@@ -164,13 +178,20 @@ func TestRebuildHistoryReadModelOnPageFailureRefusesForeignSchema(t *testing.T) 
 	}
 }
 
-func parseHexDigest(t *testing.T, hexDigest string) [32]byte {
-	t.Helper()
+func shortDigest(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 16 {
+		return s[:16]
+	}
+	return s
+}
+
+func decodeDigest(hexDigest string) ([32]byte, error) {
 	var out [32]byte
 	raw, err := hex.DecodeString(strings.TrimSpace(hexDigest))
 	if err != nil || len(raw) != 32 {
-		t.Fatalf("bad digest %q: %v", hexDigest, err)
+		return out, err
 	}
 	copy(out[:], raw)
-	return out
+	return out, nil
 }
