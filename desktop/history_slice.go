@@ -424,12 +424,7 @@ func (a *App) HistorySliceForTab(tabID string, req HistorySliceRequest) HistoryS
 		if strings.TrimSpace(sessionPath) == "" {
 			return failedHistorySlice("session path unavailable before controller ready")
 		}
-		slice, err := a.coldHistorySlice(sessionDir, sessionPath, req)
-		if err != nil {
-			slog.Debug("desktop: cold history slice failed", "path", sessionPath, "err", err)
-			return failedHistorySlice(err.Error())
-		}
-		return slice
+		return a.coldHistorySliceWithRecovery(sessionDir, sessionPath, req)
 	}
 	if p := ctrl.SessionPath(); strings.TrimSpace(p) != "" {
 		sessionPath = p
@@ -454,7 +449,10 @@ func (a *App) liveHistorySlice(ctrl control.SessionAPI, sessionDir, sessionPath 
 	slice, err := a.pageHistorySliceSource(src, req, resolver, sessionPlannerDisplayTurns(sessionDir, sessionPath), ctrl.CheckpointTurnsByMessageIndex(), sessionPath)
 	if err != nil {
 		slog.Debug("desktop: live history slice failed", "path", sessionPath, "err", err)
-		return failedHistorySlice(err.Error())
+		slice, indexUsed, err = a.retryLiveHistorySliceAfterRebuild(ctrl, sessionDir, sessionPath, req, resolver, err)
+		if err != nil {
+			return failedHistorySlice(err.Error())
+		}
 	}
 	if indexUsed {
 		slice.Source = "live-index"
