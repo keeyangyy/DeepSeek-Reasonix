@@ -577,6 +577,55 @@ export function messageIdCoveredLiveItemIds(
   return out;
 }
 
+// Rows a whole-page replace must not erase: live user rows the page does not
+// carry yet. A submitted prompt reaches the transcript before the backend
+// finishes persisting it, so a `history_replace` sampled in that window owns a
+// page that simply does not contain the row — replacing wholesale drops the
+// user's own message from the screen until the next reload re-reads disk
+// (field evidence: tab switch after submit, 21 live rows removed, page without
+// the prompt).
+//
+// Scope is deliberately narrow:
+//   - only the live TAIL — rows after the last row the page covers. A local row
+//     in the middle of covered content is not a persistence gap.
+//   - only when the page covers at least one live row. Zero overlap means the
+//     page belongs to a different transcript generation (rebind/rewind/tab
+//     reuse), where keeping live rows would leak the previous session.
+// Count-based coverage already guarantees an identical text the page carries is
+// not retained twice, so a genuinely persisted prompt never duplicates.
+//
+// `withUncoveredUserRows` is the call-site form: history_replace must reach the
+// page in a single expression, because useController.ts sits on a file-size
+// budget and cannot afford extra statements.
+export function withUncoveredUserRows<T extends SignatureItem>(
+  pageItems: readonly T[],
+  liveItems: readonly T[],
+): readonly T[] {
+  const retained = uncoveredUserRows(pageItems, liveItems);
+  return retained.length > 0 ? [...pageItems, ...retained] : pageItems;
+}
+
+export function uncoveredUserRows<T extends SignatureItem>(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly T[],
+): T[] {
+  const covered = new Set<string>([
+    ...pageCoveredLiveItemIds(pageItems, liveItems),
+    ...messageIdCoveredLiveItemIds(pageItems, liveItems),
+  ]);
+  const pageIds = new Set<string>();
+  for (const item of pageItems) pageIds.add(item.id);
+
+  let lastCovered = -1;
+  liveItems.forEach((item, index) => {
+    if (covered.has(item.id) || pageIds.has(item.id)) lastCovered = index;
+  });
+  if (lastCovered < 0) return [];
+
+  return liveItems.filter((item, index) =>
+    index > lastCovered && item.kind === "user" && !covered.has(item.id) && !pageIds.has(item.id));
+}
+
 export function sameSessionPlaceholderItems<T>(
   target: SessionHydrateIdentity | undefined,
   prev: { meta?: SessionHydrateIdentity; items?: T[] } | undefined,

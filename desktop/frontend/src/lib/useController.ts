@@ -41,7 +41,7 @@ import {
 } from "./controllerNotices";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, messageIdCoveredLiveItemIds, pageAssistantPointer, pageCoveredLiveItemIds, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
+import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, assertNoDuplicateItems, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, historyPageFingerprintAccepts, duplicateItemRows, liftLiveToolStatus, liveItemTurnId, messageIdCoveredLiveItemIds, pageAssistantPointer, pageCoveredLiveItemIds, pageOverlapsLiveContent, pageSupersedesInFlightTurn, replaceRemoveIds, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, switchTargetIdentity, withUncoveredUserRows, type HydrateSurfacePolicy, type SignatureItem } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent, normalizeSessionGeneration, preserveSessionIdentity, sessionIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
@@ -2326,7 +2326,7 @@ export function reducer(s: State, a: Action): State {
       const rebasedAssistant = rebaseLiveAssistantToPage(a.items, s), pageItems = rebasedAssistant?.items ?? a.items;
       return {
         ...s,
-        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, liftLiveToolStatus(pageItems, s.items))),
+        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, liftLiveToolStatus(withUncoveredUserRows(pageItems, s.items), s.items))),
         historyPrefixCount: pageItems.length,
         pendingSubmissionId: undefined,
         hydrateHistoryLoaded: true,

@@ -36,14 +36,21 @@ export function InlineAssistantReasoning({
   const live = useContext(LiveStreamContext);
   const presentation = useWorkProcessPresentation();
   const policy = useReasoningExpansionPolicy();
-  const shown = live?.id === item.id ? { reasoning: live.reasoning, streaming: true, reasoningComplete: live.reasoningComplete } : item;
+  // live 拥有这一行，但只有当它确实带着 reasoning 内容时才接管正文：切会话 /
+  // 历史页接管的那一瞬 live 可能还是空的，而 item 上已落盘的内容才是用户该看到
+  // 的那份。原先无条件以 live 为准，于是折叠头按 item.reasoning 报了「1 段思考」，
+  // 正文却因 live.reasoning 为空走到下面的 return null，整块消失。
+  const liveFeedsReasoning = live?.id === item.id && Boolean(live.reasoning);
+  const shown = liveFeedsReasoning
+    ? { reasoning: live!.reasoning, streaming: true, reasoningComplete: live!.reasoningComplete }
+    : item;
   const running = shown.streaming && !shown.reasoningComplete;
   const followActive = autoFollowActive ?? shown.streaming;
   // "This block is the one streaming right now" is an OWNERSHIP fact: the live
   // stream names the item it feeds. The component's own `streaming` flag alone
   // cannot separate a live block from one that stopped but was not cleared yet,
   // and it cannot see whether a newer block has taken over.
-  const producing = live?.id === item.id && !live.reasoningComplete;
+  const producing = liveFeedsReasoning && !live!.reasoningComplete;
   // Which block is the newest comes from the row model's global ordering, so a
   // block inside a multi-segment turn knows it is no longer the latest one.
   const isLatest = isLatestReasoning ?? false;
