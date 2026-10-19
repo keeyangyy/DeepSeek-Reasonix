@@ -11,7 +11,6 @@
 import {
   describeRow,
   rowSequence,
-  rowSlots,
   recordPageDiagnostic,
   recordWireDiagnostic,
 } from "../lib/frontendDiagnosticRows";
