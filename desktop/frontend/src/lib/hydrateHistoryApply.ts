@@ -338,6 +338,14 @@ export function pageOverlapsLiveContent(
   // of the live text. Count the prefix relationship as overlap too — otherwise
   // the page-owns-the-turn cleanup is skipped entirely and the rebuilt rows
   // co-mount beside the page copies (the low-frequency duplicate).
+  //
+  // Neither signature nor text can carry a tool-only round: steer cuts one turn
+  // into rounds whose assistant rows have no visible text (a live session's
+  // rows measured 0 chars), so `text` is empty on both sides and reasoning is a
+  // moving prefix. The provider-issued tool call id is the only identity here
+  // that does not move while the turn streams, so a covered tool id means the
+  // page already carries this turn's output.
+  if (toolIdentityCoveredLiveItemIds(pageItems, liveItems).length) return true;
   const liveTexts = liveItems.filter((item) => item.kind === "assistant" && typeof item.text === "string" && item.text.length > 0);
   if (liveTexts.length === 0) return false;
   for (const item of pageItems) {
@@ -373,7 +381,38 @@ export function replaceRemoveIds(
   }
   for (const id of pageCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
   for (const id of messageIdCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
+  for (const id of toolIdentityCoveredLiveItemIds(pageItems, liveItems)) remove.add(id);
   return [...remove];
+}
+
+// A live assistant row with no visible text cannot be matched by signature or
+// text, so the tool calls that follow it carry its identity instead: if any of
+// the tools directly after the row already exists in the page, the page owns
+// that stretch of the turn and the live copy has to yield. The tool rows
+// themselves yield on the same identity. Steer produces exactly these rounds,
+// which is why they used to co-mount (a duplicate pair per round, the earlier
+// answer surfacing under the newest tool).
+//
+// History rows id their tool calls `he:<toolCallId>` while live rows use the
+// bare call id, so both sides strip that namespace before comparing; the call
+// id itself is provider-issued and stays identical across the two copies.
+export function toolIdentityCoveredLiveItemIds(
+  pageItems: readonly SignatureItem[],
+  liveItems: readonly SignatureItem[],
+): string[] {
+  const pageTools = new Set<string>();
+  for (const item of pageItems) if (item.kind === "tool") pageTools.add(item.id.replace(/^he:/, ""));
+  const out: string[] = [];
+  let pending: string | undefined;
+  for (const item of liveItems) {
+    if (item.kind === "assistant") { pending = item.id; continue; }
+    if (item.kind === "user") { pending = undefined; continue; }
+    if (item.kind !== "tool" || !pageTools.has(item.id.replace(/^he:/, ""))) continue;
+    out.push(item.id);
+    if (pending) out.push(pending);
+    pending = undefined;
+  }
+  return out;
 }
 
 // True when the page carries the running turn's own heading AND its output, so
