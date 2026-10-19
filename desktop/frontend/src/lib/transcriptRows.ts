@@ -75,6 +75,10 @@ function assistantHasVisibleAnswer(item: AssistantItem, live: TranscriptLiveFlag
   return live.id === item.id && live.hasAnswerText;
 }
 
+// A reasoning block earns a row only when it has something to show; the renderer
+// trims and returns null otherwise, so a truthy-only test disagreed with it and
+// a whitespace-only `reasoning` (" ") counted as "1 thought" over an empty body.
+
 // Splits a turn by channel, not by position: reasoning, tools, phases, info
 // notices, and compaction cards are process material and fold; every assistant
 // message with answer text is model output addressed to the user and stays
@@ -142,7 +146,7 @@ export function partitionTurnItems(items: readonly Item[], live: TranscriptLiveF
       pushProcess(item);
       continue;
     }
-    const hasReasoning = Boolean(item.reasoning || (live.id === item.id && live.hasReasoning));
+    const hasReasoning = item.reasoning.trim() !== "" || (live.id === item.id && live.hasReasoning);
     if (assistantHasVisibleAnswer(item, live)) {
       if (hasReasoning) pushProcess(assistantReasoningOnly(item));
       pushOutside(item);
@@ -276,7 +280,7 @@ function foldDisplayItems(items: readonly Item[], live: TranscriptLiveFlags, hid
   return items.filter((it) => {
     if (it.kind === "assistant") {
       if (hideReasoning) return false;
-      return Boolean(it.reasoning || (live.id === it.id && live.hasReasoning));
+      return it.reasoning.trim() !== "" || (live.id === it.id && live.hasReasoning);
     }
     if (it.kind === "phase") return true;
     if (it.kind === "notice") return true;

@@ -796,12 +796,12 @@ export const AssistantMessage = memo(function AssistantMessage({
   const presentation = useWorkProcessPresentation();
   const hasText = item.streaming || item.text.trim() !== "";
   const hasFootnotes = Boolean(item.searchSources?.length);
-  const processOnly = Boolean(item.reasoning) && !hasText && !hasFootnotes;
-  const processWithText = Boolean(item.reasoning) && (hasText || hasFootnotes);
+  const processOnly = item.reasoning.trim() !== "" && !hasText && !hasFootnotes;
+  const processWithText = item.reasoning.trim() !== "" && (hasText || hasFootnotes);
   const reasoningFallback = <div className="reasoning reasoning--loading" data-expanded={defaultExpanded || presentation.keepExpandedAfterCompletion || (item.streaming && (presentation.showWhileRunning || expandWhileStreaming)) ? "" : undefined} aria-hidden />;
   return (
     <div className={`msg msg--assistant${processOnly ? " msg--process-only" : ""}${processWithText ? " msg--process-with-text" : ""}`} data-history-restore={item.id.startsWith("h") ? "" : undefined} data-entrance={item.id}>
-      {item.reasoning && (
+      {item.reasoning.trim() !== "" && (
         <Suspense fallback={reasoningFallback}>
           <AssistantReasoningPanel item={item} defaultExpanded={defaultExpanded} expandWhileStreaming={expandWhileStreaming} />
         </Suspense>

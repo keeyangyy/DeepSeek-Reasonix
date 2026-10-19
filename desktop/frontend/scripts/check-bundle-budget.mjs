@@ -473,6 +473,12 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // the action-aware sub-agent counting and the capability subject — measure 2439.0
 // KiB raw after trimming the new module down. Widen the raw ceiling to 2439.5 and
 // keep 0.5 KiB of toolchain headroom; gzip and chunk budgets stay put.
-const rawInitialBudgetKiB = 2_439.5;
+// 2026-10-19: the blank-reasoning fix (trim-based reasoning presence in three
+// places) lands on a ceiling that was already fully spent — the 0.5 KiB headroom
+// recorded above was consumed by later work, so 6d25f59cd/915d6c9ba had to shave
+// bytes to stay under it. Measured 2439.53 KiB after inlining the predicate (no
+// new module, smallest possible delta). Widen to 2440.0 and keep 0.5 KiB of
+// headroom again; gzip and chunk budgets stay put.
+const rawInitialBudgetKiB = 2_440;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
