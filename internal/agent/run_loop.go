@@ -42,11 +42,28 @@ type streamedTurn struct {
 
 func (s streamedTurn) assistantMessage() provider.Message {
 	return provider.Message{
-		Role: provider.RoleAssistant, Content: s.text, ReasoningContent: s.reasoning,
+		Role: provider.RoleAssistant, Content: s.text, ReasoningContent: normalizeReasoning(s.reasoning),
 		ReasoningState: s.reasoningState, ThinkingBlocks: s.thinkingBlocks,
 		ReasoningSignature: s.signature, ReasoningID: s.reasoningID, ReasoningStatus: s.reasoningStatus,
 		ToolCalls: s.calls, ResponsesItems: s.responsesItems, ServerSearch: s.serverSearch,
 	}
+}
+
+// normalizeReasoning drops a reasoning block that carries no text. Providers
+// return a whitespace-only block on some tool-call turns — one 820-row session
+// held 559 of them (mostly a single space) against 48 with real content — and
+// storing those as-is made every reader disagree about emptiness: the desktop
+// header counted them as thoughts while the renderer trimmed them to nothing.
+// Storing "" removes the ambiguity for history, projection and replay alike.
+//
+// Only blank-and-nothing-else is dropped: any block with real text keeps its
+// exact bytes, including surrounding whitespace, because preserved-thinking
+// protocols require the returned content to stay complete and unchanged.
+func normalizeReasoning(reasoning string) string {
+	if strings.TrimSpace(reasoning) == "" {
+		return ""
+	}
+	return reasoning
 }
 
 // beginRunTurn handles evidence scope, delivery classification, background-job
@@ -243,7 +260,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 			ID:                 msgID,
 			Role:               provider.RoleAssistant,
 			Content:            text,
-			ReasoningContent:   reasoning,
+			ReasoningContent:   normalizeReasoning(reasoning),
 			ReasoningSignature: signature,
 			ReasoningID:        streamed.reasoningID,
 			ReasoningStatus:    streamed.reasoningStatus,
