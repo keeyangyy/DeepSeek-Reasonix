@@ -11,8 +11,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	fileenc "reasonix/internal/fileutil/encoding"
 )
 
 // InjectFail is a test seam. When set, CommitRewind fails at the named phase
@@ -560,15 +558,9 @@ func (s *Store) prepareTransaction(plan RewindPlan, applier ConversationApplier)
 						return nil, lerr
 					}
 				} else if rev.Content != nil {
-					enc := fileenc.UTF8
-					if rev.Encoding != nil {
-						enc = *rev.Encoding
-					} else if current := s.detectCurrentEncoding(abs); current != nil {
-						enc = *current
-					}
-					var encErr error
-					if data, encErr = fileenc.Encode(*rev.Content, enc); encErr != nil {
-						return nil, encErr
+					var eerr error
+					if data, eerr = s.encodeForWrite(rev, abs); eerr != nil {
+						return nil, eerr
 					}
 				} else {
 					return nil, fmt.Errorf("missing restore payload for %s", p)
@@ -1698,13 +1690,7 @@ func (s *Store) CommitFileRevert(planID string, resolution ConflictResolution) (
 		t.Action = "write"
 		data, lerr := s.loadRevisionBytes(rev)
 		if lerr != nil && rev.Content != nil {
-			enc := fileenc.UTF8
-			if rev.Encoding != nil {
-				enc = *rev.Encoding
-			} else if current := s.detectCurrentEncoding(abs); current != nil {
-				enc = *current
-			}
-			data, lerr = fileenc.Encode(*rev.Content, enc)
+			data, lerr = s.encodeForWrite(rev, abs)
 		}
 		if lerr != nil {
 			return RewindResult{OK: false, Error: lerr.Error()}, lerr
