@@ -78,6 +78,12 @@ func (g *gzipBufferedWriter) WriteHeader(code int) {
 }
 
 func (g *gzipBufferedWriter) Write(p []byte) (int, error) {
+	// Establish the response type at the byte-write boundary, including writes
+	// after Flush. Explicit handler types (JSON, HTML, downloads) are preserved.
+	if g.ResponseWriter.Header().Get("Content-Type") == "" {
+		g.ResponseWriter.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	g.ResponseWriter.Header().Set("X-Content-Type-Options", "nosniff")
 	if g.gz != nil {
 		return g.gz.Write(p)
 	}
