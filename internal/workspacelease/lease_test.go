@@ -241,12 +241,15 @@ func TestIndependentWorkspacesDoNotBlockEachOther(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := New(t.TempDir(), locks, nil)
+	secondRoot, _ := unrelatedTreePath(t, first, t.TempDir())
+	second, err := New(secondRoot, locks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first.BeginRun()
 	second.BeginRun()
+	t.Cleanup(first.EndRun)
+	t.Cleanup(second.EndRun)
 	if err := first.AcquireWrite(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -255,8 +258,6 @@ func TestIndependentWorkspacesDoNotBlockEachOther(t *testing.T) {
 	if err := second.AcquireWrite(ctx); err != nil {
 		t.Fatalf("independent workspace was blocked: %v", err)
 	}
-	first.EndRun()
-	second.EndRun()
 }
 
 func TestLeaseMetadataNeverDirtiesWorkspace(t *testing.T) {
@@ -422,14 +423,18 @@ func TestNestedRepoPathWritesRunInParallel(t *testing.T) {
 	}
 	first.BeginRun()
 	second.BeginRun()
-	if err := first.AcquireWriteForPath(context.Background(), filepath.Join(repoA, "a.go")); err != nil {
+	t.Cleanup(first.EndRun)
+	t.Cleanup(second.EndRun)
+	firstPath := filepath.Join(repoA, "a.go")
+	secondPath := distinctPathSlotInDirectory(t, second, repoB, canonicalPathSlot(t, first, firstPath))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := first.AcquireWriteForPath(ctx, firstPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.AcquireWriteForPath(context.Background(), filepath.Join(repoB, "b.go")); err != nil {
+	if err := second.AcquireWriteForPath(ctx, secondPath); err != nil {
 		t.Fatal(err)
 	}
-	first.EndRun()
-	second.EndRun()
 }
 
 func TestExclusiveWorkspaceWriteBlocksNestedRepoPath(t *testing.T) {
@@ -479,14 +484,17 @@ func TestSameRepoDifferentFilesRunInParallel(t *testing.T) {
 	}
 	first.BeginRun()
 	second.BeginRun()
-	if err := first.AcquireWriteForPath(context.Background(), filepath.Join(repo, "a.go")); err != nil {
+	t.Cleanup(first.EndRun)
+	t.Cleanup(second.EndRun)
+	firstPath, secondPath := increasingPathSlots(t, first)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := first.AcquireWriteForPath(ctx, firstPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.AcquireWriteForPath(context.Background(), filepath.Join(repo, "b.go")); err != nil {
+	if err := second.AcquireWriteForPath(ctx, secondPath); err != nil {
 		t.Fatal(err)
 	}
-	first.EndRun()
-	second.EndRun()
 }
 
 func TestSameFilePathWritesStillSerialize(t *testing.T) {

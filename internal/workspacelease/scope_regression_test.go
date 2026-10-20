@@ -353,24 +353,6 @@ func TestHierarchyLocksDoNotSerializeUnrelatedWorkspaces(t *testing.T) {
 	releasePath()
 }
 
-func unrelatedTreePath(t *testing.T, blocker *Owner, base string) (string, string) {
-	t.Helper()
-	blockedSlot := blocker.treeLockPath(blocker.canonical)
-	for i := 1; i < treeLockStripes*2; i++ {
-		root := filepath.Join(base, fmt.Sprintf("workspace-%d", i))
-		path := filepath.Join(root, "b.go")
-		if blocker.treeLockPath(root) == blockedSlot || blocker.treeLockPath(path) == blockedSlot {
-			continue
-		}
-		if err := os.Mkdir(root, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		return root, path
-	}
-	t.Fatal("could not find unrelated hierarchy lock slots")
-	return "", ""
-}
-
 func TestHierarchyProtocolIntersectsOldExactWorkspaceLocks(t *testing.T) {
 	parent, locks := t.TempDir(), t.TempDir()
 	nested := filepath.Join(parent, "nested")
