@@ -125,7 +125,7 @@ func TestHeartbeatLoadTasksDecodesGB18030Config(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(engine.configPath()), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(engine.configPath(), fileencoding.Encode(body, fileencoding.GB18030), 0o644); err != nil {
+	if err := os.WriteFile(engine.configPath(), fileencoding.MustEncode(body, fileencoding.GB18030), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
