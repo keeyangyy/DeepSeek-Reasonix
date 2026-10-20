@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	fileenc "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/proc"
 	"reasonix/internal/tool"
 )
@@ -248,7 +249,7 @@ func newOutputCollector(combinedLimit, tailLimit int) *outputCollector {
 func (c *outputCollector) tailString() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return string(c.tail.buf)
+	return string(fileenc.DecodeOutput(c.tail.buf, fileenc.Cut{Head: c.tail.cut}))
 }
 
 // boundedBuffer keeps complete output up to limit. Once output crosses the
@@ -292,13 +293,13 @@ func (b *boundedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !b.truncated {
-		return b.buf.String()
+		return string(fileenc.DecodeOutput(b.buf.Bytes(), fileenc.Cut{}))
 	}
 	var out strings.Builder
 	out.Grow(b.buf.Len() + len(b.marker) + len(b.tail))
-	out.Write(b.buf.Bytes())
+	out.Write(fileenc.DecodeOutput(b.buf.Bytes(), fileenc.Cut{Tail: true}))
 	out.WriteString(b.marker)
-	out.Write(b.tail)
+	out.Write(fileenc.DecodeOutput(b.tail, fileenc.Cut{Head: true}))
 	return out.String()
 }
 
@@ -320,6 +321,7 @@ type tailWriter struct {
 	mu    *sync.Mutex
 	limit int
 	buf   []byte
+	cut   bool // bytes before buf were dropped to hold the limit
 }
 
 func (w *tailWriter) Write(p []byte) (int, error) {
@@ -328,6 +330,7 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 	w.buf = append(w.buf, p...)
 	if w.limit > 0 && len(w.buf) > w.limit {
 		w.buf = append([]byte(nil), w.buf[len(w.buf)-w.limit:]...)
+		w.cut = true
 	}
 	return len(p), nil
 }
