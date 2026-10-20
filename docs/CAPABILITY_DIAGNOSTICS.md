@@ -183,6 +183,60 @@ The page never edits config, executes hooks, auto-enables packages, or
 reconnects MCP. Opening Diagnostics does not rebuild the controller or snapshot
 the session.
 
+### Frontend transcript recorder (opt-in, temporary)
+
+`desktop/frontend/src/lib/frontendDiagnosticRows.ts` extends the same local
+opt-in recorder with transcript-level events, aimed at history-vs-live merge
+bugs (a row landing in the wrong place after a mid-turn steer).
+
+What it records, and what it deliberately does **not**:
+
+| Event | Fields | Notes |
+| --- | --- | --- |
+| `history` / `items.tail` | `r0`..`r5` row descriptors + kind sequence | Sequence is kind initials only (e.g. `uattnat`), capped at 60 chars |
+| `history` / `history.page-rows` | Incoming page's own rows and sequence | Lets a capture compare the page against the merged result |
+| `history` / `items.removed`, `items.dupes` | ids and counts | Both merge sides kept for comparison |
+| `runtime` / `wire` | `stream_attempt`, `steer`, `turn_started`, `turn_done` | Steer records **length only**, never text |
+
+A row descriptor is `kind.initials.id[.status].m<msgTail>.textLen.reasoningLen`.
+Text and reasoning are always recorded as **lengths**, never content, and ids are
+truncated. Every value stays inside `[a-zA-Z0-9._:-]{1,64}` because the recorder
+drops any longer field outright — when a descriptor would exceed 64 characters,
+`status` is dropped first so identity and both lengths survive.
+
+**This is temporary field-diagnosis scaffolding.** It costs about 1.5 KiB of raw
+bundle budget: `scripts/check-bundle-budget.mjs` raises the ceiling from 2440.0
+KiB to 2441.5 KiB for it. When the capture is retired, drop the ceiling back to
+2440.0 and reclaim that headroom.
+
+
+## Session fingerprint health (`doctor fingerprint`)
+
+A session can reach a state where its authoritative sidecar and its derived
+display index no longer describe the same transcript. Once that happens every
+index validation fails and history paging stalls — the session looks like
+unrepairable stale history even though the transcript itself is intact.
+
+`internal/doctor/fingerprint.go` classifies the mismatch:
+
+| Status | Meaning |
+| --- | --- |
+| `ok` | Sidecar and index describe the current transcript. |
+| `stale-meta` | The sidecar claims an identity that no longer matches the transcript. |
+| `stale-index` | The display index does not validate against the transcript. |
+| `foreign-schema` | Written by another line or a different schema version. |
+| `damaged` | The transcript cannot be replayed at all. |
+
+`reasonix doctor fingerprint` reports the verdict per session, and the desktop
+app can self-heal the `stale-meta` shape. Self-heal is gated behind
+`REASONIX_SESSION_FINGERPRINT_SELFHEAL=1` and is off by default, so the behaviour
+can be observed before it becomes the default path
+(`desktop/session_fingerprint_selfheal.go`).
+
+Reading a session whose sidecar still carries a foreign-only key is a separate
+question — see [SESSION_OWNERSHIP.md](SESSION_OWNERSHIP.md) for how a session's
+line is decided.
+
 ## JSON schema (version 1)
 
 Top-level fields:

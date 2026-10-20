@@ -405,6 +405,30 @@ Prune and summary commits are deliberate cache-reset points. Between maintenance
 runs the session remains append-only and cache-friendly. `context_window = 0`
 disables automatic compaction for an instance.
 
+**Folded-work index and recall.** A compaction digest can carry a folded-work
+index, and the `recall` tool reads folded content back through it. It is on by
+default (`agent.fold_index`, `internal/config/config.go`); setting it to `false`
+omits the index, which drops the per-fold byte cost but leaves folded material
+reachable only through the canonical transcript. `FoldIndexEnabled()` treats an
+absent key as enabled.
+
+**Cache-continuous prefix after a fold.** The post-compaction request keeps a
+continuous prefix rather than restarting it: the summary is spliced in without
+disturbing the bytes before it, so the provider's prompt cache stays warm across
+the maintenance boundary instead of re-charging the whole prefix.
+
+**A failed compaction reports why.** When a compaction cannot complete, the
+abort is not silent: `emitCompactionAborted(trigger, reason)` carries the
+failing stage (`prepare failed`, `summary failed`, or an explicit trigger reason)
+so the transcript and the toolbar can show what stopped it. See
+`internal/agent/compact_projection.go`.
+
+**An invalidated projection is rebuilt, not replayed.** When a projection stops
+covering the history it claims, the request is rebuilt from the covered span
+instead of replaying the whole session. Validity is judged by the stretch of
+history the projection actually covers, not by session identity, so a projection
+that still spans the live range stays usable while a stale one is discarded.
+
 ### 3.7 Permissions (`internal/permission`) — per-call gating
 
 A coding agent runs shell commands and edits files autonomously. The permission

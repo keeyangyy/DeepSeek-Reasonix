@@ -117,3 +117,54 @@ that every frontend issue since 1.23.0 has been eliminated.
 An approved measurement batch also owns its next geometry commit. A layout-effect state update completes that commit before paint rather than relying on TanStack notification scheduling. The commit installs the complete published prefix and either its covering candidate or a range reconstructed from that same prefix. Retaining the older prefix would defer already-approved offscreen growth until native scrolling brings it into view. Unsolicited stale range notifications still retain the last covering snapshot.
 
 Input ownership also gates intent changes: an unowned scroll event may be a layout clamp or a delayed writer notification, so it cannot change the logical reading anchor or cancel tail follow. Structural transactions use the existing logical anchor. Touch momentum and native thumb release retain the same renewable native-input lease; a jump-bottom command explicitly ends the older lease. Lease renewal does not synthesize a scroll observation, and no-op writes do not erase pending writer provenance.
+
+## Row identity, folding and mid-turn steer
+
+This section covers the data layer that feeds the renderer: which id a row
+carries, how a turn's work splits into fold groups, and what happens when the
+user inserts a message into a running turn. Geometry and windowing are owned by
+the sections above.
+
+**Rows carry a stable identity from the backend.** A history row exposes
+`messageId`, the ULID the row was converted from (`desktop/history_slice.go`), so
+the same message keeps one id across a reload, a page landing, and a live
+rebuild. Pages also expose `openTurnId` for the in-flight turn; the frontend uses
+it to decide that this page owns that turn and drops the turn's matching live
+rows (`a:<turnId>:…`) instead of co-mounting both. Without a shared id, a page
+arriving mid-turn could only be matched by text or position, which is what made
+duplicate and reordered rows possible.
+
+**Fold groups honour a four-value policy.** A turn's work process folds into the
+"N tools · M thoughts" headers under one of four policies
+(`desktop/frontend/src/lib/processFoldPolicy.ts`):
+
+| Policy | Behaviour |
+| --- | --- |
+| `follow-turn` (default) | The running turn keeps its groups open; a settled turn folds them. |
+| `collapsed` | Every group starts folded, including the one producing output. A manual toggle still wins. |
+| `active-only` | Only the group producing output stays open; a group that already settled inside the running turn folds immediately. |
+| `always-expanded` | Every group stays open, including after the turn ends. |
+
+The policy is a frontend-local presentation preference stored in `localStorage`;
+it is deliberately not part of the backend two-mode session-experience contract,
+so it stays inert under "Deep".
+
+A fold group only renders items the body would actually show. An assistant item
+enters the group stripped to its reasoning, so reasoning presence is what keeps
+it: a row whose reasoning trims to empty is dropped, except for the live row that
+the running turn is still streaming into.
+
+**A steer splits the running turn's work.** Inserting a message mid-turn emits a
+`steer` event and a new `stream_attempt`; the tools and reasoning before it belong
+to the turn's first stretch, everything after to the next. Because the page for
+that turn arrives with the same tool call ids the live rows used, overlap is
+judged on the provider-issued tool id (history ids are namespaced `he:<toolCallId>`,
+live ids are bare) rather than on text: a tool-only round has no text to compare,
+and comparing ids is the only identity that does not depend on streaming
+progress. A compaction card inserted while a turn runs anchors to its covered row
+so it restores to that position when the tab is switched back, rather than
+sinking to the bottom of the message flow.
+
+See [the dedupe design report](reasonix-transcript-dedup-report.md) for the
+merge-time defences, and [REASONING_CONTRACT.md](REASONING_CONTRACT.md) for the
+blank-reasoning rule the fold filter depends on.

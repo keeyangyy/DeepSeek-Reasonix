@@ -80,6 +80,12 @@ Layer 3: 返回前断言守护（transcriptStore / useController）
 | 1 | `replaceRemoveIds`（main-v2） | 按 id / activeTurnId 前缀 / `pageCoveredLiveItemIds` 去重 | `pageCoveredLiveItemIds` **只处理 user/notice**，不处理 assistant |
 | 2 | `findDuplicateItemIds`（本分支） | 按 `itemSignature` 做 multiset 去重 | **处理所有 kind**，但**不理解 turn 配对** |
 
+> ⚠️ **以上表格为 2026-09-19 历史分析，现状已变化**（证据见 3.6）：`replaceRemoveIds` 现由**四个**来源组成，
+> `pageCoveredLiveItemIds` 只覆盖 user/notice 这一点**仍然成立**，但 assistant 已由
+> `messageIdCoveredLiveItemIds`（有 messageID 时）与 `toolIdentityCoveredLiveItemIds`（纯工具轮）补上；
+> `findDuplicateItemIds` 已**不再参与生产去重**（无调用点，仅测试引用）。
+
+
 **关键代码路径**：
 
 ```ts
@@ -119,6 +125,10 @@ if (
 - 原有 `duplicateLiveItemIds` 只处理**连续**的 page suffix 和 live prefix，不会出现"只移除 user 不移除 assistant"的情况
 - `replaceRemoveIds` 虽然处理了 user/notice，但 assistant 不在其处理范围内
 - 两层去重同时作用时，才会产生**部分移除**的异常情况
+
+> 补充（2026-10-20）：第二点已被后续修复补上——assistant 现在由
+> `messageIdCoveredLiveItemIds` 与 `toolIdentityCoveredLiveItemIds` 覆盖，见 3.6。
+
 
 ### 3.5 修复方案
 
@@ -277,3 +287,50 @@ live user 保留 / 同 id tool 仍去重），先红后绿（107 passed）。
 - （已实现）生产短路；如需"生产亦观测"，走 items.dupes 诊断
 - `historyMessagesToItems` ID 生成彻底统一（需评估投入产出比）
 - Turn-aware dedup：给 `SignatureItem` 增加 `turnId` 字段，让 dedup 函数理解 pairing
+
+---
+
+## 附录 A：现状核对（2026-10-20）
+
+> 本文档正文写于 2026-09-19，其后代码有多次演进。本附录是**基于源码逐条核对**的现状，
+> 与正文冲突时**以本附录为准**。所有行号对应 `desktop/frontend/src/lib/hydrateHistoryApply.ts`。
+
+### A.1 `replaceRemoveIds` 现有四个去重来源
+
+`replaceRemoveIds`（第 369 行）合并以下来源，正文只记录了前两项：
+
+| 来源 | 行号 | 覆盖范围 |
+|------|------|----------|
+| id 相等 / `a:<activeTurnId>:` 前缀 | 380-383 | 所有 kind |
+| `pageCoveredLiveItemIds` | 382 | **仅 user / notice**（第 589 行 `if (item.kind !== "user" && item.kind !== "notice") continue;` 仍然如此） |
+| `messageIdCoveredLiveItemIds` | 383 | assistant，按 `messageID` 匹配（第 602 行） |
+| `toolIdentityCoveredLiveItemIds` | 384 | assistant + tool，按 toolCallId（第 399 行） |
+
+**因此正文「assistant 不在其处理范围内」已经不成立**：assistant 现在有两条覆盖路径。
+
+### A.2 `toolIdentityCoveredLiveItemIds`（正文未记录）
+
+- 历史行 tool id 是 `he:<toolCallId>`，live 行是裸 `<toolCallId>`，两侧统一 `id.replace(/^he:/, "")` 后比较（第 396-398 行注释、第 404 行）
+- 覆盖的正是**无正文 assistant 行**：这类行没有 text 可做签名匹配，只能由其后紧跟的 tool 身份判定（第 387-395 行注释原文：*"Steer produces exactly these rounds, which is why they used to co-mount"*）
+- 命中时同时移除该 tool 行与其前面 pending 的 assistant 行（第 411-412 行）
+
+### A.3 `findDuplicateItemIds` 已不参与生产去重
+
+- 全仓库 grep 结果：除定义（第 472 行）外，**只有 `__tests__/transcript-dedup-regression.test.ts` 引用**，无任何生产调用点
+- 正文 3.5 节「已实施：`history_rebase` / `history_prepend` 的兜底去重只传 `["tool"]`」与现状不符：
+  - `useController.ts:2355`（rebase）与 `:2415`（prepend）调用的是 `duplicateItemRows(merged).length`，**只计算残留数量用于记录异常**（`noteOrderAnomaly`），不做删除
+  - `history_rebase` 的 `removeIds` 来自 `replaceRemoveIds(...)`（`useController.ts:3274`）；`history_prepend` 同理（`:3367`）
+
+### A.4 其他正文与现状的差异
+
+- **`history_replace` 不经过 `replaceRemoveIds`**：`useController.ts` 的 `history_replace` 分支直接采用整页 items，因此上述四个来源都**不覆盖整页替换路径**
+- Bundle 预算：正文第 264 行记 2407.0 KiB，现为 **2441.5 KiB**（`scripts/check-bundle-budget.mjs:491`），其中 2440.0 是基线，1.5 KiB 为诊断脚手架临时放宽
+
+### A.5 仍未定位的问题
+
+「插入消息（steer）后思考块错位」**至今未定位**。已排除的假设：
+
+- 运行中段数少算：reducer 层复刻验证运行中与结束后 assistant 段数一致，`item.reasoning` 运行中已落位
+- 已知特征：仅在会话运行中出现，本轮结束后自行恢复，切换会话再切回也恢复
+
+排查脚手架已随 1.38.54-beta.10 发出（前端诊断 `frontendDiagnosticRows.ts`）。

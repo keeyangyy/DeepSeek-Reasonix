@@ -122,3 +122,11 @@ func (c *Controller) UndoRewind(transactionID string) (RewindResult, error)
 
 - 是否在 `/compact` 和 `NewSession` 边界创建快照？
 - 是否需要在 `[checkpoints]` 配置中公开 100 回合与 1 GiB 软字节上限？
+## 长工具运行期间的列表存活
+
+工具检查点会保存 transcript 并推迟开销较大的显示索引。侧车计数不属于该推迟范围：它们是
+catalog 的存活回执，若在长时间工具运行期间让它们自我失效，正在活跃运行的会话看起来就会像
+无法修复的过期历史。
+
+因此 `save_tool_checkpoint.go` 在每次检查点都会发布列表投影，即便显示索引本身仍被推迟。
+若要在此新增推迟，请保持这个区分——推迟索引是安全的，推迟计数不是。

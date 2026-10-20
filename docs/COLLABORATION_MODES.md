@@ -33,3 +33,19 @@ for approval.
 Goal mode keeps working inside the stated objective. Blocked Goals write into
 the existing Goal state. Ordinary tasks that cannot satisfy a strict obligation
 return a blocked explanation and must not look successful.
+
+## Write claims are limited to declared paths
+
+A write claim answers one question: may this tool call run while another writer
+holds a claim. Claim scope is deliberately narrow — only path-aware built-ins
+reserve their concrete targets.
+
+Bash and MCP/custom writers reserve nothing. Their targets are not statically
+knowable, so reserving the whole workspace would make every shell command
+serialize against any running background writer — including a proven read-only
+command the safety classifier did not recognise. That serialization is what
+previously made concurrent work look unavailable.
+
+The consequence is a deliberate trade: a sub-agent that declares no `write_paths`
+does not infer a whole-workspace scope, so it keeps running in parallel. The
+declared paths remain the boundary that is actually enforced.

@@ -43,3 +43,25 @@ migration or copy Harness's request journal architecture.
 The design is independently implemented for Reasonix, informed by
 [DeepSeek Harness's adapter-owned reasoning contract](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/.agents/notes/implemented/architecture/2026-07-24-adapter-owned-reasoning-effort-capabilities.md).
 No upstream implementation was copied.
+
+## Blank reasoning is stored as empty
+
+A provider can return a reasoning block that contains only whitespace on turns
+where it did not actually reason. Those blocks are real `reasoning_content`
+values — one measured 820-row transcript carried 559 whitespace-only blocks
+against 48 with content — and persisting them verbatim made every reader disagree
+about emptiness: the desktop header counted them as thoughts while the renderer
+trimmed them to nothing.
+
+`normalizeReasoning` (`internal/agent/run_loop.go`) resolves that at the write
+boundary: a value whose `strings.TrimSpace` result is empty becomes `""`, so
+history, projection, and replay all see the same thing.
+
+The rule is deliberately narrow. Any block with real text keeps its exact bytes,
+including surrounding whitespace, because preserved-thinking protocols require
+the returned content to stay complete and unchanged. Normalisation is not applied
+on read, so already-persisted sessions keep whatever form they were written in.
+
+Because the frontend fold filter keeps an assistant row on reasoning presence
+(`it.reasoning.trim() !== ""`), stored-empty reasoning is what stops a
+whitespace-only round from inflating a turn's thought count.

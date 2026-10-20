@@ -31,3 +31,18 @@
 
 参考 [DeepSeek Harness 设计](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/.agents/notes/implemented/architecture/2026-07-24-adapter-owned-reasoning-effort-capabilities.zh.md)
 独立实现，未复制上游代码。
+## 纯空白 reasoning 存为空串
+
+Provider 在并未真正推理的回合里，可能返回只含空白的 reasoning 块。这些是真实的
+`reasoning_content` 值——某份 820 行 transcript 中，纯空白块有 559 条，有内容的仅 48 条——
+原样落盘会让每个读取方对「空」的判断不一致：桌面端折叠头把它们算作思考段，而渲染层
+trim 之后什么都不显示。
+
+`normalizeReasoning`（`internal/agent/run_loop.go`）在写入边界解决这件事：`strings.TrimSpace`
+结果为空的值存为 `""`，于是 history、投影与 replay 看到的是同一个结果。
+
+这条规则刻意收窄。任何有实际文字的块都保留原有字节，包括其前后的空白——保留思考的协议要求
+返回内容完整不变。归一化不在读取时进行，因此已落盘的会话保持写入时的形态。
+
+由于前端折叠过滤以 reasoning 是否存在为判据（`it.reasoning.trim() !== ""`），存为空串正是
+纯空白回合不会虚增思考段数的原因。

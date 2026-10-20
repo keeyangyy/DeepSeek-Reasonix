@@ -92,3 +92,18 @@ retired heads next to the recovery-copy numbers.
 Format 2 opens in Reasonix 1.39.0 and newer. Mixed installations should
 upgrade the older side before sharing a session directory; the older binary
 reports the newer format and does not modify the file.
+
+## Event log rotation
+
+A session's event log rotates when it grows past its bound, keeping the nodes
+reachable from a live head and dropping the rest. The size test and the rotation
+must measure the same set of nodes, or rotation can never fire.
+
+The bound is the encoded size of what a rotation would keep: every node reachable
+from a live head, counted once, plus the system override each head contributes.
+Heads share chain prefixes — a fork or a concurrent head reuses its parent's
+whole chain — so summing per-head chains counts a shared prefix once per head and
+inflates the bound until an oversized log never qualifies.
+
+Any change to what `buildRotatedSessionDAG` keeps must be mirrored in that
+measurement; see `internal/agent/session_dag_rotate.go`.
