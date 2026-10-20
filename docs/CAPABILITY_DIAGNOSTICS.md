@@ -183,6 +183,33 @@ The page never edits config, executes hooks, auto-enables packages, or
 reconnects MCP. Opening Diagnostics does not rebuild the controller or snapshot
 the session.
 
+### Frontend transcript recorder (opt-in, temporary)
+
+`desktop/frontend/src/lib/frontendDiagnosticRows.ts` extends the same local
+opt-in recorder with transcript-level events, aimed at history-vs-live merge
+bugs (a row landing in the wrong place after a mid-turn steer).
+
+What it records, and what it deliberately does **not**:
+
+| Event | Fields | Notes |
+| --- | --- | --- |
+| `history` / `items.tail` | `r0`..`r5` row descriptors + kind sequence | Sequence is kind initials only (e.g. `uattnat`), capped at 60 chars |
+| `history` / `history.page-rows` | Incoming page's own rows and sequence | Lets a capture compare the page against the merged result |
+| `history` / `items.removed`, `items.dupes` | ids and counts | Both merge sides kept for comparison |
+| `runtime` / `wire` | `stream_attempt`, `steer`, `turn_started`, `turn_done` | Steer records **length only**, never text |
+
+A row descriptor is `kind.initials.id[.status].m<msgTail>.textLen.reasoningLen`.
+Text and reasoning are always recorded as **lengths**, never content, and ids are
+truncated. Every value stays inside `[a-zA-Z0-9._:-]{1,64}` because the recorder
+drops any longer field outright — when a descriptor would exceed 64 characters,
+`status` is dropped first so identity and both lengths survive.
+
+**This is temporary field-diagnosis scaffolding.** It costs about 1.5 KiB of raw
+bundle budget: `scripts/check-bundle-budget.mjs` raises the ceiling from 2440.0
+KiB to 2441.5 KiB for it. When the capture is retired, drop the ceiling back to
+2440.0 and reclaim that headroom.
+
+
 ## JSON schema (version 1)
 
 Top-level fields:
