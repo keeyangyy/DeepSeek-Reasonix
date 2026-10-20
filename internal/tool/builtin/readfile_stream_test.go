@@ -87,7 +87,7 @@ func TestReadFileLargeUTF16UsesStreamingDecoder(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "big-utf16.txt")
-			if err := os.WriteFile(path, fileenc.Encode(content, tc.kind), 0o644); err != nil {
+			if err := os.WriteFile(path, fileenc.MustEncode(content, tc.kind), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			args, _ := json.Marshal(map[string]any{"path": path, "limit": 5})

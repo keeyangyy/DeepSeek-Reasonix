@@ -140,7 +140,7 @@ func TestWriteRecoveryRejectsChangedSymlinkTarget(t *testing.T) {
 
 func TestWriteRecoveryChecksEncoding(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "encoded.txt")
-	if err := os.WriteFile(path, fileenc.Encode("before", fileenc.UTF16LE), 0600); err != nil {
+	if err := os.WriteFile(path, fileenc.MustEncode("before", fileenc.UTF16LE), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var intent tool.FileWriteIntent

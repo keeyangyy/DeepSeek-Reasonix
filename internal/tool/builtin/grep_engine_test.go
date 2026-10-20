@@ -152,7 +152,7 @@ func TestGrepNativeStreamsUTF16WithAndWithoutBOM(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "windows-utf16.txt")
-			if err := os.WriteFile(path, fileenc.Encode(content, tc.kind), 0o644); err != nil {
+			if err := os.WriteFile(path, fileenc.MustEncode(content, tc.kind), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			out := runTool(t, grepTool{}, map[string]any{"pattern": "UTF16-END", "path": path})

@@ -108,7 +108,7 @@ func TestLoadProjectHooksByDefault(t *testing.T) {
 func TestLoadDecodesGB18030GlobalSettings(t *testing.T) {
 	home := t.TempDir()
 	body := `{"hooks":{"Stop":[{"command":"echo 中文","description":"全局"}]}}`
-	writeHookTestBytes(t, GlobalSettingsPath(home), fileencoding.Encode(body, fileencoding.GB18030))
+	writeHookTestBytes(t, GlobalSettingsPath(home), fileencoding.MustEncode(body, fileencoding.GB18030))
 
 	got := Load(LoadOptions{HomeDir: home})
 	if len(got) != 1 {
@@ -123,7 +123,7 @@ func TestLoadDecodesUTF8BOMProjectSettings(t *testing.T) {
 	home := t.TempDir()
 	proj := t.TempDir()
 	body := `{"hooks":{"PreToolUse":[{"match":"bash","command":"echo pre"}]}}`
-	writeHookTestBytes(t, ProjectSettingsPath(proj), fileencoding.Encode(body, fileencoding.UTF8BOM))
+	writeHookTestBytes(t, ProjectSettingsPath(proj), fileencoding.MustEncode(body, fileencoding.UTF8BOM))
 
 	got := Load(LoadOptions{HomeDir: home, ProjectRoot: proj, Trusted: true})
 	if len(got) != 1 {
@@ -984,7 +984,7 @@ func TestDefaultSpawnerUsesGitBashForExplicitShOnWindows(t *testing.T) {
 
 func TestDecodeHookOutputRecoversGB18030WindowsErrors(t *testing.T) {
 	want := `'sh' 不是内部或外部命令，也不是可运行的程序`
-	raw := fileencoding.Encode(want, fileencoding.GB18030)
+	raw := fileencoding.MustEncode(want, fileencoding.GB18030)
 	if got := decodeHookOutput(raw, false); got != want {
 		t.Fatalf("decoded hook stderr = %q, want %q", got, want)
 	}

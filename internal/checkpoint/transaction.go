@@ -566,7 +566,10 @@ func (s *Store) prepareTransaction(plan RewindPlan, applier ConversationApplier)
 					} else if current := s.detectCurrentEncoding(abs); current != nil {
 						enc = *current
 					}
-					data = fileenc.Encode(*rev.Content, enc)
+					var encErr error
+					if data, encErr = fileenc.Encode(*rev.Content, enc); encErr != nil {
+						return nil, encErr
+					}
 				} else {
 					return nil, fmt.Errorf("missing restore payload for %s", p)
 				}
@@ -1701,8 +1704,7 @@ func (s *Store) CommitFileRevert(planID string, resolution ConflictResolution) (
 			} else if current := s.detectCurrentEncoding(abs); current != nil {
 				enc = *current
 			}
-			data = fileenc.Encode(*rev.Content, enc)
-			lerr = nil
+			data, lerr = fileenc.Encode(*rev.Content, enc)
 		}
 		if lerr != nil {
 			return RewindResult{OK: false, Error: lerr.Error()}, lerr

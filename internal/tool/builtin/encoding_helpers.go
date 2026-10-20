@@ -18,8 +18,8 @@ func readFileEncoded(path string) (content string, enc fileenc.Kind, err error) 
 	if err != nil {
 		return "", 0, err
 	}
-	enc, _ = fileenc.Detect(b)
-	return string(fileenc.Decode(b, enc)), enc, nil
+	enc, text := fileenc.DetectAndDecode(b)
+	return string(text), enc, nil
 }
 
 // writeFileEncoded encodes content back to the given encoding and writes it.
@@ -27,7 +27,11 @@ func readFileEncoded(path string) (content string, enc fileenc.Kind, err error) 
 // driver holding a transient lock, a full disk) would leave the user's source
 // file empty or half-written.
 func writeFileEncoded(path string, content string, enc fileenc.Kind) error {
-	return fileutil.AtomicOverwriteFile(path, fileenc.Encode(content, enc), 0o644)
+	data, err := fileenc.Encode(content, enc)
+	if err != nil {
+		return err
+	}
+	return fileutil.AtomicOverwriteFile(path, data, 0o644)
 }
 
 // matchLineEndings adapts an edit's old/new text to a CRLF file when the literal

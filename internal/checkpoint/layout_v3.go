@@ -27,17 +27,17 @@ func (s *Store) v3BeforePath(turn, index int) string {
 	return filepath.Join(s.turnDir(turn), "files", fmt.Sprintf("%04d.before", index))
 }
 
-func v3PayloadBytes(f FileSnap) []byte {
+func v3PayloadBytes(f FileSnap) ([]byte, error) {
 	if f.rawContent != nil {
-		return f.rawContent
+		return f.rawContent, nil
 	}
 	if f.Content == nil {
-		return nil
+		return nil, nil
 	}
 	if f.Encoding != nil {
 		return fileenc.Encode(*f.Content, *f.Encoding)
 	}
-	return []byte(*f.Content)
+	return []byte(*f.Content), nil
 }
 
 func (s *Store) persistV3(c *Checkpoint) error {
@@ -75,7 +75,11 @@ func (s *Store) persistV3(c *Checkpoint) error {
 		snap.BlobRef = ""
 		payloadPath := s.v3BeforePath(c.Turn, i)
 		if f.Content != nil && !f.PayloadExpired {
-			if err := fileutil.AtomicWriteFile(payloadPath, v3PayloadBytes(f), 0o644); err != nil {
+			payload, payloadErr := v3PayloadBytes(f)
+			if payloadErr != nil {
+				return payloadErr
+			}
+			if err := fileutil.AtomicWriteFile(payloadPath, payload, 0o644); err != nil {
 				return err
 			}
 			snap.Content = nil
