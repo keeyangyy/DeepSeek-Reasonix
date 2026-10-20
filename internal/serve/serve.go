@@ -1504,7 +1504,7 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name required", http.StatusBadRequest)
 		return
 	}
-	if name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+	if !filepath.IsLocal(name) || name == "." || strings.ContainsAny(name, `/\`) { // IsLocal also rejects Windows drive-relative and reserved names
 		http.Error(w, "invalid session name", http.StatusBadRequest)
 		return
 	}

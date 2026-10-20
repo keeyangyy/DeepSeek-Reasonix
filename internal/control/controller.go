@@ -1513,13 +1513,12 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 	case trimmed == "/compact" || strings.HasPrefix(trimmed, "/compact "):
 		focus := strings.TrimSpace(strings.TrimPrefix(trimmed, "/compact"))
 		go func() {
+			// CompactionDone already carries the outcome card to every sink; a
+			// second "compacted" notice only adds a folded duplicate row.
 			if err := c.Compact(context.Background(), focus); err != nil {
 				c.notice("compaction failed: " + err.Error())
-			} else {
-				c.notice("compacted")
-				if err := c.SnapshotRewrite(); err != nil {
-					slog.Warn("controller: snapshot after compact", "err", err)
-				}
+			} else if err := c.SnapshotRewrite(); err != nil {
+				slog.Warn("controller: snapshot after compact", "err", err)
 			}
 		}()
 	case trimmed == "/context":
@@ -3636,8 +3635,7 @@ func updateSessionListingProjection(s *agent.Session, path, modelRef, preview st
 	if !ok {
 		return fmt.Errorf("session persistence baseline missing after save")
 	}
-	_, err := agent.UpdateSessionListingProjectionIfCurrent(path, modelRef, preview, turns, markActivity, persisted)
-	return err
+	return updateSessionListingProjectionIfCurrent(s, path, modelRef, preview, turns, markActivity, persisted)
 }
 
 func (c *Controller) recoverExternallyRemovedSession(path string, saveErr error) (string, error) {
