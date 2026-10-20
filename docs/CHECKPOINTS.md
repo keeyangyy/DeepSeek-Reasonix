@@ -174,3 +174,15 @@ re-render uniformly.
 - Snapshot on `/compact` and on `NewSession` boundaries?
 - Whether to expose the 100-turn retention and 1 GiB soft byte limits in
   `[checkpoints]` config.
+
+## Listing liveness during a long tool run
+
+A tool checkpoint saves the transcript and defers the expensive display index.
+The sidecar counts are not part of that deferral: they are the catalog's liveness
+receipt, and leaving them self-invalidated across a long tool run makes an
+actively running session look like unrepairable stale history.
+
+`save_tool_checkpoint.go` therefore publishes the listing projection on every
+checkpoint even though the display index itself stays deferred. If you add a new
+deferral here, keep that split — deferring the index is safe, deferring the counts
+is not.

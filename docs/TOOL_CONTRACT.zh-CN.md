@@ -161,3 +161,23 @@ schema 编译失败回退策略不变。
 metrics 中旧的 `capability_loop_guard.RepeatFailures` 和 `BlockedCalls` 字段继续保留兼容，
 但新运行不再递增它们，也不将它们重新解释为 storm 干预次数；后者仍使用现有 `loop_guard` Notice。
 无需迁移会话或配置；降级会恢复旧版错误恢复行为，但不改变已存储会话。
+## Shell 安全白名单
+
+`internal/shellsafe` 在执行前对 shell 文本分类。位于只读白名单上的命令无需审批即可运行，
+其余一律 fail-closed。
+
+白名单按命令能证明的行为分组：
+
+| 分组 | 示例 |
+| --- | --- |
+| 系统、磁盘、进程观测 | `groups`、`nproc`、`uptime`、`free`、`pgrep`、`lscpu`、`lsblk`、`vmstat`、`iostat` |
+| 网络观测（仅 socket/接口状态） | `netstat`、`ss`、`ifconfig` |
+| 校验、编码、二进制检查 | `md5sum`、`sha256sum`、`base64`、`od`、`hexdump`、`strings` |
+| JSON 查询（读输入，写 stdout） | `jq` |
+| PowerShell 观测类 cmdlet | `get-date`、`test-path`、`get-filehash`、`get-itemproperty`、`get-member`、`get-host`、`get-timezone`、`get-computerinfo` 等 |
+
+有两处刻意排除。`env` 不在其中：任何参数都会使它变为命令包装器，其影响无法界定，
+需要时用 `printenv` 覆盖。PowerShell cmdlet 只收录观测性动词——无论动词是什么，
+解析器仍会拒绝管道、替换、重定向与命令链。
+
+在此新增名称是安全决策而非便利决策：判据是该命令只能读取并写 stdout。

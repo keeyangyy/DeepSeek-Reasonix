@@ -227,3 +227,25 @@ MCP 仅列出 env/header 的 **key**。可能携带 HTTP 响应体或 MCP stderr
 
 内置 `reasonix-guide` 仅在 system prompt 的 Skill 索引中增加 **一行稳定索引**；
 正文按需加载。诊断本身不进入 provider 请求。
+## 会话指纹体检（`doctor fingerprint`）
+
+会话可能进入这样一种状态：权威 sidecar 与其派生的显示索引不再描述同一份 transcript。
+一旦如此，所有索引校验都会失败，历史分页随之停滞——即便 transcript 本身完好，该会话看起来
+也像无法修复的过期历史。
+
+`internal/doctor/fingerprint.go` 对不一致进行分类：
+
+| 状态 | 含义 |
+| --- | --- |
+| `ok` | sidecar 与索引描述的是当前 transcript。 |
+| `stale-meta` | sidecar 声称的身份已与 transcript 不匹配。 |
+| `stale-index` | 显示索引无法对 transcript 校验通过。 |
+| `foreign-schema` | 由另一线或不同 schema 版本写入。 |
+| `damaged` | transcript 完全无法重放。 |
+
+`reasonix doctor fingerprint` 按会话给出判定，桌面端可对 `stale-meta` 形态自愈。自愈由
+`REASONIX_SESSION_FINGERPRINT_SELFHEAL=1` 门控，默认关闭，以便在成为默认路径前先观察其行为
+（`desktop/session_fingerprint_selfheal.go`）。
+
+若 sidecar 仍带有他线独有键，读取该会话是另一个问题——会话属于哪条线，见
+[SESSION_OWNERSHIP.md](SESSION_OWNERSHIP.md)。

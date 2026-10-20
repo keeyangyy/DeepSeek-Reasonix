@@ -68,6 +68,7 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en|off（o
 # max_subagent_concurrency = 6        # 会话级子代理总并发（task/fleet/skills）
 # max_parallel_writers = 3            # 互不重叠 write_paths 时的并行写入上限
 # compact_ratio 是唯一自动维护阈值（默认 0.80；预设 0.70/0.80/0.85）
+# fold_index = true                # 压缩摘要携带折叠工作索引，recall 工具据此取回内容
 # max_output_tokens = 0            # 自动：官方 DeepSeek 空间充足时省略字段（服务端 384K），临界时裁剪
 # max_output_tokens = 32768        # 可选控费上限，仍可按物理剩余继续下调
 # max_output_tokens = 65536        # 可选控费上限

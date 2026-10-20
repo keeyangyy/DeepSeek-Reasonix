@@ -215,3 +215,28 @@ for compatibility but are no longer incremented by new runs. They are not
 repurposed as storm-intervention counters; existing `loop_guard` notices describe
 those interventions. No session/config migration is required. Downgrading restores
 the older error-recovery behavior without changing the stored conversation.
+
+## Shell safety allowlist
+
+`internal/shellsafe` classifies shell text before execution. Commands on its
+read-only allowlist may run without an approval prompt; everything else stays
+fail-closed.
+
+The allowlist is grouped by what the command can prove it does:
+
+| Group | Examples |
+| --- | --- |
+| System, disk, process observation | `groups`, `nproc`, `uptime`, `free`, `pgrep`, `lscpu`, `lsblk`, `vmstat`, `iostat` |
+| Network observation (socket/interface state only) | `netstat`, `ss`, `ifconfig` |
+| Checksum, encoding, binary inspection | `md5sum`, `sha256sum`, `base64`, `od`, `hexdump`, `strings` |
+| JSON query (reads input, writes stdout) | `jq` |
+| PowerShell inspection cmdlets | `get-date`, `test-path`, `get-filehash`, `get-itemproperty`, `get-member`, `get-host`, `get-timezone`, `get-computerinfo`, and similar observational verbs |
+
+Two exclusions are deliberate. `env` is absent: any argument turns it into a
+command wrapper whose effects cannot be bounded, so `printenv` covers the need
+instead. Only observational verbs qualify among the PowerShell cmdlets — the
+parser still rejects pipelines, substitutions, redirects, and chains regardless
+of the verb.
+
+Adding a name here is a security decision, not a convenience one: the criterion
+is that the command can only read and write stdout.
