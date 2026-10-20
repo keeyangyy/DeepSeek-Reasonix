@@ -169,3 +169,16 @@ exclusive 锁，且只在该次 tool 期间持有。整区写入会独占精确�
 文件或整区。macOS 使用折叠身份协调大小写别名，同时保留原始大小写根锁兼容旧版；
 旧版进程仍只认识它打开时的路径拼写，跨拼写共存需要双方都使用新协议。Git 不是运行
 前提；对话结束后不继续占锁。需要长期隔离工作树时再用 worktree。
+## 区分本线与另一线的会话
+
+两条发版线可能共用一个 sessions 目录。本线不额外盖自己的标记，而是从各自构建本就写入的字段
+判断归属（`internal/agent/session_foreign.go`）：
+
+- **归属字段**，本构建创建的每个会话都会写入：`topic_id`、`topic_title`、`scope`、
+  `workspace_root`。话题处理会填充 topic，钉住会话时记录 scope 与 workspace root。
+- **他线字段**，只有另一线写入：`archived`、`superseded`、`imported_from`、
+  `recovery_root_id`。本构建从不产生这些字段。
+
+`IsForeignSession` 倾向于保留会话：仅当 sidecar 带有他线独有键，或完全没有本构建归属字段的
+痕迹时，才判定为另一线的会话。会话列表与筛选据此判断，而不是从目录布局猜测，因此另一线的会话
+既不会被当作本线列出，也不会被静默迁移。

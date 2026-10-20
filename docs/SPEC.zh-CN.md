@@ -488,3 +488,18 @@ MCP 启动与单次工具调用使用不同生命周期。调用方只短暂等�
 - MCP long tail：`headersHelper`、更多 `.mcp.json` scope、tool-search 延迟加载、`list_changed`、channel、elicitation、root，以及可提供 provider 的插件。
 - 增加 Anthropic-native provider kind，用于验证 registry 不依赖单一 wire format，并支持原生 prompt cache control。
 - 把“始终允许”规则持久化到项目配置，以及为 `reasonix run` 提供 session 级权限覆盖。
+**折叠工作索引与 recall。** 压缩摘要可以携带折叠工作索引，`recall` 工具据此取回折叠内容。
+该能力默认开启（`agent.fold_index`，见 `internal/config/config.go`）；设为 `false` 则不写索引，
+省下一次折叠的字节开销，但折叠内容只能通过 canonical transcript 取回。`FoldIndexEnabled()`
+把「键缺失」视为开启。
+
+**折叠后保持缓存连续前缀。** 压缩后的请求保持连续前缀而不是重启：摘要拼接进来时不改动其之前的
+字节，因此 Provider 的 prompt cache 在维护边界上仍然命中，不会为整个前缀重新计费。
+
+**压缩失败会给出原因。** 压缩无法完成时不会静默：`emitCompactionAborted(trigger, reason)`
+带上失败阶段（`prepare failed`、`summary failed` 或显式的触发原因），使 transcript 与工具栏
+能够显示究竟是什么挡住了它。见 `internal/agent/compact_projection.go`。
+
+**投影失效即重建，不再重放。** 当投影不再覆盖它所声称的历史时，请求按覆盖区间重建，而不是
+重放整个会话。有效性只看投影实际覆盖的那段历史，不看会话身份，因此仍然覆盖当前 range 的投影
+可继续使用，过期的则被丢弃。

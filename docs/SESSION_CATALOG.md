@@ -122,3 +122,16 @@ page latency, queue pressure, and shutdown duration. Required checks include
 legacy/ corrupt fixtures, deterministic lifecycle races, `go test -race`, the
 React contract tests, and `CGO_ENABLED=0` builds for supported macOS, Windows,
 and Linux architectures.
+
+## Session filename components are validated
+
+A session's filename carries the model label, which comes from provider
+configuration rather than from code. A label containing a path separator or a
+reserved character could otherwise escape the session directory.
+
+`internal/agent/session_paths.go` validates each component before use: it must be
+non-empty, must not contain Windows/POSIX separators, Windows-reserved punctuation
+(`<>:"/\|?*`), NUL, or control bytes, and stays under a byte bound so the
+generated name remains portable. A label that fails validation uses a safe
+fallback rather than reaching the filesystem, so the component can never escape
+the session directory or produce an unreadable name on any supported platform.

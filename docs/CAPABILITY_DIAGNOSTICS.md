@@ -210,6 +210,33 @@ KiB to 2441.5 KiB for it. When the capture is retired, drop the ceiling back to
 2440.0 and reclaim that headroom.
 
 
+## Session fingerprint health (`doctor fingerprint`)
+
+A session can reach a state where its authoritative sidecar and its derived
+display index no longer describe the same transcript. Once that happens every
+index validation fails and history paging stalls — the session looks like
+unrepairable stale history even though the transcript itself is intact.
+
+`internal/doctor/fingerprint.go` classifies the mismatch:
+
+| Status | Meaning |
+| --- | --- |
+| `ok` | Sidecar and index describe the current transcript. |
+| `stale-meta` | The sidecar claims an identity that no longer matches the transcript. |
+| `stale-index` | The display index does not validate against the transcript. |
+| `foreign-schema` | Written by another line or a different schema version. |
+| `damaged` | The transcript cannot be replayed at all. |
+
+`reasonix doctor fingerprint` reports the verdict per session, and the desktop
+app can self-heal the `stale-meta` shape. Self-heal is gated behind
+`REASONIX_SESSION_FINGERPRINT_SELFHEAL=1` and is off by default, so the behaviour
+can be observed before it becomes the default path
+(`desktop/session_fingerprint_selfheal.go`).
+
+Reading a session whose sidecar still carries a foreign-only key is a separate
+question — see [SESSION_OWNERSHIP.md](SESSION_OWNERSHIP.md) for how a session's
+line is decided.
+
 ## JSON schema (version 1)
 
 Top-level fields:

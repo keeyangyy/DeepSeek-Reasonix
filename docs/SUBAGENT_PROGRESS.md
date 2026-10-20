@@ -102,6 +102,13 @@ What is **not** done:
 - `completed` / `failed` / `cancelled` reuse the existing done / error /
   stopped visuals; after a terminal the card folds by default unless the user
   explicitly expanded it.
+- The running strip is driven by a single sidecar source rather than by the
+  transcript rows: `subagentInventory.ts` derives the counts, so a read-only
+  sub-agent (`read_only_skill`) is recorded on the same footing as a writing one.
+  Labels read "tool: content", counts are per call (not per expanded row), and
+  `fleet` contributes its own expansion count so a grouped call does not look
+  like one child. A collapsed capability row keeps its id across re-renders so
+  the strip does not lose a still-running child when the surrounding group folds.
 
 ## CLI
 

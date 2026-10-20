@@ -232,3 +232,21 @@ to use the folded protocol.
 Conflict cards name the file or workspace being written. Git is never required.
 A finished conversation does not keep the write lease; use a worktree when you
 need a long-lived isolated tree.
+
+## Telling this line's sessions from the other line's
+
+Two release lines can share one sessions directory. Rather than stamp a marker of
+its own, this line identifies ownership from the fields each build already
+writes (`internal/agent/session_foreign.go`):
+
+- **Ownership fields**, written on every session this build creates:
+  `topic_id`, `topic_title`, `scope`, `workspace_root`. The topic pass fills the
+  topic; pinning one records scope and workspace root.
+- **Foreign fields**, written only by the other line: `archived`, `superseded`,
+  `imported_from`, `recovery_root_id`. This build never produces them.
+
+`IsForeignSession` errs toward keeping sessions: a session is claimed as foreign
+only when its sidecar carries a foreign-only key, or when it shows no trace of
+this build's ownership fields at all. Session lists and filters then use that
+verdict instead of guessing from the directory layout, so the other line's
+sessions are neither listed as ours nor silently migrated.
