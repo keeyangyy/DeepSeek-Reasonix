@@ -177,7 +177,7 @@ type foregroundOnlyBash struct {
 	inner tool.Tool
 }
 
-func (b foregroundOnlyBash) Name() string { return "bash" }
+func (b foregroundOnlyBash) Name() string { return b.inner.Name() }
 
 func (b foregroundOnlyBash) Description() string {
 	desc := strings.TrimSpace(b.inner.Description())
@@ -200,7 +200,7 @@ func (b foregroundOnlyBash) Execute(ctx context.Context, args json.RawMessage) (
 		return "", fmt.Errorf("invalid args: %w", err)
 	}
 	if p.RunInBackground {
-		return "", tool.Blocked("blocked: background bash is unavailable in subagents; run a foreground command or ask the parent agent to start a background job")
+		return "", tool.Blocked(fmt.Sprintf("blocked: background %s is unavailable in subagents; run a foreground command or ask the parent agent to start a background job", b.Name()))
 	}
 	return b.inner.Execute(ctx, args)
 }
@@ -1071,7 +1071,7 @@ func FilterRegistry(parent *tool.Registry, names []string, exclude ...string) *t
 		ex[e] = true
 	}
 	customAllowlist := len(names) > 0
-	src := names
+	src := normalizeSubagentShellNames(parent, names)
 	if !customAllowlist {
 		src = parent.Names()
 	} else {
@@ -1410,7 +1410,7 @@ func ReadOnlySubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, name
 	if parent == nil {
 		return sub
 	}
-	src := names
+	src := normalizeSubagentShellNames(parent, names)
 	if len(src) == 0 {
 		src = parent.Names()
 	} else {
