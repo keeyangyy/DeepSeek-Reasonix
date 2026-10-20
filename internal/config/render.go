@@ -395,7 +395,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 			b.WriteString("\n")
 		}
 	}
-
+	renderCheckpointsConfig(&b, c.Checkpoints)
 	b.WriteString("[tools]\n")
 	if len(c.Tools.Enabled) == 0 {
 		b.WriteString("enabled = []   # empty = all built-in tools\n")
@@ -1056,7 +1056,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 			b.WriteString("\n")
 		}
 	}
-
+	renderCheckpointsConfig(&b, c.Checkpoints)
 	// [tools]
 	if len(c.Tools.Enabled) > 0 ||
 		(c.Tools.BashTimeoutSeconds != nil && *c.Tools.BashTimeoutSeconds != 0) ||

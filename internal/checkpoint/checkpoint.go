@@ -163,10 +163,9 @@ type Store struct {
 	protectTurns map[int]bool
 }
 
-// New returns a store for the given checkpoint dir and workspace root, loading any
-// checkpoints already persisted under dir. A "" dir disables persistence (the
-// store still works in memory for the session).
-func New(dir, root string) *Store {
+// New returns a store for the given checkpoint dir and workspace root, loading
+// any checkpoints persisted under dir. "" disables persistence.
+func New(dir, root string, opts ...Option) *Store {
 	s := &Store{
 		dir:          dir,
 		root:         root,
@@ -177,6 +176,7 @@ func New(dir, root string) *Store {
 		blobQuota:    DefaultBlobQuotaBytes,
 		protectTurns: map[int]bool{},
 	}
+	applyOptions(s, opts)
 	if dir != "" {
 		s.blobs = NewBlobStore(filepath.Join(dir, "blobs"))
 		s.load()
