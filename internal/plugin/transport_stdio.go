@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	fileencoding "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/proc"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/secrets"
@@ -578,7 +579,7 @@ func waitFinishedWithinBudget(wait func(), budget time.Duration) bool {
 func (t *stdioTransport) close() {
 	t.closeOnce.Do(func() {
 		if t.releaseSlot != nil {
-			t.releaseSlot()
+			defer t.releaseSlot()
 		}
 		if t.stdin != nil {
 			_ = t.stdin.Close()
@@ -593,6 +594,7 @@ func (t *stdioTransport) close() {
 		// clean up resources they launched outside the process group. Hard-kill
 		// after the bounded grace period so teardown cannot wedge.
 		if waitFinishedWithinBudget(t.wait, gracefulCloseWaitBudget) {
+			proc.FinishTracked(t.job)
 			return
 		}
 		proc.KillTracked(t.cmd, t.job)
@@ -604,6 +606,7 @@ type tailBuffer struct {
 	mu    sync.Mutex
 	limit int
 	buf   []byte
+	cut   bool // bytes before buf were dropped to hold the limit
 }
 
 func (b *tailBuffer) Write(p []byte) (int, error) {
@@ -612,12 +615,15 @@ func (b *tailBuffer) Write(p []byte) (int, error) {
 	b.buf = append(b.buf, p...)
 	if b.limit > 0 && len(b.buf) > b.limit {
 		b.buf = append([]byte(nil), b.buf[len(b.buf)-b.limit:]...)
+		b.cut = true
 	}
 	return len(p), nil
 }
 
+// String reads the tail in the server's own encoding: cmd.exe on a Chinese
+// Windows reports a missing command in the console code page, not UTF-8.
 func (b *tailBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return strings.TrimSpace(string(b.buf))
+	return strings.TrimSpace(string(fileencoding.DecodeOutput(b.buf, fileencoding.Cut{Head: b.cut})))
 }

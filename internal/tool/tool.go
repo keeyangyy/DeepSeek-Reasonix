@@ -72,6 +72,18 @@ type Previewer interface {
 // PreviewChange returns the change a writer tool would make for args, or ok=false
 // when there's nothing renderable: t is read-only, doesn't implement Previewer,
 // the preview errored (the edit will likely fail too), or the file is binary.
+// IsShellToolName reports whether name denotes a shell execution tool. Aliases
+// are recognized so legacy subagent allowlists keep working when the platform
+// exposes only one canonical shell tool.
+func IsShellToolName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "bash", "pwsh", "powershell", "shell":
+		return true
+	default:
+		return false
+	}
+}
+
 func PreviewChange(ctx context.Context, t Tool, args json.RawMessage) (diff.Change, bool) {
 	if t == nil || t.ReadOnly() {
 		return diff.Change{}, false

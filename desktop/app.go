@@ -10431,7 +10431,7 @@ func (a *App) ReadFileForTab(tabID, rel string) FilePreview {
 	}
 	enc, _ := fileenc.Detect(data)
 	if enc == fileenc.LossyUTF8 {
-		out.Binary = true
+		out.Body = strings.ToValidUTF8(string(data), "\uFFFD")
 		return out
 	}
 	out.Body = string(fileenc.Decode(data, enc))

@@ -2291,7 +2291,7 @@ func TestSaveHooksSettingsDecodesLegacyEncodedGlobalSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := `{"label":"中文","hooks":{"Stop":[{"command":"echo 旧"}]}}`
-	if err := os.WriteFile(path, fileencoding.Encode(legacy, fileencoding.GB18030), 0o644); err != nil {
+	if err := os.WriteFile(path, fileencoding.MustEncode(legacy, fileencoding.GB18030), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

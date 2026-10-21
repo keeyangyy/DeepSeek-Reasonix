@@ -94,6 +94,10 @@ func (a *SessionWriteAuthority) Valid() bool {
 	}
 	a.lease.mu.Lock()
 	defer a.lease.mu.Unlock()
+	return a.validLeaseLocked()
+}
+
+func (a *SessionWriteAuthority) validLeaseLocked() bool {
 	if a.lease.released || a.lease.leaseLock == nil {
 		return false
 	}
@@ -117,6 +121,22 @@ func (a *SessionWriteAuthority) Covers(path string) bool {
 		return false
 	}
 	return a.path == canonicalSessionSavePath(path)
+}
+
+// lockCurrentLease fences generation replacement through a metadata commit.
+// Callers acquire their save/file/meta locks first: a lease operation must
+// never hold this mutex while waiting to acquire those locks.
+func (a *SessionWriteAuthority) lockCurrentLease(path string) (func(), error) {
+	if a == nil || a.lease == nil || a.generation == 0 {
+		return nil, ErrSessionWriteAuthorityMissing
+	}
+	canonical := canonicalSessionSavePath(path)
+	a.lease.mu.Lock()
+	if a.path != canonical || !a.validLeaseLocked() {
+		a.lease.mu.Unlock()
+		return nil, ErrSessionWriteAuthorityStale
+	}
+	return a.lease.mu.Unlock, nil
 }
 
 // BeginSave registers an in-flight save so Release waits for it. Writer-minted

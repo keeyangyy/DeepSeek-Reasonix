@@ -155,17 +155,17 @@ const (
 // events. It never carries user prompts, file contents, command args, or
 // reviewer reasoning.
 type CompletionSummaryInfo struct {
-	Preset             string // deprecated wire-compat label; pinned to "balanced"
-	Verdict            string // complete | partial | blocked | continue
-	Mutations          int
-	ChecksPassed       int
-	ChecksFailed       int
-	ChecksSuppressed   int
-	Review             string // none | passed | warned | failed | unavailable
-	GapKinds           []string
-	ConstraintDegraded bool
-	Floor              string // standard | delivery; empty on legacy events
-	Attention          bool   // authoritative when Floor is non-empty
+	Preset                  string // deprecated wire-compat label; pinned to "balanced"
+	Verdict                 string // complete | partial | blocked | continue
+	Mutations, ChangedFiles int
+	ChecksPassed            int
+	ChecksFailed            int
+	ChecksSuppressed        int
+	Review                  string // none | passed | warned | failed | unavailable
+	GapKinds                []string
+	ConstraintDegraded      bool
+	Floor                   string // standard | delivery; empty on legacy events
+	Attention               bool   // authoritative when Floor is non-empty
 }
 
 // StreamAttemptAction is the lifecycle phase of a local sampling attempt.

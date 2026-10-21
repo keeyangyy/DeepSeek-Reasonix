@@ -123,7 +123,11 @@ func upgradeDeepSeekChatDefaultFileLocked(path string) (bool, error) {
 	if !found {
 		next = "config_version = 9\n" + next
 	}
-	if err := fileutil.AtomicWriteFile(resolved, fileencoding.Encode(next, encoding), info.Mode().Perm()); err != nil {
+	encoded, encErr := fileencoding.Encode(next, encoding)
+	if encErr != nil {
+		return false, encErr
+	}
+	if err := fileutil.AtomicWriteFile(resolved, encoded, info.Mode().Perm()); err != nil {
 		return false, err
 	}
 	return true, nil

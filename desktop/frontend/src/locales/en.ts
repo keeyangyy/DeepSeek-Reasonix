@@ -3303,6 +3303,7 @@ export const en = {
   "notice.completionDeliveryBody": "Workspace files changed without a matching verification.",
   "notice.completionChangesTitle": "Changes this turn",
   "notice.completionChangesBody": "{count} changes",
+  "notice.completionChangesFiles": "{count} files",
   "notice.completionViewChanges": "View changes",
   "notice.completionViewVerification": "Turn verification",
   "completion.panelTitle": "Turn verification",

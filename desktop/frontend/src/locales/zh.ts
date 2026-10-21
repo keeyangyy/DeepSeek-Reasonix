@@ -3306,6 +3306,7 @@ export const zh: Record<DictKey, string> = {
   "notice.completionDeliveryBody": "改了工作区文件，之后没有对应验证。",
   "notice.completionChangesTitle": "本轮改动",
   "notice.completionChangesBody": "{count} 项变更",
+  "notice.completionChangesFiles": "{count} 个文件",
   "notice.completionViewChanges": "查看改动",
   "notice.completionViewVerification": "本轮验证",
   "completion.panelTitle": "本轮验证",

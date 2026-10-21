@@ -444,6 +444,7 @@ export interface WireCompletionSummary {
   preset: string;
   verdict: string;
   mutations: number;
+  changed_files?: number;
   checks_passed: number;
   checks_failed: number;
   checks_suppressed: number;
@@ -1875,8 +1876,7 @@ export interface UsageStatsRequest {
   source?: string;
 }
 
-// DailyTokenUsage is one day's token total, per-model split and turn count in
-// the daily trend series.
+// DailyTokenUsage is one day's token total, per-model split and turn count in the daily trend series.
 export interface DailyTokenUsage {
   day: string; // "2006-01-02"
   total: number;

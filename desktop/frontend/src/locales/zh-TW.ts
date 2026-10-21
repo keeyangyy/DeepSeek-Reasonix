@@ -2353,6 +2353,7 @@ export const zhTW: Record<DictKey, string> = {
   "notice.completionDeliveryBody": "改了工作區檔案，之後沒有對應驗證。",
   "notice.completionChangesTitle": "本輪改動",
   "notice.completionChangesBody": "{count} 項變更",
+  "notice.completionChangesFiles": "{count} 個檔案",
   "notice.completionViewChanges": "查看變更",
   "notice.completionViewVerification": "本輪驗證",
   "completion.panelTitle": "本輪驗證",

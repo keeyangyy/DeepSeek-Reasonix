@@ -757,7 +757,7 @@ func (c *Catalog) refreshStatus(ctx context.Context) {
 
 func (c *Catalog) publish(revision uint64, roots []string, reason string) {
 	c.revision.Store(revision)
-	c.refreshStatus(context.Background())
+	c.refreshStatus(statusContextOrBackground(c.ctx))
 	if c.opts.OnRevision != nil {
 		c.opts.OnRevision(c.Status(), roots, reason)
 	}

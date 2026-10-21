@@ -10,6 +10,7 @@ export function normalizeCompletionSummary(summary: WireCompletionSummary): Wire
     preset: String(summary.preset ?? "").trim().toLowerCase(),
     verdict: String(summary.verdict ?? "").trim().toLowerCase(),
     mutations: count(summary.mutations),
+    changed_files: summary.changed_files === undefined ? undefined : count(summary.changed_files),
     checks_passed: count(summary.checks_passed),
     checks_failed: count(summary.checks_failed),
     checks_suppressed: count(summary.checks_suppressed),
@@ -59,9 +60,13 @@ export function completionSummaryNotice(summary: WireCompletionSummary, t: Trans
 }
 
 export function completionSummaryChangeNotice(summary: WireCompletionSummary, t: Translator): { title: string; body: string } {
+  const changes = t("notice.completionChangesBody", { count: String(summary.mutations) });
+  const files = summary.changed_files && summary.changed_files > 0
+    ? t("notice.completionChangesFiles", { count: String(summary.changed_files) })
+    : "";
   return {
     title: t("notice.completionChangesTitle"),
-    body: t("notice.completionChangesBody", { count: String(summary.mutations) }),
+    body: files ? `${changes} · ${files}` : changes,
   };
 }
 

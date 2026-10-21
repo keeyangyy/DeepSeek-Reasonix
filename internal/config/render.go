@@ -395,7 +395,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 			b.WriteString("\n")
 		}
 	}
-
+	renderCheckpointsConfig(&b, c.Checkpoints)
 	b.WriteString("[tools]\n")
 	if len(c.Tools.Enabled) == 0 {
 		b.WriteString("enabled = []   # empty = all built-in tools\n")
@@ -1056,7 +1056,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 			b.WriteString("\n")
 		}
 	}
-
+	renderCheckpointsConfig(&b, c.Checkpoints)
 	// [tools]
 	if len(c.Tools.Enabled) > 0 ||
 		(c.Tools.BashTimeoutSeconds != nil && *c.Tools.BashTimeoutSeconds != 0) ||
@@ -1325,7 +1325,7 @@ func projectScopedConfigForRender(c *Config) *Config {
 		return c
 	}
 	cp := *c
-	cp.Providers = make([]ProviderEntry, 0, len(c.Providers)+len(c.shadowedProjectProviders))
+	cp.Providers = make([]ProviderEntry, 0, len(c.Providers))
 	for _, p := range c.Providers {
 		if c.providerSources[providerMergeKey(p)] == providerSourceUser {
 			continue

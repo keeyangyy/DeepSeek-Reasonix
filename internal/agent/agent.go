@@ -284,11 +284,10 @@ type ToolHooks interface {
 type Agent struct {
 	imageInput agentImageInput
 	agentConfig
+	stragglers runStragglers
 	// svc are the collaborators this agent talks to; see services.go.
 	svc agentServices
-	// lastCompaction keeps the most recent compaction receipt (event payload)
-	// in memory so the owning controller can persist it to the session sidecar
-	// even when the tab was released mid-compaction.
+	// lastCompaction keeps the latest receipt so the controller can persist it after tab release.
 	lastCompaction atomic.Pointer[CompactionRecord]
 	// sess is the state one conversation owns; SetSession restarts it. See
 	// sessionstate.go.

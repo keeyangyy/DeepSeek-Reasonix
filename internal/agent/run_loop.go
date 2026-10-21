@@ -76,6 +76,7 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string, pinned pinnedRev
 	// A fresh user turn starts from zeroed per-turn host state; the new turn's
 	// values are computed below. Cross-turn state (checkpoint, scope, failure
 	// budgets) lives in taskRuntime and is reconciled there.
+	a.stragglers.drain(ctx, parallelStragglerGrace)
 	a.turn = turnRuntime{}
 	a.resetStructuralRunGuards()
 	scope, scoped := DeliveryExecutionScopeFromContext(ctx)
@@ -392,7 +393,12 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 			StopReason: reason,
 		}
 	}
+	// The phase belongs at the caller: ReadinessResult runs the same check for
+	// the host, outside any turn. Reopening working keeps the continuation paths
+	// below, each of which starts a provider round, out of the tool bucket.
+	a.emitTurnPhase(event.TurnPhaseVerifying)
 	readiness := a.finalReadinessCheckFor()
+	a.emitTurnPhase(event.TurnPhaseWorking)
 	if state.graceRound && (readiness.reason != "" || !hasVisibleFinalAnswer(text)) {
 		a.contextManager().ObserveUsage(usage)
 		return false, a.gracePause(state)
@@ -460,6 +466,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 	// carries into the next turn un-folded and can overflow the model window.
 	// No-op below the trigger, so normal turns keep their warm cache.
 	a.contextManager().ObserveUsage(usage)
+	a.closeTurnPhase()
 	return false, nil // model gave a final answer
 }
 
@@ -492,7 +499,11 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 	if a.task.ledger != nil {
 		receiptMark = a.task.ledger.Len()
 	}
+	// The phase pair around the batch is what makes the accounting mean its
+	// names: it bills this round's wait to the provider and the batch to tools.
+	a.emitTurnPhase(event.TurnPhaseChecking)
 	batch := a.executeBatch(ctx, state, calls)
+	a.emitTurnPhase(event.TurnPhaseWorking)
 	if batch.err != nil {
 		// Any completed results are already stored; a failed durability barrier
 		// prevents starting the next tool.
@@ -506,6 +517,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 		// result is stored, so another acknowledgement adds no host value and can
 		// turn a valid bounded plan into a max-steps pause.
 		a.contextManager().ObserveUsage(usage)
+		a.closeTurnPhase()
 		return false, nil
 	}
 	if boundaryFinalizer {
