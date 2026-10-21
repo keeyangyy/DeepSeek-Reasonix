@@ -31119,6 +31119,11 @@ body > .mermaid-diagram--fullscreen {
   pointer-events: auto;
 }
 
+/* Armed: the title keeps a readable floor instead of collapsing to zero. */
+:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-copy {
+  min-width: 4em;
+}
+
 .sidebar--workbench .project-tree__topic-action:disabled,
 .sidebar--workbench .project-tree__topic-action:disabled:hover,
 .app--classic .project-tree__topic-action:disabled,
