@@ -31113,10 +31113,13 @@ body > .mermaid-diagram--fullscreen {
 }
 
 :root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions {
-  position: static;
-  transform: none;
-  opacity: 1;
-  pointer-events: auto;
+  /* The row's hover rules carry a higher specificity than this one and would
+     restore the absolute-positioning offset on pointer entry, so the armed state
+     has to win outright rather than by source order. */
+  position: static !important;
+  transform: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 /* Armed: the title keeps a readable floor instead of collapsing to zero. */
