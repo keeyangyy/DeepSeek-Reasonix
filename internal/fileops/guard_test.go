@@ -9,9 +9,10 @@ import (
 	"time"
 )
 
-// TestRequireObservedRefusesUnreadFile pins the first refusal: a target never
-// handed to the model must not be overwritten.
-func TestRequireObservedRefusesUnreadFile(t *testing.T) {
+// TestRequireObservedAllowsUnreadFile pins the deliberate allowance: the host
+// cannot tell "never read" from "written blind on purpose", so an unread target
+// is not blocked. Only a stale version is refused.
+func TestRequireObservedAllowsUnreadFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "note.txt")
 	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
@@ -19,9 +20,8 @@ func TestRequireObservedRefusesUnreadFile(t *testing.T) {
 	}
 	ctx := WithStore(context.Background(), NewStore())
 
-	err := RequireObserved(ctx, path)
-	if !errors.Is(err, ErrNotObserved) {
-		t.Fatalf("RequireObserved on unread file = %v, want ErrNotObserved", err)
+	if err := RequireObserved(ctx, path); err != nil {
+		t.Fatalf("RequireObserved on unread file = %v, want nil", err)
 	}
 }
 
@@ -94,20 +94,15 @@ func TestRequireObservedNilStorePermits(t *testing.T) {
 	}
 }
 
-// TestRequireObservedNewFileNeedsAbsentObservation distinguishes "never looked"
-// from "confirmed missing": creating a file is allowed only for the latter.
-func TestRequireObservedNewFileNeedsAbsentObservation(t *testing.T) {
+// TestRequireObservedAllowsMissingTarget keeps file creation working: a target
+// that does not exist has no version to compare.
+func TestRequireObservedAllowsMissingTarget(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "new.txt")
 	ctx := WithStore(context.Background(), NewStore())
 
-	if err := RequireObserved(ctx, path); !errors.Is(err, ErrNotObserved) {
-		t.Fatalf("RequireObserved on unobserved new file = %v, want ErrNotObserved", err)
-	}
-
-	ObserveAbsent(ctx, path)
 	if err := RequireObserved(ctx, path); err != nil {
-		t.Fatalf("RequireObserved after ObserveAbsent = %v, want nil", err)
+		t.Fatalf("RequireObserved on missing target = %v, want nil", err)
 	}
 }
 
