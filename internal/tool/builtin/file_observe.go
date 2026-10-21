@@ -22,9 +22,3 @@ func commitObservedOnSuccess(ctx context.Context, path string, err error) {
 		fileops.CommitObserved(ctx, path)
 	}
 }
-
-// requireObservedTarget refuses a mutation whose target version this session
-// never read, or whose version changed since it was read.
-func requireObservedTarget(ctx context.Context, path string) error {
-	return fileops.RequireObserved(ctx, path)
-}
