@@ -32,7 +32,9 @@ function removalText(options: ProjectTreeRemovalOptions, mode: ProjectTreeRemova
 }
 
 export function projectTreeRemovalButtons(options: ProjectTreeRemovalOptions): ReactNode {
-  return removalModes.map((mode) => {
+  // 确认态只保留删除与提示：置顶/归档此时既不该再被触发，也会把标题挤到 0 宽。
+  const modes = options.armed ? (["purge"] as const) : removalModes;
+  return modes.map((mode) => {
     const label = removalText(options, mode);
     const kind = removalKind(mode);
     const armed = mode === "purge" && options.armed;

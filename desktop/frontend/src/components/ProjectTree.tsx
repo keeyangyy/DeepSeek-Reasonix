@@ -1343,21 +1343,23 @@ export function ProjectTree({
               onMouseEnter={classicTopics ? cancelHoverCard : undefined}
               onFocus={classicTopics ? cancelHoverCard : undefined}
             >
-              <Tooltip label={pinLabel} side="top" className="project-tree__topic-action-slot">
-                <button
-                  className={`project-tree__topic-action${pinned ? " project-tree__topic-action--pinned" : ""}`}
-                  type="button"
-                  aria-label={pinLabel}
-                  aria-pressed={pinned}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void setTopicPinned(topicId, !pinned);
-                  }}
-                >
-                  <Pin size={15} aria-hidden="true" />
-                </button>
-              </Tooltip>
+              {!purgeArmed(archiveTargetKey) && (
+                <Tooltip label={pinLabel} side="top" className="project-tree__topic-action-slot">
+                  <button
+                    className={`project-tree__topic-action${pinned ? " project-tree__topic-action--pinned" : ""}`}
+                    type="button"
+                    aria-label={pinLabel}
+                    aria-pressed={pinned}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void setTopicPinned(topicId, !pinned);
+                    }}
+                  >
+                    <Pin size={15} aria-hidden="true" />
+                  </button>
+                </Tooltip>
+              )}
               {projectTreeRemovalButtons({
                 blocked: archiveBlocked, busy: topicTrashing,
                 armed: purgeArmed(archiveTargetKey),
