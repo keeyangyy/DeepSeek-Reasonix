@@ -73,6 +73,7 @@ type CompletionSummary struct {
 	Preset             string   `json:"preset"` // deprecated; pinned compat value
 	Verdict            string   `json:"verdict"`
 	Mutations          int      `json:"mutations"`
+	ChangedFiles       int      `json:"changed_files,omitempty"`
 	ChecksPassed       int      `json:"checks_passed"`
 	ChecksFailed       int      `json:"checks_failed"`
 	ChecksSuppressed   int      `json:"checks_suppressed"`
@@ -91,6 +92,7 @@ func toWireCompletionSummary(c *event.CompletionSummaryInfo) *CompletionSummary 
 		Preset:             c.Preset,
 		Verdict:            c.Verdict,
 		Mutations:          c.Mutations,
+		ChangedFiles:       c.ChangedFiles,
 		ChecksPassed:       c.ChecksPassed,
 		ChecksFailed:       c.ChecksFailed,
 		ChecksSuppressed:   c.ChecksSuppressed,
@@ -639,8 +641,7 @@ func KindNames() []string {
 	return names
 }
 
-// KindName returns the stable wire name of one event kind, or false for a
-// kind outside the known set.
+// KindName returns the stable wire name of one event kind, or false outside the set.
 func KindName(kind event.Kind) (string, bool) {
 	name, ok := kindNames[kind]
 	return name, ok
@@ -806,9 +807,8 @@ func ToWireExtensionSurface(p *event.ExtensionSurfacePayload) *ExtensionSurface 
 					Required: field.Required,
 				}
 				if field.Default != nil {
-					// The value arrived as protocol-validated JSON, so a
-					// marshal failure here is unreachable in practice; a
-					// pathological in-memory value simply drops the default.
+					// Protocol-validated JSON, so marshal failure is unreachable in practice;
+					// a pathological in-memory value simply drops the default.
 					if raw, err := json.Marshal(field.Default); err == nil {
 						wireField.Default = raw
 					}

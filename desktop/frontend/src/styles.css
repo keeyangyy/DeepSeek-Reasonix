@@ -31103,6 +31103,22 @@ body > .mermaid-diagram--fullscreen {
   }
 }
 
+/* An armed permanent delete must not overdraw the session title. The overlay
+   action group is absolutely positioned, so a wide hint grows leftwards and
+   covers the label; the label cannot react because it is not a flex sibling.
+   While armed, the group joins the row's flex flow and the row stops reserving
+   the action column, so the label truncates into the space actually left. */
+:root[data-theme-style] .project-tree__topic--delete-armed {
+  margin-right: 8px;
+}
+
+:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions {
+  position: static;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .sidebar--workbench .project-tree__topic-action:disabled,
 .sidebar--workbench .project-tree__topic-action:disabled:hover,
 .app--classic .project-tree__topic-action:disabled,
