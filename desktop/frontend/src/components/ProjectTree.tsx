@@ -1335,6 +1335,14 @@ export function ProjectTree({
             )}
             {compactTopics && metaFull && <span className="sr-only">{metaFull}</span>}
           </button>
+          {isSessionNode && purgeArmed(archiveTargetKey) && (
+            // Inline so the hint sits right after the title instead of far right:
+            // the action group is absolutely positioned, so a hint living there
+            // leaves an empty gap between the title and itself.
+            <span className="project-tree__topic-action-hint project-tree__topic-action-hint--inline" role="status">
+              {t("history.purgeArmedHint")}
+            </span>
+          )}
           {unread && <span className="project-tree__topic-unread-dot" aria-hidden="true" />}
           {showTopicActions && (
             <span

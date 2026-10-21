@@ -1066,7 +1066,7 @@ export const zhTW: Record<DictKey, string> = {
   "history.confirmMoveToTrash": "確認移入回收站",
   "history.deletePermanently": "永久刪除",
   "history.confirmDeletePermanently": "確認永久刪除（無法復原）",
-  "history.purgeArmedHint": "再次點擊將永久刪除",
+  "history.purgeArmedHint": "確認刪除",
   "history.restore": "還原",
   "history.restoreSession": "還原會話",
   "history.purge": "徹底刪除",

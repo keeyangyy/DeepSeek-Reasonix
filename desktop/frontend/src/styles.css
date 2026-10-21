@@ -31103,13 +31103,26 @@ body > .mermaid-diagram--fullscreen {
   }
 }
 
-/* An armed permanent delete adds a hint inside the absolutely positioned action
-   group. The row's own layout must not change when that happens: reserving space
-   at row level (padding or margin) reflows everything on the arming click, which
-   reads as the controls jumping. Only the title column yields, so the row height
-   and the overlay geometry stay put while the label makes room. */
-:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-copy {
-  margin-right: 152px;
+/* An armed permanent delete renders its hint inline, right after the title. A
+   hint living inside the absolutely positioned action group sits at the far
+   right, which leaves a wide empty gap once the title is short; keeping it in
+   the flow makes title and hint adjacent. The delete button stays in the
+   overlay, so the inline hint keeps clear of it. */
+:root[data-theme-style] .project-tree__topic-action-hint--inline {
+  flex: 0 0 auto;
+  margin-right: 30px;
+}
+
+/* Armed rows no longer need the activity time: the hint takes its place, so the
+   title keeps its width and the hint sits right next to it. Hover behaviour on
+   ordinary rows is untouched. */
+:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-side {
+  display: none;
+}
+
+/* The inline hint replaces the overlay one on session rows. */
+:root[data-theme-style] .project-tree__topic--session.project-tree__topic--delete-armed .project-tree__topic-actions .project-tree__topic-action-hint {
+  display: none;
 }
 
 .sidebar--workbench .project-tree__topic-action:disabled,
