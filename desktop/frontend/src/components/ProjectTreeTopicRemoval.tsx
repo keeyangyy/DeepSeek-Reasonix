@@ -63,10 +63,19 @@ export function projectTreeRemovalButtons(options: ProjectTreeRemovalOptions): R
   });
 }
 
+// The armed hint renders inline, right after the title: inside the overlay
+// action group it would sit at the far right and leave a wide gap.
+export function projectTreeInlineRemovalHint(text: string): ReactNode {
+  return (
+    <span className="project-tree__topic-action-hint project-tree__topic-action-hint--inline" role="status">
+      {text}
+    </span>
+  );
+}
+
 // A context menu is already an overlay, so it cannot slide anything out beside its
 // items. It keeps the label swap, which states the same thing the row hint does.
-export function projectTreeRemovalMenuItems(options: ProjectTreeRemovalOptions): ContextMenuItem[] {
-  return removalModes.map((mode) => ({
+export function projectTreeRemovalMenuItems(options: ProjectTreeRemovalOptions): ContextMenuItem[] {  return removalModes.map((mode) => ({
     key: mode,
     icon: mode === "purge"
       ? <Trash2 size={13} />

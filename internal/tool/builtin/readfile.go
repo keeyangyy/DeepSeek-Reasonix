@@ -116,7 +116,9 @@ func (readFile) SnipHint() tool.SnipHint {
 	return tool.SnipHint{Head: 120, Tail: 12, HeadChars: 12000, TailChars: 2000}
 }
 
-func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+func (r readFile) Execute(ctx context.Context, args json.RawMessage) (out string, err error) {
+	var observedPath string
+	defer func() { observeReadOnSuccess(ctx, observedPath, out, err) }()
 	var p struct {
 		Path   string `json:"path"`
 		Offset int    `json:"offset,omitempty"`
@@ -130,6 +132,7 @@ func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 	}
 	rp := resolveReadablePath(r.workDir, p.Path, r.paths)
 	p.Path = rp.Path
+	observedPath = p.Path
 	displayPath := rp.DisplayPath
 	if confineRead(r.forbidRoots, p.Path) {
 		err := &os.PathError{Op: "open", Path: p.Path, Err: os.ErrNotExist}

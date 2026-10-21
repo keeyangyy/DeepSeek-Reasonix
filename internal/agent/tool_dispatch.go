@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"reasonix/internal/evidence"
+	"reasonix/internal/fileops"
 	"reasonix/internal/tool"
 )
 
@@ -25,6 +26,11 @@ func (a *Agent) dispatchResolvedTool(ctx context.Context, plan *toolCallPlan) (r
 }
 
 func (a *Agent) invokeResolvedTool(ctx context.Context, plan *toolCallPlan) (result string, images []string, execution *tool.ShellExecution, err error) {
+	// Publish this session's file observations so structured file tools can
+	// refuse to write a version the model never read.
+	if a.fileObservations != nil {
+		ctx = fileops.WithStore(ctx, a.fileObservations)
+	}
 	runTool, runArgs := plan.runTool, plan.runArgs
 	if de, ok := runTool.(tool.DetailedExecutor); ok {
 		var detailed tool.DetailedResult

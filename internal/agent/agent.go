@@ -20,6 +20,7 @@ import (
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
 	"reasonix/internal/extension/dispatch"
+	"reasonix/internal/fileops"
 	"reasonix/internal/i18n"
 	"reasonix/internal/imageinput"
 	"reasonix/internal/instruction"
@@ -285,17 +286,16 @@ type Agent struct {
 	imageInput agentImageInput
 	agentConfig
 	stragglers runStragglers
+	// fileObservations holds this session's read file versions; see internal/fileops.
+	fileObservations *fileops.Store
 	// svc are the collaborators this agent talks to; see services.go.
-	svc agentServices
-	// lastCompaction keeps the latest receipt so the controller can persist it after tab release.
-	lastCompaction atomic.Pointer[CompactionRecord]
-	// sess is the state one conversation owns; SetSession restarts it. See
-	// sessionstate.go.
+	svc            agentServices
+	lastCompaction atomic.Pointer[CompactionRecord] // latest receipt for the controller after tab release
+	// sess is the state one conversation owns; SetSession restarts it (sessionstate.go).
 	sess sessionRuntime
 	// executorHandoffGuard is enabled by Coordinator only for the executor agent.
-	executorHandoffGuard bool
-	responseLanguage     atomic.Value // string: auto|zh|en
-	reasoningLanguage    atomic.Value // string: auto|zh|en|off
+	executorHandoffGuard                bool
+	responseLanguage, reasoningLanguage atomic.Value // string: auto|zh|en / auto|zh|en|off
 
 	requireVisibleFinal bool // internal callers require final Content
 	continuationPolicy  ContinuationPolicy
@@ -1092,7 +1092,8 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		reasoningByteLimit = defaultReasoningByteLimit
 	}
 	a := &Agent{
-		imageInput: newImageInput(opts.ImageInput, prov),
+		fileObservations: fileops.NewStore(),
+		imageInput:       newImageInput(opts.ImageInput, prov),
 		svc: newAgentServices(prov, tools, sink, gate, planModeReadOnlyTrust,
 			sandboxEscapeApprover, configWriteApprover, hooks, opts),
 		agentConfig: agentConfig{
