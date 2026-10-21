@@ -38,10 +38,11 @@ func ObserveRead(ctx context.Context, path string) {
 	store.ObservePresent(target, version)
 }
 
-// RequireObserved rejects a mutation whose target was never read, or whose
-// current version no longer matches the one that was read. A nil store (direct
-// package-level tool calls in tests and embeddings) permits the write, matching
-// the upstream contract that this gate is host-owned.
+// RequireObserved refuses a mutation whose target changed after this session
+// read it, so a write never silently discards someone else's edit. A target
+// that was never read is permitted: creating files and replacing them from a
+// fresh description stays valid, and the host cannot distinguish "unread" from
+// "intentionally written blind".
 func RequireObserved(ctx context.Context, path string) error {
 	store := FromContext(ctx)
 	if store == nil {
@@ -49,20 +50,13 @@ func RequireObserved(ctx context.Context, path string) error {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// Creating a new file is allowed only when the absence itself was
-			// observed; "never looked" must not read as "does not exist".
-			if store.Get(DiskTarget(path, nil)).Kind == Absent {
-				return nil
-			}
-			return fmt.Errorf("%w: %s does not exist; read the directory or create it deliberately", ErrNotObserved, path)
-		}
-		return err
+		// Missing or unreadable targets carry no version to compare against.
+		return nil
 	}
 	target, version := DiskSnapshot(path, info)
 	observed := store.Get(target)
-	if observed.Kind != Present {
-		return fmt.Errorf("%w: %s; read any window of it first", ErrNotObserved, path)
+	if observed.Kind != Present || observed.Version == "" {
+		return nil
 	}
 	if observed.Version != version {
 		return fmt.Errorf("%w: %s changed since it was read; read it again before editing", ErrStaleVersion, path)
