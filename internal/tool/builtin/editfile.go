@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"reasonix/internal/fileops"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/tool"
 )
@@ -40,7 +41,9 @@ func (e editFile) DeclareWriteAccess(args json.RawMessage) (tool.WriteAccessDecl
 	return declareFilePathWriteAccess(e.workDir, args)
 }
 
-func (e editFile) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+func (e editFile) Execute(ctx context.Context, args json.RawMessage) (out string, err error) {
+	var committedPath string
+	defer func() { commitObservedOnSuccess(ctx, committedPath, err) }()
 	var p struct {
 		Path      string `json:"path"`
 		OldString string `json:"old_string"`
@@ -57,6 +60,9 @@ func (e editFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 	}
 	p.Path = resolveIn(e.workDir, p.Path)
 	if err := confineWrite(ctx, effectiveWriteRoots(ctx, e.rootSet, e.roots), e.guard, e.managed, p.Path); err != nil {
+		return "", err
+	}
+	if err := fileops.RequireObserved(ctx, p.Path); err != nil {
 		return "", err
 	}
 
@@ -82,5 +88,6 @@ func (e editFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 	if applied.fuzzy {
 		summary += " (fuzzy match)"
 	}
+	committedPath = p.Path
 	return withActualPostWriteReceipts(summary, []editReplacementReceipt{applied.receipt}), nil
 }

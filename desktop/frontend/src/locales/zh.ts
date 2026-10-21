@@ -1316,7 +1316,7 @@ export const zh: Record<DictKey, string> = {
   "history.confirmMoveToTrash": "确认移入回收站",
   "history.deletePermanently": "永久删除",
   "history.confirmDeletePermanently": "确认永久删除（不可恢复）",
-  "history.purgeArmedHint": "再次点击将永久删除",
+  "history.purgeArmedHint": "确认删除",
   "history.restore": "恢复",
   "history.restoreSession": "恢复会话",
   "history.purge": "彻底删除",

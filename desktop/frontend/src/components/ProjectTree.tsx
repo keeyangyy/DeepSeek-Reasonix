@@ -20,7 +20,7 @@ import { useRemovalArm } from "../lib/removalArm";
 import { topicShortcutLabel, type TopicShortcutEntry } from "../lib/topicShortcuts";
 import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { Tooltip } from "./Tooltip";
-import { projectTreeRemovalButtons, projectTreeRemovalMenuItems, type ProjectTreeRemovalMode } from "./ProjectTreeTopicRemoval";
+import { projectTreeInlineRemovalHint, projectTreeRemovalButtons, projectTreeRemovalMenuItems, type ProjectTreeRemovalMode } from "./ProjectTreeTopicRemoval";
 import { WorktreeBadge } from "./WorktreeBadge";
 import { useProjectCreation } from "./useProjectCreation";
 import { useProjectTreeRuntimeProjection } from "../lib/useProjectTreeRuntimeProjection";
@@ -115,8 +115,7 @@ export function activeSessionAncestorKeys(
   };
   const found = walk(nodes, []);
   if (found) return found;
-  // Shell-only snapshots no longer embed topics. Expand the matching project or
-  // Global folder by workspace identity so the first lazy page can load.
+  // Shell-only snapshots no longer embed topics; expand the matching project or global folder by workspace identity so the first lazy page can load.
   const scope = (activeScope ?? "").trim();
   const root = (activeWorkspaceRoot ?? "").trim();
   for (const node of nodes) {
@@ -1335,6 +1334,7 @@ export function ProjectTree({
             )}
             {compactTopics && metaFull && <span className="sr-only">{metaFull}</span>}
           </button>
+          {isSessionNode && purgeArmed(archiveTargetKey) && projectTreeInlineRemovalHint(t("history.purgeArmedHint"))}
           {unread && <span className="project-tree__topic-unread-dot" aria-hidden="true" />}
           {showTopicActions && (
             <span

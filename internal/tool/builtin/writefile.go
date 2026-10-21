@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"reasonix/internal/fileops"
 	fileenc "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/tool"
@@ -51,7 +52,9 @@ func (w writeFile) DeclareWriteAccess(args json.RawMessage) (tool.WriteAccessDec
 	return declareFilePathWriteAccess(w.workDir, args)
 }
 
-func (w writeFile) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+func (w writeFile) Execute(ctx context.Context, args json.RawMessage) (out string, err error) {
+	var committedPath string
+	defer func() { commitObservedOnSuccess(ctx, committedPath, err) }()
 	var p struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
@@ -64,6 +67,9 @@ func (w writeFile) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 	p.Path = resolveIn(w.workDir, p.Path)
 	if err := confineWrite(ctx, effectiveWriteRoots(ctx, w.rootSet, w.roots), w.guard, w.managed, p.Path); err != nil {
+		return "", err
+	}
+	if err := fileops.RequireObserved(ctx, p.Path); err != nil {
 		return "", err
 	}
 	// Preserve the existing file's encoding (GBK/UTF-16/BOM) on overwrite instead
@@ -100,6 +106,7 @@ func (w writeFile) Execute(ctx context.Context, args json.RawMessage) (string, e
 			if w.receipt != nil {
 				w.receipt(p.Path, rerr == nil, []byte(src.content))
 			}
+			committedPath = p.Path
 			return fmt.Sprintf("wrote %d bytes to %s", len(p.Content), p.Path), nil
 		}
 		if tool.HasWriteIntentHook(ctx) {
@@ -128,6 +135,7 @@ func (w writeFile) Execute(ctx context.Context, args json.RawMessage) (string, e
 	if w.receipt != nil {
 		w.receipt(p.Path, hadPrior, prior)
 	}
+	committedPath = p.Path
 	return fmt.Sprintf("wrote %d bytes to %s", len(p.Content), p.Path), nil
 }
 

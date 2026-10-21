@@ -1315,7 +1315,7 @@ export const en = {
   "history.confirmMoveToTrash": "Confirm move to trash",
   "history.deletePermanently": "Delete permanently",
   "history.confirmDeletePermanently": "Confirm permanent deletion (cannot be undone)",
-  "history.purgeArmedHint": "Click again to delete permanently",
+  "history.purgeArmedHint": "Confirm delete",
   "history.restore": "Restore",
   "history.restoreSession": "Restore session",
   "history.purge": "Delete permanently",
