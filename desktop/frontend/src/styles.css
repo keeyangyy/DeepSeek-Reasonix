@@ -31103,28 +31103,13 @@ body > .mermaid-diagram--fullscreen {
   }
 }
 
-/* An armed permanent delete must not overdraw the session title. The overlay
-   action group is absolutely positioned, so a wide hint grows leftwards and
-   covers the label; the label cannot react because it is not a flex sibling.
-   While armed, the group joins the row's flex flow and the row stops reserving
-   the action column, so the label truncates into the space actually left. */
-:root[data-theme-style] .project-tree__topic--delete-armed {
-  margin-right: 8px;
-}
-
-:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions {
-  /* The row's hover rules carry a higher specificity than this one and would
-     restore the absolute-positioning offset on pointer entry, so the armed state
-     has to win outright rather than by source order. */
-  position: static !important;
-  transform: none !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
-
-/* Armed: the title keeps a readable floor instead of collapsing to zero. */
+/* An armed permanent delete adds a hint inside the absolutely positioned action
+   group. The row's own layout must not change when that happens: reserving space
+   at row level (padding or margin) reflows everything on the arming click, which
+   reads as the controls jumping. Only the title column yields, so the row height
+   and the overlay geometry stay put while the label makes room. */
 :root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-copy {
-  min-width: 4em;
+  margin-right: 152px;
 }
 
 .sidebar--workbench .project-tree__topic-action:disabled,
