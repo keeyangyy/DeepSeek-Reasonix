@@ -467,10 +467,22 @@ func (s *Store) UpdateItem(id string, env PromptEnvelope) (InboxItemMeta, error)
 	return s.UpdateItemWithIdempotency(id, env, "", PromptEnvelope{})
 }
 
+// UpdateItemAllowingAcceptedSteer edits an item this turn already accepted.
+// The accepted steer's body stays on disk until the agent consumes it, so the
+// edit is what the consumer reads; once consumed the same call fails closed
+// with ErrInvalidState rather than rewriting a delivered message.
+func (s *Store) UpdateItemAllowingAcceptedSteer(id string, env PromptEnvelope) (InboxItemMeta, error) {
+	return s.updateItem(id, env, "", PromptEnvelope{}, true)
+}
+
 // UpdateItemWithIdempotency atomically updates an item and optionally binds an
 // additional client idempotency key to it. aliasEnvelope is the original client
 // request, not the merged body, so collect-mode redelivery remains deduplicated.
 func (s *Store) UpdateItemWithIdempotency(id string, env PromptEnvelope, alias string, aliasEnvelope PromptEnvelope) (InboxItemMeta, error) {
+	return s.updateItem(id, env, alias, aliasEnvelope, false)
+}
+
+func (s *Store) updateItem(id string, env PromptEnvelope, alias string, aliasEnvelope PromptEnvelope, allowAcceptedSteer bool) (InboxItemMeta, error) {
 	if s == nil {
 		return InboxItemMeta{}, ErrClosed
 	}
@@ -509,7 +521,7 @@ func (s *Store) UpdateItemWithIdempotency(id string, env PromptEnvelope, alias s
 	if !ok {
 		return InboxItemMeta{}, ErrNotFound
 	}
-	if !isPendingState(meta.State) {
+	if !isPendingState(meta.State) && !(allowAcceptedSteer && meta.State == StateSteerAccepted) {
 		return InboxItemMeta{}, ErrInvalidState
 	}
 	replayed, err := s.idempotentAliasReplayLocked(alias, aliasHash, id)

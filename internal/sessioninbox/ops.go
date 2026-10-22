@@ -266,6 +266,52 @@ func (s *Store) PauseIfPending() error {
 	return nil
 }
 
+// setStateRequeued transitions one item and moves it to the end of the manifest.
+// Entering a different group is a fresh arrival: the row must not keep the slot
+// it held in the group it just left, or a refresh would show it jumping back to
+// where it was.
+func (s *Store) setStateRequeued(id string, state InboxState, blockReason string) error {
+	if s == nil {
+		return ErrClosed
+	}
+	id = strings.TrimSpace(id)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	release, err := s.beginDiskTransactionLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := s.mutableLocked(); err != nil {
+		return err
+	}
+	next := s.man.clone()
+	i := next.indexOf(id)
+	if i < 0 {
+		return ErrNotFound
+	}
+	moved := next.Items[i]
+	moved.State = state
+	moved.BlockReason = blockReason
+	moved.UpdatedAt = time.Now().UTC()
+	rest := make([]InboxItemMeta, 0, len(next.Items))
+	rest = append(rest, next.Items[:i]...)
+	rest = append(rest, next.Items[i+1:]...)
+	next.Items = append(rest, moved)
+	if err := s.commitManifestLocked(next); err != nil {
+		return err
+	}
+	s.notifyLocked(s.snapshotLocked())
+	return nil
+}
+
+// AcceptSteer is the durable admission boundary for an accepted steer. The item
+// leaves the next-turn queue, so it re-queues after the guidance already
+// admitted to this turn.
+func (s *Store) AcceptSteer(id string) error {
+	return s.setStateRequeued(id, StateSteerAccepted, "")
+}
+
 // SetState transitions one item's durable state.
 func (s *Store) SetState(id string, state InboxState, blockReason string) error {
 	if s == nil {
@@ -311,6 +357,16 @@ func (s *Store) MarkAcceptedSteerUncertain(id, reason string) error {
 	return s.transitionAcceptedSteer(id, StateUncertain, reason, false)
 }
 
+// ReleaseAcceptedSteer returns an accepted steer to the next-turn queue. The
+// body was never inlined into the agent heap — the entry only holds an id and a
+// loader — so the consumer reads the item's current state. Once this drops it
+// back to queued, MarkSteerConsumed refuses and the guidance is not applied,
+// which is exactly the withdrawal the caller asked for. A consumed item fails
+// closed instead of silently reappearing in the queue.
+func (s *Store) ReleaseAcceptedSteer(id string) error {
+	return s.transitionAcceptedSteer(id, StateQueued, "", false)
+}
+
 func (s *Store) transitionAcceptedSteer(id string, target InboxState, blockReason string, consumedIdempotent bool) error {
 	if s == nil {
 		return ErrClosed
@@ -337,9 +393,21 @@ func (s *Store) transitionAcceptedSteer(id string, target InboxState, blockReaso
 	if next.Items[i].State != StateSteerAccepted {
 		return ErrInvalidState
 	}
-	next.Items[i].State = target
-	next.Items[i].BlockReason = blockReason
-	next.Items[i].UpdatedAt = time.Now().UTC()
+	// Only a return to the next-turn queue is a fresh arrival. Consuming or
+	// flagging the steer as uncertain keeps it in the current-turn group, so it
+	// must hold the slot it already has.
+	moved := next.Items[i]
+	moved.State = target
+	moved.BlockReason = blockReason
+	moved.UpdatedAt = time.Now().UTC()
+	if target == StateQueued {
+		rest := make([]InboxItemMeta, 0, len(next.Items))
+		rest = append(rest, next.Items[:i]...)
+		rest = append(rest, next.Items[i+1:]...)
+		next.Items = append(rest, moved)
+	} else {
+		next.Items[i] = moved
+	}
 	if err := s.commitManifestLocked(next); err != nil {
 		return err
 	}

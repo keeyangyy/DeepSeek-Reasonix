@@ -21575,7 +21575,7 @@ body > .mermaid-diagram--fullscreen {
 .composer-guidance-item {
   min-height: 32px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) repeat(3, auto);
+  grid-template-columns: auto minmax(0, 1fr) repeat(4, auto);
   align-items: center;
   gap: 8px;
   padding: 5px 6px 5px 8px;
@@ -21586,9 +21586,31 @@ body > .mermaid-diagram--fullscreen {
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent);
 }
 
-.composer-guidance-item__icon {
+.composer-guidance-item__icon,
+.composer-guidance-item__grip {
   flex: 0 0 auto;
   color: var(--fg-faint);
+}
+
+/* A draggable row swaps the leading arrow for a grip in the same column. */
+.composer-guidance-item__grip {
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+}
+
+.composer-guidance-item__grip:active {
+  cursor: grabbing;
+}
+
+/* The queue reads as "now" and "next": a quiet divider carries that split
+   without adding another box around the rows. */
+.composer-guidance-group {
+  padding: 2px 4px 0;
+  color: var(--fg-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .composer-guidance-item__text {
@@ -30859,7 +30881,7 @@ body > .mermaid-diagram--fullscreen {
 
 .sidebar--workbench .project-tree__topic-side {
   flex: 0 0 auto;
-  min-width: 44px;
+  min-width: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -30872,7 +30894,16 @@ body > .mermaid-diagram--fullscreen {
   transition: opacity var(--dur-fast), transform var(--dur-fast);
 }
 
-.project-tree__topic--has-actions .project-tree__topic-side { flex: 0 0 70px; }
+/* Fixed right-edge widths: hover never moves the title. */
+:root[data-theme-style] .project-tree__topic--has-actions .project-tree__topic-side {
+  flex: 0 0 58px;
+  min-width: 0;
+}
+
+:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-side {
+  flex: 0 0 74px;
+  visibility: hidden;
+}
 
 .sidebar--workbench .project-tree__topic-time {
   min-width: 0;
@@ -31103,26 +31134,17 @@ body > .mermaid-diagram--fullscreen {
   }
 }
 
-/* An armed permanent delete renders its hint inline, right after the title. A
-   hint living inside the absolutely positioned action group sits at the far
-   right, which leaves a wide empty gap once the title is short; keeping it in
-   the flow makes title and hint adjacent. The delete button stays in the
-   overlay, so the inline hint keeps clear of it. */
-:root[data-theme-style] .project-tree__topic-action-hint--inline {
-  flex: 0 0 auto;
-  margin-right: 30px;
-}
-
-/* Armed rows no longer need the activity time: the hint takes its place, so the
-   title keeps its width and the hint sits right next to it. Hover behaviour on
-   ordinary rows is untouched. */
-:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-side {
-  display: none;
-}
-
-/* The inline hint replaces the overlay one on session rows. */
-:root[data-theme-style] .project-tree__topic--session.project-tree__topic--delete-armed .project-tree__topic-actions .project-tree__topic-action-hint {
-  display: none;
+/* An armed permanent delete keeps the row exactly as it looks when idle: the
+   title, its truncation and the activity time all stay put, and the hint plus
+   the delete button float over the row's right edge. Reflowing the row to make
+   room made the title jump on the pointer's first entry. */
+:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions {
+  opacity: 1;
+  pointer-events: auto;
+  /* Keep the vertical centering the base rule establishes; only the 4px
+     horizontal offset of the hover reveal is dropped, or the group would sit
+     half a row lower. */
+  transform: translateY(-50%);
 }
 
 .sidebar--workbench .project-tree__topic-action:disabled,

@@ -54,6 +54,7 @@ type Inbox interface {
 	CancelWithInboxItems(ids []string, source string) error
 	CancelWithInboxItemsResult(ids []string, source string) (InboxCancelResult, error)
 	MoveInboxItem(id string, toIndex int) error
+	ReleaseInboxItem(id string) error
 	SetInboxPaused(paused bool) error
 	RetryInboxItem(id string) error
 	RefreshInboxReferences(id string) error
@@ -388,7 +389,7 @@ func (c *Controller) UpdateInboxItem(id, display, raw, submit string) (sessionin
 		Extra:        maps.Clone(previous.Extra),
 	}
 	env.FrozenRefBlock, env.FrozenImages, env.ReferenceErrors = c.freezeInboxReferences(context.Background(), submit, env.ExplicitRefs)
-	updated, err := st.UpdateItem(id, env)
+	updated, err := st.UpdateItemAllowingAcceptedSteer(id, env)
 	if err != nil {
 		return sessioninbox.InboxItemMeta{}, err
 	}
@@ -479,6 +480,17 @@ func (c *Controller) MoveInboxItem(id string, toIndex int) error {
 		return err
 	}
 	return st.MoveItem(id, toIndex)
+}
+
+// ReleaseInboxItem returns an accepted steer to the next-turn queue. The item's
+// body was never inlined into the agent, so dropping it back to queued makes the
+// pending loader fail closed and the guidance is not applied to the running turn.
+func (c *Controller) ReleaseInboxItem(id string) error {
+	st, err := c.ensureInbox()
+	if err != nil {
+		return err
+	}
+	return st.ReleaseAcceptedSteer(strings.TrimSpace(id))
 }
 
 func (c *Controller) SetInboxPaused(paused bool) error {
