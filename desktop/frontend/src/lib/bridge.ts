@@ -174,11 +174,9 @@ function stripLegacyGoalBudgetFlags(arg: string): string {
   return parts.join(" ");
 }
 
-// AppBindings is derived from the Wails-generated Go → TS method signatures, so
-// the compiler catches drift between the Go binding surface and the frontend mock.
-// Run `wails generate module` after adding/renaming a bound method on App, then
-// `pnpm typecheck` to verify the mock still satisfies the contract.
-//
+// AppBindings is derived from the Wails-generated Go → TS method signatures, so the
+// compiler catches drift with the frontend mock; run `wails generate module` after
+// adding/renaming a bound method on App, then `pnpm typecheck`.
 // Types for native-feel bindings, used only by AppBindings and the dev mock.
 interface NativeConfirmRequest {
   title: string;
@@ -196,8 +194,8 @@ interface DesktopWindowState {
   y: number;
   maximised: boolean;
 }
-// AppBindings is the hand-written React-to-Go contract. _CheckGeneratedBindings
-// catches generated methods missing here; update this interface and typecheck.
+// AppBindings is the hand-written React-to-Go contract; _CheckGeneratedBindings
+// catches generated methods missing here, so update this interface and typecheck.
 export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings, ScrollDiagnosticBindings, RemoteProjectBindings, MCPAppBindings, PinnedContextBindings {
   Platform(): Promise<string>;
   MinimiseMainWindow(): Promise<void>;
@@ -273,6 +271,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   UpdateInboxItem(tabID: string, id: string, display: string, submit: string): Promise<void>;
   DeleteInboxItem(tabID: string, id: string): Promise<void>;
   MoveInboxItem(tabID: string, id: string, toIndex: number): Promise<void>;
+  ReleaseInboxItem(tabID: string, id: string): Promise<void>;
   SetInboxPaused(tabID: string, paused: boolean): Promise<void>;
   RetryInboxItem(tabID: string, id: string): Promise<void>;
   RefreshInboxItem(tabID: string, id: string): Promise<void>;
@@ -3071,6 +3070,7 @@ function makeMockApp(): AppBindings {
         async UpdateInboxItem() {},
         async DeleteInboxItem() {},
         async MoveInboxItem() {},
+        async ReleaseInboxItem() {},
         async SetInboxPaused(_tabID, paused) { if (recoveryMock) (await import("./inboxRecoveryPreview")).setInboxRecoveryPreviewPaused(paused); },
         async RetryInboxItem() {},
         async RefreshInboxItem() {},

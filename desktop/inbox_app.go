@@ -407,6 +407,19 @@ func (a *App) MoveInboxItem(tabID, id string, toIndex int) error {
 	return nil
 }
 
+// ReleaseInboxItem moves an accepted steer back to the next-turn queue.
+func (a *App) ReleaseInboxItem(tabID, id string) error {
+	ctrl, err := a.inboxCtrl(tabID)
+	if err != nil {
+		return err
+	}
+	if err := ctrl.ReleaseInboxItem(id); err != nil {
+		return inboxWailsError(err)
+	}
+	a.emitInboxChanged(tabID)
+	return nil
+}
+
 // SetInboxPaused pauses or resumes dispatch.
 func (a *App) SetInboxPaused(tabID string, paused bool) error {
 	ctrl, err := a.inboxCtrl(tabID)

@@ -153,7 +153,7 @@ func (c *Controller) trySteerInboxItem(id, expectedTurnID string) (sessioninbox.
 	c.inbox.trackAdmission(id)
 	defer c.inbox.untrackAdmission(id)
 	if len(env.FrozenImages) == 0 {
-		if err := st.SetState(id, sessioninbox.StateSteerAccepted, ""); err != nil {
+		if err := st.AcceptSteer(id); err != nil {
 			return sessioninbox.InboxReceipt{}, err
 		}
 	}

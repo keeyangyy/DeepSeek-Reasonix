@@ -8,12 +8,13 @@ import { filterAtMatches } from "../lib/atMatches";
 import { DedupIndex, sha256 } from "../lib/attachDedup";
 import { app, onFilesDropped } from "../lib/bridge";
 import { enqueueInboxGuidanceForActiveTurn, steerInboxItemForActiveTurn } from "../lib/inboxSubmit";
+import type { QueueActions } from "../lib/inboxQueueActions";
 import { formatInboxError, isInboxItemMissing } from "../lib/inboxError";
 import { inboxScopeKey } from "../lib/composerInboxQueue";
 import { useComposerInboxRefresh } from "../lib/useComposerInboxRefresh";
 import { useComposerImeGuard } from "../lib/useComposerImeGuard";
 import { useComposerCommandCatalog } from "../lib/useComposerCommandCatalog";
-import { guidanceIsInFlight, guidanceNeedsRetry, guidanceTextMatches, kickIdleGuidance, markGuidanceQueued } from "../lib/composerGuidance";
+import { guidanceIsInFlight, guidanceNeedsRetry, guidanceTextMatches, kickIdleGuidance, markGuidanceQueued, markGuidanceSteered } from "../lib/composerGuidance";
 import { canUsePromptHistory, composerEnterAction, composerEscapeAction, composerMenuKeyAction, insertComposerNewline, isFnKeyEvent, isImeKeyEvent, promptHistoryDirectionFromEvent } from "../lib/composerKeyboard";
 import { cacheGeneration, loadOlder } from "../lib/composerHistory";
 import { sessionTurnsLabel } from "../lib/sessionTurnsPresentation";
@@ -2185,7 +2186,8 @@ export function Composer({
         const receipt = await steerInboxItemForActiveTurn(app, targetTabId || "", item.id, turnId);
         if (receipt?.error) throw new Error(receipt.error);
         if (receipt?.disposition === "steer_accepted") {
-          updatePendingGuidanceForDraft(targetDraftKey, (items) => items.filter((queued) => queued.id !== item.id));
+          // The row moves into the current-turn group instead of leaving the list.
+          updatePendingGuidanceForDraft(targetDraftKey, (items) => markGuidanceSteered(items, item.id));
         } else {
           // Rejected steers remain the same durable follow-up item. The
           // Controller owns its later FIFO dispatch.
@@ -2259,20 +2261,14 @@ export function Composer({
     }
   };
 
-  const editQueuedGuidance = async (item: PendingGuidance, nextText: string) => {
-    const text = nextText.trim();
-    if (!text || item.id.startsWith("local-")) return;
-    const targetDraftKey = activeDraftKeyRef.current;
-    const targetTabId = tabId || "";
-    try {
-      await app.UpdateInboxItem(targetTabId, item.id, text, text);
-      updatePendingGuidanceForDraft(targetDraftKey, (items) =>
-        items.map((queued) => queued.id === item.id ? { ...queued, text, submitText: text } : queued),
-      );
-    } catch (error) {
-      showToast(formatInboxError(error, locale), "warn");
-      throw error;
-    }
+  // Queue row mutations load on first click, keeping their module out of the initial bundle.
+  const withQueueActions = async (run: (actions: QueueActions) => void | Promise<void>) => {
+    const { makeInboxQueueActions } = await import("../lib/inboxQueueActions");
+    await run(makeInboxQueueActions({
+      app, tabId: tabId || "", draftKey: () => activeDraftKeyRef.current, updateItems: updatePendingGuidanceForDraft,
+      warn: (error) => showToast(formatInboxError(error, locale), "warn"), readText: () => textRef.current,
+      writeText: setTextCaretEnd, focus: focusComposerInput, requestFrame: requestActiveDraftFrame,
+    }));
   };
 
   const readFileAsDataURL = (file: File) =>
@@ -4293,7 +4289,10 @@ export function Composer({
             onToggleExpanded={() => setGuidanceExpanded((value) => !value)}
             onSend={(item) => void sendQueuedGuidance(item)}
             onDismiss={(item) => void dismissQueuedGuidance(item)}
-            onEdit={(item, text) => editQueuedGuidance(item, text)}
+            onEdit={(item, text) => withQueueActions((a) => a.editQueuedGuidance(item, text))}
+            onRecall={(item) => withQueueActions((a) => a.recallQueuedGuidance(item))}
+            onMove={(item, toIndex) => withQueueActions((a) => a.moveQueuedGuidance(item, toIndex))}
+            onRelease={(item) => withQueueActions((a) => a.releaseQueuedGuidance(item))}
           />
         </Suspense>
       )}
