@@ -292,6 +292,12 @@ export function ComposerGuidanceShelf({
                           aria-label={actionLabel}
                           disabled={unknownState || disabled || readOnly || sendingId !== null || (running && !needsRetry && Boolean(item.structured)) || Boolean(item.paused) || (currentTurn && !canRelease)}
                           onClick={() => {
+                            // Retry keeps its own path; only a healthy row switches
+                            // between promoting and releasing.
+                            if (needsRetry) {
+                              onSend(item);
+                              return;
+                            }
                             // One control, two directions: a next-turn row is
                             // promoted into the running turn, an accepted steer is
                             // handed back to the queue.

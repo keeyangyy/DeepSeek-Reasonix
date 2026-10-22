@@ -8,7 +8,7 @@ import { filterAtMatches } from "../lib/atMatches";
 import { DedupIndex, sha256 } from "../lib/attachDedup";
 import { app, onFilesDropped } from "../lib/bridge";
 import { enqueueInboxGuidanceForActiveTurn, steerInboxItemForActiveTurn } from "../lib/inboxSubmit";
-import type { QueueActions } from "../lib/inboxQueueActions";
+import { makeInboxQueueActions } from "../lib/inboxQueueActions";
 import { formatInboxError, isInboxItemMissing } from "../lib/inboxError";
 import { inboxScopeKey } from "../lib/composerInboxQueue";
 import { useComposerInboxRefresh } from "../lib/useComposerInboxRefresh";
@@ -2261,15 +2261,13 @@ export function Composer({
     }
   };
 
-  // Queue row mutations load on first click, keeping their module out of the initial bundle.
-  const withQueueActions = async (run: (actions: QueueActions) => void | Promise<void>) => {
-    const { makeInboxQueueActions } = await import("../lib/inboxQueueActions");
-    await run(makeInboxQueueActions({
-      app, tabId: tabId || "", draftKey: () => activeDraftKeyRef.current, updateItems: updatePendingGuidanceForDraft,
-      warn: (error) => showToast(formatInboxError(error, locale), "warn"), readText: () => textRef.current,
-      writeText: setTextCaretEnd, focus: focusComposerInput, requestFrame: requestActiveDraftFrame,
-    }));
-  };
+  // Queue row mutations live in lib/inboxQueueActions; this component only wires
+  // the draft and toast callbacks it already owns.
+  const { editQueuedGuidance, recallQueuedGuidance, moveQueuedGuidance, releaseQueuedGuidance } = makeInboxQueueActions({
+    app, tabId: tabId || "", draftKey: () => activeDraftKeyRef.current, updateItems: updatePendingGuidanceForDraft,
+    warn: (error) => showToast(formatInboxError(error, locale), "warn"), readText: () => textRef.current,
+    writeText: setTextCaretEnd, focus: focusComposerInput, requestFrame: requestActiveDraftFrame,
+  });
 
   const readFileAsDataURL = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -4289,10 +4287,10 @@ export function Composer({
             onToggleExpanded={() => setGuidanceExpanded((value) => !value)}
             onSend={(item) => void sendQueuedGuidance(item)}
             onDismiss={(item) => void dismissQueuedGuidance(item)}
-            onEdit={(item, text) => withQueueActions((a) => a.editQueuedGuidance(item, text))}
-            onRecall={(item) => withQueueActions((a) => a.recallQueuedGuidance(item))}
-            onMove={(item, toIndex) => withQueueActions((a) => a.moveQueuedGuidance(item, toIndex))}
-            onRelease={(item) => withQueueActions((a) => a.releaseQueuedGuidance(item))}
+            onEdit={(item, text) => editQueuedGuidance(item, text)}
+            onRecall={(item) => recallQueuedGuidance(item)}
+            onMove={(item, toIndex) => moveQueuedGuidance(item, toIndex)}
+            onRelease={(item) => releaseQueuedGuidance(item)}
           />
         </Suspense>
       )}

@@ -1171,14 +1171,12 @@ console.log("\ncomposer goal toggle");
   });
   eq(steerItemIDs.join(","), "durable-1", "guide attempts admission with the existing durable item ID");
   eq(calls.send.join(","), "", "guide never opens a duplicate frontend submit");
-  ok(document.querySelector(".composer-guidance-item") === null, "accepted durable steer clears after backend admission");
+  const rowWithText = (text: string) => Array.from(document.querySelectorAll(".composer-guidance-item")).find((el) => el.textContent?.includes(text)) ?? null;
+  ok(rowWithText("keep the files small") !== null, "accepted durable steer stays under this turn");
 
   await rerender({ insertRequest: { id: 5, text: "prefer the smaller diff", mode: "replace" } });
-  await act(async () => {
-    sendButton.click();
-    await flushTimers();
-  });
-  const dismissibleGuidanceItem = document.querySelector(".composer-guidance-item") as HTMLElement | null;
+  await act(async () => { sendButton.click(); await flushTimers(); });
+  const dismissibleGuidanceItem = rowWithText("prefer the smaller diff") as HTMLElement | null;
   if (!dismissibleGuidanceItem) throw new Error("dismissible guidance chip did not render");
   const dismissButton = Array.from(dismissibleGuidanceItem.querySelectorAll<HTMLButtonElement>(".composer-guidance-item__action")).at(-1) ?? null;
   if (!dismissButton) throw new Error("running guidance dismiss button did not render");
@@ -1187,17 +1185,17 @@ console.log("\ncomposer goal toggle");
     await flushTimers();
   });
   eq(deletedItemIDs.join(","), "durable-2", "dismiss deletes the durable backend item before clearing the shelf");
-  ok(document.querySelector(".composer-guidance-item") === null, "running guidance chip can be dismissed");
+  ok(rowWithText("prefer the smaller diff") === null, "running guidance chip can be dismissed");
 
   await rerender({ insertRequest: { id: 6, text: "prefer the smaller diff", mode: "replace" } });
   await act(async () => {
     sendButton.click();
     await flushTimers();
   });
-  ok(document.querySelector(".composer-guidance-item") !== null, "running guidance chip renders again after another queued item");
+  ok(rowWithText("prefer the smaller diff") !== null, "running guidance chip renders again after another queued item");
 
   await rerender({ guidanceConsumedKey: "s1", guidanceConsumedText: "prefer the smaller diff" });
-  ok(document.querySelector(".composer-guidance-item") === null, "running guidance chip clears when steer is consumed");
+  ok(rowWithText("prefer the smaller diff") === null, "running guidance chip clears when steer is consumed");
 
   await rerender({ insertRequest: { id: 7, text: "then stop showing the chip", mode: "replace" } });
   await act(async () => {

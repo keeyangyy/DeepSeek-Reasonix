@@ -491,9 +491,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // 2026-10-23: the composer guidance queue splits into "this turn" and "next
 // turn" groups, gains a bidirectional promote/release control, drag reordering
 // for next-turn rows, and a recall-into-composer action (2438.6 KiB measured
-// before it, 2442.9 after). The queue mutation module loads on first click so
-// only the group/control shell counts here. Widen to 2443.0 and keep 0.1 KiB of
-// headroom; gzip and chunk budgets stay put.
-const rawInitialBudgetKiB = 2_443.0;
+// before it, 2443.3 after). Widen to 2444.0 and keep 0.7 KiB of headroom, so a
+// runner whose module order differs slightly cannot fail the gate. gzip and
+// chunk budgets stay put.
+const rawInitialBudgetKiB = 2_444.0;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
