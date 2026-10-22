@@ -139,7 +139,10 @@ func waitForChatBudgetProgress(t *testing.T, done <-chan event.Event, progress <
 	t.Helper()
 	idle := time.NewTimer(5 * time.Second)
 	defer idle.Stop()
-	total := time.NewTimer(30 * time.Second)
+	// 121 rounds across a shared CI runner: the deadline guards against a hang,
+	// not against a slow machine, so keep it well above a healthy run (~34s) to
+	// stop a loaded runner from reporting a correctness failure.
+	total := time.NewTimer(90 * time.Second)
 	defer total.Stop()
 	for {
 		select {
