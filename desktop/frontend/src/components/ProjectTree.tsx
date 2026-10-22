@@ -20,7 +20,7 @@ import { useRemovalArm } from "../lib/removalArm";
 import { topicShortcutLabel, type TopicShortcutEntry } from "../lib/topicShortcuts";
 import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { Tooltip } from "./Tooltip";
-import { projectTreeInlineRemovalHint, projectTreeRemovalButtons, projectTreeRemovalMenuItems, type ProjectTreeRemovalMode } from "./ProjectTreeTopicRemoval";
+import { projectTreeRemovalButtons, projectTreeRemovalMenuItems, type ProjectTreeRemovalMode } from "./ProjectTreeTopicRemoval";
 import { WorktreeBadge } from "./WorktreeBadge";
 import { useProjectCreation } from "./useProjectCreation";
 import { useProjectTreeRuntimeProjection } from "../lib/useProjectTreeRuntimeProjection";
@@ -1334,7 +1334,7 @@ export function ProjectTree({
             )}
             {compactTopics && metaFull && <span className="sr-only">{metaFull}</span>}
           </button>
-          {isSessionNode && purgeArmed(archiveTargetKey) && projectTreeInlineRemovalHint(t("history.purgeArmedHint"))}
+          {/* The armed hint rides in the action group; the row itself never reflows. */}
           {unread && <span className="project-tree__topic-unread-dot" aria-hidden="true" />}
           {showTopicActions && (
             <span
