@@ -104,7 +104,10 @@ try {
   assert.ok(tree.labelRight <= tree.actionsLeft, "topic text is clipped before the action buttons begin");
   assert.deepEqual(tree.buttonWidths, [22, 22, 22]);
   assert.equal(tree.actionGap, "2px");
-  assert.equal(tree.sideWidth, 70, "the timestamp side owns the same width as the three action buttons");
+  // The side column is deliberately narrower than the action group: the icons carry
+// their own padding, so 58px still ends the label before the buttons begin while
+// leaving no unused band right of the timestamp.
+  assert.equal(tree.sideWidth, 58, "the timestamp side stops short of the action group");
   assert.equal(tree.reservedSpace, "12px");
   pass("project topic labels stop before the compact three-button action group");
 
@@ -124,7 +127,7 @@ try {
     return result;
   });
   assert.ok(classicTree.labelRight <= classicTree.actionsLeft, "classic topic text is clipped before the action buttons begin");
-  assert.equal(classicTree.sideWidth, 70, "classic timestamp side shares the action width");
+  assert.equal(classicTree.sideWidth, 58, "classic timestamp side stops short of the action group");
   assert.equal(classicTree.reservedSpace, "9px");
   pass("classic project topic rows share the timestamp and action slot");
 } finally {
