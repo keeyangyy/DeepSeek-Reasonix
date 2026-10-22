@@ -354,10 +354,10 @@ console.log("\ncomposer inbox recovery");
 
   await waitFor("idle durable guidance rendered", () => document.querySelectorAll(".composer-guidance-item__guide").length === 2);
   const guides = Array.from(document.querySelectorAll(".composer-guidance-item__guide")) as HTMLButtonElement[];
-  ok(!guides[0].disabled && guides[0].textContent === "Send", "idle FIFO head exposes an explicit send fallback");
-  ok(guides[0].getAttribute("aria-label") === "Send this guidance to the transcript", "idle send fallback has an accessible label");
-  ok(guides[1].disabled, "idle non-head guidance remains disabled to preserve FIFO order");
-  ok(guides[1].getAttribute("aria-label") === "Waiting for earlier queued guidance", "idle non-head guidance explains the FIFO gate");
+  ok(!guides[0].disabled && guides[0].textContent === "Insert", "idle head offers promotion into the running turn");
+  ok(guides[0].getAttribute("aria-label") === "Insert this into the running turn", "idle promotion has an accessible label");
+  ok(!guides[1].disabled, "idle non-head guidance can be promoted without waiting behind the queue");
+  ok(guides[1].getAttribute("aria-label") === "Insert this into the running turn", "idle non-head promotion explains its own action");
   await act(async () => { guides[0].click(); await flushTimers(); });
   ok(pauseCalls.length === 1 && pauseCalls[0].tabId === "tab-a" && pauseCalls[0].paused === false, "idle send re-kicks the Controller drain without changing pause state");
   ok(steerCalls === 0, "idle send never attempts active-turn steering");
@@ -369,8 +369,7 @@ console.log("\ncomposer inbox recovery");
 
 {
   const dom = installDom();
-  let steerCalls = 0;
-  let deleteCalls = 0;
+  let steerCalls = 0, deleteCalls = 0, releaseCalls = 0;
   installBridgeApp({
     InboxSnapshot: async () => ({
       revision: 4,
@@ -392,16 +391,17 @@ console.log("\ncomposer inbox recovery");
     }),
     SteerInboxItem: async () => { steerCalls += 1; },
     DeleteInboxItem: async () => { deleteCalls += 1; },
+    ReleaseInboxItem: async () => { releaseCalls += 1; },
   });
   const { root } = await renderComposer({ running: true });
   await waitFor("active steer rendered", () => document.querySelector(".composer-guidance-item__guide") !== null);
   const guide = document.querySelector(".composer-guidance-item__guide") as HTMLButtonElement;
   const actions = document.querySelectorAll(".composer-guidance-item__action");
   const dismiss = actions[actions.length - 1] as HTMLButtonElement;
-  ok(guide.disabled && dismiss.disabled, "active steer disables send and delete actions");
-  ok(guide.getAttribute("aria-label") === "Guidance is already being applied", "active steer explains why actions are disabled");
+  ok(!guide.disabled, "active steer offers release instead of a dead control");
+  ok(guide.getAttribute("aria-label") === "Move this back to the next-turn queue", "active steer explains the release action");
   await act(async () => { guide.click(); dismiss.click(); await flushTimers(); });
-  ok(steerCalls === 0 && deleteCalls === 0, "active steer never sends invalid backend operations");
+  ok(steerCalls === 0 && releaseCalls === 1 && deleteCalls === 1, "active steer releases and deletes without re-sending");
 
   await act(async () => { root.unmount(); });
   dom.window.close();
