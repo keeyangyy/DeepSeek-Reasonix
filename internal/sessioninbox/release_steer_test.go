@@ -19,7 +19,7 @@ func openReleaseStore(t *testing.T) (*Store, string) {
 		s.Close()
 		t.Fatal(err)
 	}
-	if err := s.SetState(rec.ItemID, StateSteerAccepted, ""); err != nil {
+	if err := s.AcceptSteer(rec.ItemID); err != nil {
 		s.Close()
 		t.Fatal(err)
 	}
@@ -39,6 +39,18 @@ func itemState(t *testing.T, s *Store, id string) InboxState {
 	return ""
 }
 
+// itemIntent reads one item's intent, which is what fronts group rows by.
+func itemIntent(t *testing.T, s *Store, id string) InboxIntent {
+	t.Helper()
+	for _, item := range s.Snapshot().Items {
+		if item.ID == id {
+			return item.Intent
+		}
+	}
+	t.Fatalf("item %q missing from snapshot", id)
+	return ""
+}
+
 // TestReleaseAcceptedSteerReturnsToQueue is the happy path: an accepted steer
 // the agent has not read yet goes back to the next-turn queue and is dispatchable.
 func TestReleaseAcceptedSteerReturnsToQueue(t *testing.T) {
@@ -50,6 +62,11 @@ func TestReleaseAcceptedSteerReturnsToQueue(t *testing.T) {
 	}
 	if got := itemState(t, s, id); got != StateQueued {
 		t.Fatalf("state = %q, want %q", got, StateQueued)
+	}
+	// Fronts group rows by intent, so a released row must also leave the steer
+	// group; otherwise a refresh pulls it back into the current-turn list.
+	if got := itemIntent(t, s, id); got != IntentFollowup {
+		t.Fatalf("intent = %q, want %q", got, IntentFollowup)
 	}
 	next, ok := s.NextQueued()
 	if !ok || next.ID != id {

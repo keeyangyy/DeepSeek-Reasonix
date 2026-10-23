@@ -292,6 +292,7 @@ func (s *Store) setStateRequeued(id string, state InboxState, blockReason string
 	}
 	moved := next.Items[i]
 	moved.State = state
+	moved.Intent = IntentSteer
 	moved.BlockReason = blockReason
 	moved.UpdatedAt = time.Now().UTC()
 	rest := make([]InboxItemMeta, 0, len(next.Items))
@@ -401,6 +402,10 @@ func (s *Store) transitionAcceptedSteer(id string, target InboxState, blockReaso
 	moved.BlockReason = blockReason
 	moved.UpdatedAt = time.Now().UTC()
 	if target == StateQueued {
+		// Releasing hands the row back to the next-turn queue, so its intent has
+		// to leave the steer group too. Fronts group rows by intent, and a stale
+		// "steer" label keeps a released row pinned in the current-turn list.
+		moved.Intent = IntentFollowup
 		rest := make([]InboxItemMeta, 0, len(next.Items))
 		rest = append(rest, next.Items[:i]...)
 		rest = append(rest, next.Items[i+1:]...)
