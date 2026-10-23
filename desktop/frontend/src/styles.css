@@ -25308,6 +25308,10 @@ body > .mermaid-diagram--fullscreen {
   min-height: 34px;
   height: 34px;
   box-sizing: border-box;
+  /* The action group now ends the flex row instead of floating over it, so the
+     row has to keep a trailing gap or the buttons sit flush against the
+     scroll container and get clipped by its overflow. */
+  padding-right: 8px !important;
 }
 :root[data-theme-style] .sidebar--workbench .project-tree__topic-main {
   min-height: 34px;
