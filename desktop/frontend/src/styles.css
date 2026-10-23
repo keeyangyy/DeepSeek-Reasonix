@@ -31039,16 +31039,22 @@ body > .mermaid-diagram--fullscreen {
 .sidebar--workbench .project-tree__topic:hover .project-tree__topic-side,
 .sidebar--workbench .project-tree__topic:focus-within .project-tree__topic-side,
 .sidebar--workbench .project-tree__topic--menu-open .project-tree__topic-side,
-.sidebar--workbench .project-tree__topic--unread .project-tree__topic-side,
 .app--classic .project-tree__topic:hover .project-tree__topic-side,
 .app--classic .project-tree__topic:focus-within .project-tree__topic-side,
-.app--classic .project-tree__topic--menu-open .project-tree__topic-side,
-.app--classic .project-tree__topic--unread .project-tree__topic-side {
+.app--classic .project-tree__topic--menu-open .project-tree__topic-side {
   opacity: 0;
   /* The action group occupies its own width now, so hidden time/status has to
      leave the flow entirely: a zero-width box still consumes the parent gap and
-     paddings, which padded the gap to ~26px against the intended 10px. */
+     paddings, which padded the gap to ~26px against the intended 2px. */
   display: none;
+  transform: translateX(-3px);
+}
+
+/* An unread row only dims its time; it must keep holding the slot, or the row
+   loses its width and the unread dot shifts position. */
+.sidebar--workbench .project-tree__topic--unread .project-tree__topic-side,
+.app--classic .project-tree__topic--unread .project-tree__topic-side {
+  opacity: 0;
   transform: translateX(-3px);
 }
 
