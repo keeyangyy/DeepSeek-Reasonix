@@ -24914,7 +24914,7 @@ body > .mermaid-diagram--fullscreen {
   padding-bottom: 0;
   padding-left: 0 !important;
   margin-left: 22px;
-  margin-right: var(--project-tree-action-column);
+  margin-right: 8px;
   padding-right: 8px;
   border-radius: var(--project-tree-row-radius);
   color: var(--fg-dim);
@@ -25383,19 +25383,9 @@ body > .mermaid-diagram--fullscreen {
   pointer-events: auto;
 }
 
-/* Remove right-side slide animations on topic hover */
-:root[data-theme-style] .sidebar--workbench .project-tree__topic-actions,
-:root[data-theme-style] .app--classic .project-tree__topic-actions {
-  transform: translateY(-50%) translateX(0);
-}
-:root[data-theme-style] .sidebar--workbench .project-tree__topic:hover .project-tree__topic-actions,
-:root[data-theme-style] .sidebar--workbench .project-tree__topic:focus-within .project-tree__topic-actions,
-:root[data-theme-style] .sidebar--workbench .project-tree__topic--menu-open .project-tree__topic-actions,
-:root[data-theme-style] .app--classic .project-tree__topic:hover .project-tree__topic-actions,
-:root[data-theme-style] .app--classic .project-tree__topic:focus-within .project-tree__topic-actions,
-:root[data-theme-style] .app--classic .project-tree__topic--menu-open .project-tree__topic-actions {
-  transform: translateY(-50%) translateX(0);
-}
+/* The action group participates in the row's flex flow, so no transform is
+   involved in its placement. Vertical centering comes from align-items, which
+   is why hover can resize it without the group ever shifting up or down. */
 :root[data-theme-style] .sidebar--workbench .project-tree__topic:hover .project-tree__topic-side,
 :root[data-theme-style] .sidebar--workbench .project-tree__topic:focus-within .project-tree__topic-side,
 :root[data-theme-style] .sidebar--workbench .project-tree__topic--menu-open .project-tree__topic-side,
@@ -30846,8 +30836,23 @@ body > .mermaid-diagram--fullscreen {
 
 .sidebar--workbench .project-tree__topic-main {
   min-height: 34px;
-  gap: 10px;
+  gap: 2px;
   padding: 0 12px 0 48px !important;
+}
+
+/* Hover swaps the time for the action group; dropping the trailing padding and
+   pulling the group back by the row gap keeps the title-to-controls gap at the
+   same 2px the armed confirm hint uses. */
+.sidebar--workbench .project-tree__topic:hover .project-tree__topic-main,
+.sidebar--workbench .project-tree__topic:focus-within .project-tree__topic-main,
+.sidebar--workbench .project-tree__topic--menu-open .project-tree__topic-main {
+  padding-right: 0 !important;
+}
+
+.sidebar--workbench .project-tree__topic:hover .project-tree__topic-actions,
+.sidebar--workbench .project-tree__topic:focus-within .project-tree__topic-actions,
+.sidebar--workbench .project-tree__topic--menu-open .project-tree__topic-actions {
+  margin-left: -2px;
 }
 
 .sidebar--workbench .project-tree__topic-copy {
@@ -30884,7 +30889,7 @@ body > .mermaid-diagram--fullscreen {
   min-width: 32px;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 7px;
   color: var(--fg-faint);
   font-size: 13px;
@@ -30894,15 +30899,24 @@ body > .mermaid-diagram--fullscreen {
   transition: opacity var(--dur-fast), transform var(--dur-fast);
 }
 
-/* Fixed right-edge widths: hover never moves the title. */
+/* Side column hugs its content: the time sits right after the title with the
+   same 8px gap the action group uses, instead of a fixed 58px box that padded
+   the gap to ~30px. */
 :root[data-theme-style] .project-tree__topic--has-actions .project-tree__topic-side {
-  flex: 0 0 58px;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
 :root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-side {
-  flex: 0 0 74px;
-  visibility: hidden;
+  /* Hidden means gone: a 74px placeholder here pushed the confirm hint far from
+     the title, unlike the 10px gap the idle time and the action group use. */
+  display: none;
+}
+
+/* The armed state is persistent (the pointer may leave the row), so it cannot
+   rely on :hover to tighten the trailing padding. */
+.sidebar--workbench .project-tree__topic--delete-armed .project-tree__topic-main {
+  padding-right: 6px !important;
 }
 
 .sidebar--workbench .project-tree__topic-time {
@@ -30991,17 +31005,20 @@ body > .mermaid-diagram--fullscreen {
 
 .sidebar--workbench .project-tree__topic-actions,
 .app--classic .project-tree__topic-actions {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  z-index: var(--z-local-raised);
+  /* Participates in the row's flex flow instead of floating over the label.
+     Hover expands it to its own width, so the title yields and the two can
+     never overlap. Vertical centering comes from the row's align-items, so no
+     transform is involved and the group cannot shift up or down. */
+  position: static;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  width: 0;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%) translateX(4px);
-  transition: opacity var(--dur-fast), transform var(--dur-fast);
+  transition: opacity var(--dur-fast);
 }
 
 .sidebar--workbench .project-tree__topic:hover .project-tree__topic-actions,
@@ -31010,9 +31027,9 @@ body > .mermaid-diagram--fullscreen {
 .app--classic .project-tree__topic:hover .project-tree__topic-actions,
 .app--classic .project-tree__topic:focus-within .project-tree__topic-actions,
 .app--classic .project-tree__topic--menu-open .project-tree__topic-actions {
+  width: 70px;
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(-50%) translateX(0);
 }
 
 .sidebar--workbench .project-tree__topic:hover .project-tree__topic-side,
@@ -31024,6 +31041,10 @@ body > .mermaid-diagram--fullscreen {
 .app--classic .project-tree__topic--menu-open .project-tree__topic-side,
 .app--classic .project-tree__topic--unread .project-tree__topic-side {
   opacity: 0;
+  /* The action group occupies its own width now, so hidden time/status has to
+     leave the flow entirely: a zero-width box still consumes the parent gap and
+     paddings, which padded the gap to ~26px against the intended 10px. */
+  display: none;
   transform: translateX(-3px);
 }
 
@@ -31139,12 +31160,9 @@ body > .mermaid-diagram--fullscreen {
    the delete button float over the row's right edge. Reflowing the row to make
    room made the title jump on the pointer's first entry. */
 :root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions {
+  width: 70px;
   opacity: 1;
   pointer-events: auto;
-  /* Keep the vertical centering the base rule establishes; only the 4px
-     horizontal offset of the hover reveal is dropped, or the group would sit
-     half a row lower. */
-  transform: translateY(-50%);
 }
 
 .sidebar--workbench .project-tree__topic-action:disabled,
@@ -35725,9 +35743,9 @@ body > .mermaid-diagram--fullscreen {
 }
 .sidebar--workbench .project-tree__topic--show-shortcut .project-tree__topic-actions,
 .app--classic .project-tree__topic--show-shortcut .project-tree__topic-actions {
+  width: 0;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%) translateX(4px);
 }
 
 /* In creation mode, hide the time/side when shortcuts are shown */
