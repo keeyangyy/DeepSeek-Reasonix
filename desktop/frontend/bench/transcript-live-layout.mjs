@@ -88,33 +88,54 @@ try {
   assert.ok(Math.abs((settled.top ?? 0) - (live.top ?? 0)) < 8, "stream completion does not move the sentence to a different line");
   pass("stream completion preserves the sentence line and position");
 
-  const tree = await page.locator(".project-tree__topic--has-actions").evaluate((row) => {
-    const label = row.querySelector(".project-tree__topic-label");
-    const actions = row.querySelector(".project-tree__topic-actions");
-    const buttons = [...row.querySelectorAll(".project-tree__topic-action")];
-    return {
-      labelRight: label?.getBoundingClientRect().right ?? 0,
-      actionsLeft: actions?.getBoundingClientRect().left ?? 0,
-      sideWidth: row.querySelector(".project-tree__topic-side")?.getBoundingClientRect().width ?? 0,
-      timeWidth: row.querySelector(".project-tree__topic-time")?.getBoundingClientRect().width ?? 0,
-      actionGap: actions ? getComputedStyle(actions).gap : "",
-      buttonWidths: buttons.map((button) => button.getBoundingClientRect().width),
-      reservedSpace: row.querySelector(".project-tree__topic-main") ? getComputedStyle(row.querySelector(".project-tree__topic-main")).paddingRight : "",
-    };
+  const readTreeRow = (root) =>
+    root.evaluate((row) => {
+      const label = row.querySelector(".project-tree__topic-label");
+      const actions = row.querySelector(".project-tree__topic-actions");
+      const side = row.querySelector(".project-tree__topic-side");
+      const time = row.querySelector(".project-tree__topic-time");
+      const main = row.querySelector(".project-tree__topic-main");
+      const buttons = [...row.querySelectorAll(".project-tree__topic-action")];
+      return {
+        labelRight: label?.getBoundingClientRect().right ?? 0,
+        actionsLeft: actions?.getBoundingClientRect().left ?? 0,
+        actionsWidth: actions ? actions.getBoundingClientRect().width : 0,
+        sideWidth: side ? side.getBoundingClientRect().width : 0,
+        timeWidth: time ? time.getBoundingClientRect().width : 0,
+        actionGap: actions ? getComputedStyle(actions).gap : "",
+        buttonWidths: buttons.map((button) => button.getBoundingClientRect().width),
+        reservedSpace: main ? getComputedStyle(main).paddingRight : "",
+      };
+    });
+
+  // The fixture carries --menu-open so the buttons are revealed without a
+  // pointer. In that state the timestamp column releases its slot, which is what
+  // lets the label keep its width budget instead of being overdrawn.
+  const revealed = await readTreeRow(page.locator(".project-tree__topic--has-actions"));
+  assert.ok(revealed.labelRight <= revealed.actionsLeft, "topic text is clipped before the action buttons begin");
+  assert.deepEqual(revealed.buttonWidths, [22, 22, 22]);
+  assert.equal(revealed.actionGap, "2px");
+  assert.equal(revealed.actionsWidth, 70, "the three buttons occupy their own 70px slot");
+  assert.equal(revealed.sideWidth, 0, "the timestamp releases its slot while the buttons are shown");
+  assert.equal(revealed.reservedSpace, "0px");
+
+  // Idle: the same row with the reveal modifier removed. The timestamp keeps its
+  // slot but hugs the time label instead of reserving a fixed 58px band — that
+  // fixed band was what pushed the time ~30px away from the title.
+  await page.evaluate(() => {
+    document.querySelector(".project-tree__topic--has-actions")?.classList.remove("project-tree__topic--menu-open");
   });
-  assert.ok(tree.labelRight <= tree.actionsLeft, "topic text is clipped before the action buttons begin");
-  assert.deepEqual(tree.buttonWidths, [22, 22, 22]);
-  assert.equal(tree.actionGap, "2px");
-  // The side column hugs the time label instead of reserving a fixed 58px band.
-  // Reserving 58px was what kept the timestamp ~30px away from the title; the
-  // label keeps its "never overlaps the buttons" guarantee either way, which is
-  // the invariant asserted above.
-  assert.ok(tree.sideWidth > 0, "the timestamp side holds the time label");
+  const idle = await readTreeRow(page.locator(".project-tree__topic--has-actions"));
+  assert.ok(idle.labelRight <= idle.actionsLeft, "idle topic text stays clear of the action slot");
+  assert.ok(idle.sideWidth > 0, "the idle row keeps the timestamp slot");
   assert.ok(
-    Math.abs(tree.sideWidth - tree.timeWidth) < 8,
-    `the timestamp side hugs the time label (side ${tree.sideWidth}px vs time ${tree.timeWidth}px)`,
+    Math.abs(idle.sideWidth - idle.timeWidth) < 8,
+    `the idle timestamp side hugs the time label (side ${idle.sideWidth}px vs time ${idle.timeWidth}px)`,
   );
-  assert.equal(tree.reservedSpace, "12px");
+  assert.equal(idle.reservedSpace, "12px");
+  await page.evaluate(() => {
+    document.querySelector(".project-tree__topic--has-actions")?.classList.add("project-tree__topic--menu-open");
+  });
   pass("project topic labels stop before the compact three-button action group");
 
   const classicTree = await page.evaluate(() => {
@@ -128,22 +149,31 @@ try {
     const actions = row.querySelector(".project-tree__topic-actions");
     const main = row.querySelector(".project-tree__topic-main");
     const side = row.querySelector(".project-tree__topic-side");
-    const result = {
+    const time = row.querySelector(".project-tree__topic-time");
+    const revealed = {
       labelRight: label.getBoundingClientRect().right,
       actionsLeft: actions.getBoundingClientRect().left,
       sideWidth: side.getBoundingClientRect().width,
-      timeWidth: row.querySelector(".project-tree__topic-time")?.getBoundingClientRect().width ?? 0,
+      reservedSpace: getComputedStyle(main).paddingRight,
+    };
+    row.classList.remove("project-tree__topic--menu-open");
+    const idle = {
+      labelRight: label.getBoundingClientRect().right,
+      sideWidth: side.getBoundingClientRect().width,
+      timeWidth: time ? time.getBoundingClientRect().width : 0,
       reservedSpace: getComputedStyle(main).paddingRight,
     };
     classic.remove();
-    return result;
+    return { revealed, idle };
   });
-  assert.ok(classicTree.labelRight <= classicTree.actionsLeft, "classic topic text is clipped before the action buttons begin");
+  assert.ok(classicTree.revealed.labelRight <= classicTree.revealed.actionsLeft, "classic topic text is clipped before the action buttons begin");
+  assert.equal(classicTree.revealed.sideWidth, 0, "classic timestamp releases its slot while the buttons are shown");
+  assert.ok(classicTree.idle.sideWidth > 0, "the classic idle row keeps the timestamp slot");
   assert.ok(
-    Math.abs(classicTree.sideWidth - classicTree.timeWidth) < 8,
-    `classic timestamp side hugs the time label (side ${classicTree.sideWidth}px vs time ${classicTree.timeWidth}px)`,
+    Math.abs(classicTree.idle.sideWidth - classicTree.idle.timeWidth) < 8,
+    `classic idle timestamp side hugs the time label (side ${classicTree.idle.sideWidth}px vs time ${classicTree.idle.timeWidth}px)`,
   );
-  assert.equal(classicTree.reservedSpace, "9px");
+  assert.equal(classicTree.idle.reservedSpace, "9px");
   pass("classic project topic rows share the timestamp and action slot");
 } finally {
   await browser?.close();
