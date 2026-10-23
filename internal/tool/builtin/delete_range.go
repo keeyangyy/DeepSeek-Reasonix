@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"reasonix/internal/diff"
-	"reasonix/internal/fileops"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/tool"
 )
@@ -59,9 +58,6 @@ func (d deleteRange) Execute(ctx context.Context, args json.RawMessage) (string,
 	// preview ran the non-approving boundary check; the actual write needs the
 	// full one, which can gate a Reasonix-managed config target on user approval.
 	if err := confineWrite(ctx, effectiveWriteRoots(ctx, d.rootSet, d.roots), d.guard, d.managed, change.Path); err != nil {
-		return "", err
-	}
-	if err := fileops.RequireObserved(ctx, change.Path); err != nil {
 		return "", err
 	}
 	// src carries the route and encoding the read came from, so the rewrite
