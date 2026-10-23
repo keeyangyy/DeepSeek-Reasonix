@@ -490,7 +490,17 @@ func (c *Controller) ReleaseInboxItem(id string) error {
 	if err != nil {
 		return err
 	}
-	return st.ReleaseAcceptedSteer(strings.TrimSpace(id))
+	id = strings.TrimSpace(id)
+	if err := st.ReleaseAcceptedSteer(id); err != nil {
+		return err
+	}
+	// Drop the in-memory admission too. The store transition alone leaves the
+	// entry queued inside the agent, whose loader would then fail at consume time
+	// and report the guidance as unapplied.
+	if c.executor != nil {
+		c.executor.WithdrawSteer(id)
+	}
+	return nil
 }
 
 func (c *Controller) SetInboxPaused(paused bool) error {

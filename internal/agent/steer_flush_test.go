@@ -125,6 +125,39 @@ func TestCloseSteerIntakeIfIdleMakesAdmissionLinearizable(t *testing.T) {
 	}
 }
 
+// TestWithdrawSteerReleasesQueuedEntry pins the "退回队列" path: once the user
+// hands a steer back, the agent must not consume it later. Without the withdraw
+// the entry's loader still runs, the store refuses the transition, and the turn
+// reports an unapplied steer the user never asked for.
+func TestWithdrawSteerReleasesQueuedEntry(t *testing.T) {
+	loaded := 0
+	a := New(nil, tool.NewRegistry(), NewSession(""), Options{}, event.Discard)
+	a.steerMu.Lock()
+	a.steerRunActive = true
+	a.steerMu.Unlock()
+	if !a.SteerItem("released-1", func() (string, error) { loaded++; return "text", nil }) {
+		t.Fatal("active steer should be accepted")
+	}
+	if !a.WithdrawSteer("released-1") {
+		t.Fatal("WithdrawSteer should report the queued entry")
+	}
+	if got := a.steerQueueLen(); got != 0 {
+		t.Fatalf("queue length = %d, want 0", got)
+	}
+	if text, itemID, ok := a.consumeSteer(); ok || text != "" || itemID != "" {
+		t.Fatalf("consume after withdraw = (%q, %q, %v), want silent miss", text, itemID, ok)
+	}
+	if loaded != 0 {
+		t.Fatalf("withdrawn loader ran %d times, want 0", loaded)
+	}
+	if a.WithdrawSteer("unknown-id") {
+		t.Fatal("WithdrawSteer on an unknown id should report nothing removed")
+	}
+	if a.WithdrawSteer("") {
+		t.Fatal("WithdrawSteer on an empty id should be a no-op")
+	}
+}
+
 func TestWithdrawnDurableSteerDoesNotEmitUnappliedNotice(t *testing.T) {
 	var notices int
 	a := New(nil, tool.NewRegistry(), NewSession(""), Options{}, event.FuncSink(func(e event.Event) {

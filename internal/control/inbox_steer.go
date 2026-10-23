@@ -69,7 +69,9 @@ func inboxSteerLoader(st *sessioninbox.Store, itemID string) func() (string, err
 		// This compare-and-transition is the durable hand-off boundary and
 		// closes the loader-vs-cancel gap after TrySteerInboxItem returns.
 		if err := st.MarkSteerConsumed(itemID); err != nil {
-			if errors.Is(err, sessioninbox.ErrNotFound) {
+			// A withdrawn or already-transitioned steer is a user decision, not a
+			// failure: stay silent instead of reporting unapplied guidance.
+			if errors.Is(err, sessioninbox.ErrNotFound) || errors.Is(err, sessioninbox.ErrInvalidState) {
 				return "", agent.ErrSteerWithdrawn
 			}
 			return "", err
