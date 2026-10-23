@@ -96,6 +96,7 @@ try {
       labelRight: label?.getBoundingClientRect().right ?? 0,
       actionsLeft: actions?.getBoundingClientRect().left ?? 0,
       sideWidth: row.querySelector(".project-tree__topic-side")?.getBoundingClientRect().width ?? 0,
+      timeWidth: row.querySelector(".project-tree__topic-time")?.getBoundingClientRect().width ?? 0,
       actionGap: actions ? getComputedStyle(actions).gap : "",
       buttonWidths: buttons.map((button) => button.getBoundingClientRect().width),
       reservedSpace: row.querySelector(".project-tree__topic-main") ? getComputedStyle(row.querySelector(".project-tree__topic-main")).paddingRight : "",
@@ -104,10 +105,15 @@ try {
   assert.ok(tree.labelRight <= tree.actionsLeft, "topic text is clipped before the action buttons begin");
   assert.deepEqual(tree.buttonWidths, [22, 22, 22]);
   assert.equal(tree.actionGap, "2px");
-  // The side column is deliberately narrower than the action group: the icons carry
-// their own padding, so 58px still ends the label before the buttons begin while
-// leaving no unused band right of the timestamp.
-  assert.equal(tree.sideWidth, 58, "the timestamp side stops short of the action group");
+  // The side column hugs the time label instead of reserving a fixed 58px band.
+  // Reserving 58px was what kept the timestamp ~30px away from the title; the
+  // label keeps its "never overlaps the buttons" guarantee either way, which is
+  // the invariant asserted above.
+  assert.ok(tree.sideWidth > 0, "the timestamp side holds the time label");
+  assert.ok(
+    Math.abs(tree.sideWidth - tree.timeWidth) < 8,
+    `the timestamp side hugs the time label (side ${tree.sideWidth}px vs time ${tree.timeWidth}px)`,
+  );
   assert.equal(tree.reservedSpace, "12px");
   pass("project topic labels stop before the compact three-button action group");
 
@@ -122,12 +128,21 @@ try {
     const actions = row.querySelector(".project-tree__topic-actions");
     const main = row.querySelector(".project-tree__topic-main");
     const side = row.querySelector(".project-tree__topic-side");
-    const result = { labelRight: label.getBoundingClientRect().right, actionsLeft: actions.getBoundingClientRect().left, sideWidth: side.getBoundingClientRect().width, reservedSpace: getComputedStyle(main).paddingRight };
+    const result = {
+      labelRight: label.getBoundingClientRect().right,
+      actionsLeft: actions.getBoundingClientRect().left,
+      sideWidth: side.getBoundingClientRect().width,
+      timeWidth: row.querySelector(".project-tree__topic-time")?.getBoundingClientRect().width ?? 0,
+      reservedSpace: getComputedStyle(main).paddingRight,
+    };
     classic.remove();
     return result;
   });
   assert.ok(classicTree.labelRight <= classicTree.actionsLeft, "classic topic text is clipped before the action buttons begin");
-  assert.equal(classicTree.sideWidth, 58, "classic timestamp side stops short of the action group");
+  assert.ok(
+    Math.abs(classicTree.sideWidth - classicTree.timeWidth) < 8,
+    `classic timestamp side hugs the time label (side ${classicTree.sideWidth}px vs time ${classicTree.timeWidth}px)`,
+  );
   assert.equal(classicTree.reservedSpace, "9px");
   pass("classic project topic rows share the timestamp and action slot");
 } finally {
