@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"reasonix/internal/diff"
+	"reasonix/internal/fileops"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/tool"
 )
@@ -80,6 +81,9 @@ func (d deleteSymbol) Execute(ctx context.Context, args json.RawMessage) (string
 	}
 	p.Path = resolveIn(d.workDir, p.Path)
 	if err := confineWrite(ctx, effectiveWriteRoots(ctx, d.rootSet, d.roots), d.guard, d.managed, p.Path); err != nil {
+		return "", err
+	}
+	if err := fileops.RequireObserved(ctx, p.Path); err != nil {
 		return "", err
 	}
 

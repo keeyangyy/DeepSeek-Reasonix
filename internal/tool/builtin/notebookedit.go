@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"reasonix/internal/diff"
+	"reasonix/internal/fileops"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/tool"
 )
@@ -89,6 +90,9 @@ func (n notebookEdit) Execute(ctx context.Context, raw json.RawMessage) (string,
 	}
 	a.Path = resolveIn(n.workDir, a.Path)
 	if err := confineWrite(ctx, effectiveWriteRoots(ctx, n.rootSet, n.roots), n.guard, n.managed, a.Path); err != nil {
+		return "", err
+	}
+	if err := fileops.RequireObserved(ctx, a.Path); err != nil {
 		return "", err
 	}
 	src, err := readEditSource(ctx, n.overlay, a.Path)
