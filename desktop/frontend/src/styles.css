@@ -31165,12 +31165,14 @@ body > .mermaid-diagram--fullscreen {
   }
 }
 
-/* An armed permanent delete keeps the row exactly as it looks when idle: the
-   title, its truncation and the activity time all stay put, and the hint plus
-   the delete button float over the row's right edge. Reflowing the row to make
-   room made the title jump on the pointer's first entry. */
-:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions {
-  width: 70px;
+/* Armed: the hint pill plus trash icon is wider than the three 22px icons, so a
+   fixed 70px clips the button. Width must be auto, and the selectors must
+   out-rank the row's :hover width rule (0,4,0) — the pointer still rests on the
+   row when the confirm state opens. */
+:root[data-theme-style] .project-tree__topic--delete-armed .project-tree__topic-actions,
+:root[data-theme-style] .project-tree__topic--delete-armed:hover .project-tree__topic-actions,
+:root[data-theme-style] .project-tree__topic--delete-armed:focus-within .project-tree__topic-actions {
+  width: auto;
   opacity: 1;
   pointer-events: auto;
 }
