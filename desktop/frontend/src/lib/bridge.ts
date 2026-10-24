@@ -242,16 +242,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
     paused: boolean;
     recovered: boolean;
     recoveredCount?: number; sessionPath?: string;
-    items: Array<{
-      id: string;
-      intent: string;
-      state: string;
-      preview: string;
-      byteSize: number;
-      source?: string;
-      position: number;
-      blockReason?: string;
-    }>;
+    items: Array<{ id: string; intent: string; state: string; revision: number; preview: string; byteSize: number; source?: string; position: number; blockReason?: string }>;
     itemsCount: number;
     bytes: number;
     maxItems: number;
@@ -267,10 +258,14 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   SteerInboxItemForTurn?(tabID: string, turnID: string, itemID: string): Promise<{
     itemId: string; disposition: string; position: number; paused: boolean; idempotent?: boolean; error?: string;
   }>;
-  ReadInboxItem(tabID: string, id: string): Promise<{ id: string; displayText: string; rawText: string; submitText: string }>;
+  ReadInboxItem(tabID: string, id: string): Promise<{ id: string; revision: number; displayText: string; rawText: string; submitText: string }>;
   UpdateInboxItem(tabID: string, id: string, display: string, submit: string): Promise<void>;
+  /** Revision-fenced edit: non-zero expectedRevision is refused when stale. */
+  UpdateInboxItemIfCurrent(tabID: string, id: string, display: string, submit: string, expectedRevision: number): Promise<void>;
   DeleteInboxItem(tabID: string, id: string): Promise<void>;
   MoveInboxItem(tabID: string, id: string, toIndex: number): Promise<void>;
+  /** Revision-fenced move: non-zero expectedRevision is refused when stale. */
+  MoveInboxItemIfCurrent(tabID: string, id: string, toIndex: number, expectedRevision: number): Promise<void>;
   ReleaseInboxItem(tabID: string, id: string): Promise<void>;
   SetInboxPaused(tabID: string, paused: boolean): Promise<void>;
   RetryInboxItem(tabID: string, id: string): Promise<void>;
@@ -3065,11 +3060,13 @@ function makeMockApp(): AppBindings {
           return { itemId: itemID, disposition: "steer_accepted", position: 1, paused: false };
         },
         async ReadInboxItem(_tabID, id) {
-          return { id, displayText: "", rawText: "", submitText: "" };
+          return { id, revision: 0, displayText: "", rawText: "", submitText: "" };
         },
         async UpdateInboxItem() {},
+        async UpdateInboxItemIfCurrent() {},
         async DeleteInboxItem() {},
         async MoveInboxItem() {},
+        async MoveInboxItemIfCurrent() {},
         async ReleaseInboxItem() {},
         async SetInboxPaused(_tabID, paused) { if (recoveryMock) (await import("./inboxRecoveryPreview")).setInboxRecoveryPreviewPaused(paused); },
         async RetryInboxItem() {},

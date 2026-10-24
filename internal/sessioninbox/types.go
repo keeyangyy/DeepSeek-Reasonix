@@ -64,6 +64,10 @@ var (
 	ErrEmpty               = errors.New("inbox item body is empty")
 	ErrPaused              = errors.New("inbox is paused")
 	ErrIdempotencyConflict = errors.New("idempotency key was already used for different input")
+	// ErrRevisionConflict means the item changed between the caller reading it
+	// and writing it back: another surface edited, moved, or transitioned the
+	// same row. The caller must re-read instead of overwriting.
+	ErrRevisionConflict = errors.New("inbox item changed since it was read")
 )
 
 // InboxItemMeta is the durable metadata kept in the manifest (never the body).

@@ -49,11 +49,14 @@ type Inbox interface {
 	InboxSnapshot() sessioninbox.InboxSnapshot
 	ReadInboxItem(id string) (sessioninbox.InboxItemMeta, sessioninbox.PromptEnvelope, error)
 	UpdateInboxItem(id string, display, raw, submit string) (sessioninbox.InboxItemMeta, error)
+	// UpdateInboxItemIfCurrent fences the write on expectedRevision (>0).
+	UpdateInboxItemIfCurrent(id, display, raw, submit string, expectedRevision int64) (sessioninbox.InboxItemMeta, error)
 	AppendInboxItem(id, text, idempotency string, extra map[string]string) (sessioninbox.InboxItemMeta, error)
 	DeleteInboxItem(id string) error
 	CancelWithInboxItems(ids []string, source string) error
 	CancelWithInboxItemsResult(ids []string, source string) (InboxCancelResult, error)
 	MoveInboxItem(id string, toIndex int) error
+	MoveInboxItemIfCurrent(id string, toIndex int, expectedRevision int64) error // >0 fences the move
 	ReleaseInboxItem(id string) error
 	SetInboxPaused(paused bool) error
 	RetryInboxItem(id string) error
@@ -365,6 +368,13 @@ func (c *Controller) ReadInboxItem(id string) (sessioninbox.InboxItemMeta, sessi
 }
 
 func (c *Controller) UpdateInboxItem(id, display, raw, submit string) (sessioninbox.InboxItemMeta, error) {
+	return c.UpdateInboxItemIfCurrent(id, display, raw, submit, 0)
+}
+
+// UpdateInboxItemIfCurrent edits an item and refuses the write when it changed
+// since expectedRevision was read, so a second surface cannot overwrite an edit
+// it never saw. A zero expectedRevision keeps the pre-handshake behaviour.
+func (c *Controller) UpdateInboxItemIfCurrent(id, display, raw, submit string, expectedRevision int64) (sessioninbox.InboxItemMeta, error) {
 	st, err := c.ensureInbox()
 	if err != nil {
 		return sessioninbox.InboxItemMeta{}, err
@@ -389,7 +399,7 @@ func (c *Controller) UpdateInboxItem(id, display, raw, submit string) (sessionin
 		Extra:        maps.Clone(previous.Extra),
 	}
 	env.FrozenRefBlock, env.FrozenImages, env.ReferenceErrors = c.freezeInboxReferences(context.Background(), submit, env.ExplicitRefs)
-	updated, err := st.UpdateItemAllowingAcceptedSteer(id, env)
+	updated, err := st.UpdateItemAllowingAcceptedSteerIfCurrent(id, env, expectedRevision)
 	if err != nil {
 		return sessioninbox.InboxItemMeta{}, err
 	}
@@ -475,11 +485,18 @@ func (c *Controller) DeleteInboxItem(id string) error {
 }
 
 func (c *Controller) MoveInboxItem(id string, toIndex int) error {
+	return c.MoveInboxItemIfCurrent(id, toIndex, 0)
+}
+
+// MoveInboxItemIfCurrent reorders an item, refusing the move when it changed
+// since expectedRevision was read. A zero expectedRevision keeps the
+// pre-handshake behaviour.
+func (c *Controller) MoveInboxItemIfCurrent(id string, toIndex int, expectedRevision int64) error {
 	st, err := c.ensureInbox()
 	if err != nil {
 		return err
 	}
-	return st.MoveItem(id, toIndex)
+	return st.MoveItemIfCurrent(id, toIndex, expectedRevision)
 }
 
 // ReleaseInboxItem returns an accepted steer to the next-turn queue. The item's

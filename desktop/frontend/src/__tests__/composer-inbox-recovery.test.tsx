@@ -558,7 +558,7 @@ console.log("\ncomposer inbox recovery");
 
 {
   const dom = installDom();
-  let updated = "";
+  let updated = "", sentRevision = -1;
   installBridgeApp({
     InboxSnapshot: async () => ({
       revision: 8,
@@ -568,7 +568,7 @@ console.log("\ncomposer inbox recovery");
       items: [{
         id: "editable-guidance",
         intent: "followup",
-        state: "queued",
+        state: "queued", revision: 7,
         preview: "Original queued text",
         byteSize: 64,
         position: 1,
@@ -578,8 +578,9 @@ console.log("\ncomposer inbox recovery");
       maxItems: 64,
       maxBytes: 64 * 1024 * 1024,
     }),
-    UpdateInboxItem: async (_tabId: string, _id: string, display: string) => {
+    UpdateInboxItemIfCurrent: async (_tabId: string, _id: string, display: string, _submit: string, expectedRevision: number) => {
       updated = display;
+      sentRevision = expectedRevision;
     },
   });
   const { root } = await renderComposer({ running: false });
@@ -590,9 +591,8 @@ console.log("\ncomposer inbox recovery");
   ok(editor?.value === "Original queued text", "edit mode loads the queued text");
   const save = document.querySelector("[aria-label=\"Save guidance edits\"]") as HTMLButtonElement;
   await act(async () => { save.click(); await flushTimers(); });
-  ok(updated === "Original queued text", "edit saves through UpdateInboxItem");
-  await act(async () => { root.unmount(); });
-  dom.window.close();
+  ok(updated === "Original queued text" && sentRevision === 7, `edit saves through UpdateInboxItemIfCurrent and echoes revision ${sentRevision}`);
+  await act(async () => { root.unmount(); }); dom.window.close();
 }
 
 {

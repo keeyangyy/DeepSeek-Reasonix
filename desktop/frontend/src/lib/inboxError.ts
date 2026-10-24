@@ -18,6 +18,7 @@ const CODE_INDEX = {
   channel_read_only: 10,
   workspace_starting: 11,
   workspace_start_failed: 12,
+  inbox_revision_conflict: 16,
 } as const;
 
 type InboxErrorCode = keyof typeof CODE_INDEX;
@@ -43,6 +44,7 @@ const ERROR_COPY: Record<Locale, readonly string[]> = {
     "The inbox operation could not be completed",
     "The turn ended before guidance could be applied. It will remain queued for the next turn",
     "Cancel failed: {error}",
+    "This instruction was changed elsewhere. Refresh and try again",
   ],
   zh: [
     "收件箱已暂停",
@@ -61,6 +63,7 @@ const ERROR_COPY: Record<Locale, readonly string[]> = {
     "无法完成收件箱操作",
     "引导尚未应用时当前回合已结束；它会保留在队列中，供下一回合处理",
     "取消失败：{error}",
+    "这条指令已在别处修改，请刷新后重试",
   ],
   "zh-TW": [
     "收件匣已暫停",
@@ -79,6 +82,7 @@ const ERROR_COPY: Record<Locale, readonly string[]> = {
     "無法完成收件匣操作",
     "引導尚未套用時目前回合已結束；它會保留在佇列中，供下一回合處理",
     "取消失敗：{error}",
+    "這條指令已在別處修改，請重新整理後重試",
   ],
 };
 
@@ -93,6 +97,7 @@ const LEGACY_CODES: Record<string, InboxErrorCode> = {
   "inbox is closed": "inbox_closed",
   "inbox item body is empty": "inbox_empty",
   "idempotency key was already used for different input": "inbox_idempotency_conflict",
+  "inbox item changed since it was read": "inbox_revision_conflict",
   "channel session is read-only": "channel_read_only",
   "workspace is still starting": "workspace_starting",
 };

@@ -106,12 +106,23 @@ func (s *Server) inboxUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body struct {
 		Input string `json:"input"`
+		// Revision is optional: when present the write is refused if the item
+		// changed since the client read it.
+		Revision int64 `json:"revision"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Input) == "" {
 		http.Error(w, "missing input", http.StatusBadRequest)
 		return
 	}
-	meta, err := s.inboxAPI().UpdateInboxItem(id, body.Input, body.Input, body.Input)
+	var (
+		meta sessioninbox.InboxItemMeta
+		err  error
+	)
+	if body.Revision > 0 {
+		meta, err = s.inboxAPI().UpdateInboxItemIfCurrent(id, body.Input, body.Input, body.Input, body.Revision)
+	} else {
+		meta, err = s.inboxAPI().UpdateInboxItem(id, body.Input, body.Input, body.Input)
+	}
 	if err != nil {
 		writeInboxError(w, err)
 		return
@@ -131,14 +142,21 @@ func (s *Server) inboxDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) inboxMove(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ID      string `json:"id"`
-		ToIndex int    `json:"toIndex"`
+		ID       string `json:"id"`
+		ToIndex  int    `json:"toIndex"`
+		Revision int64  `json:"revision"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
 		http.Error(w, "missing id", http.StatusBadRequest)
 		return
 	}
-	if err := s.inboxAPI().MoveInboxItem(body.ID, body.ToIndex); err != nil {
+	var err error
+	if body.Revision > 0 {
+		err = s.inboxAPI().MoveInboxItemIfCurrent(body.ID, body.ToIndex, body.Revision)
+	} else {
+		err = s.inboxAPI().MoveInboxItem(body.ID, body.ToIndex)
+	}
+	if err != nil {
 		writeInboxError(w, err)
 		return
 	}

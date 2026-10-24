@@ -40,6 +40,7 @@ func inboxWailsError(err error) error {
 		{sessioninbox.ErrEmpty, "inbox_empty"},
 		{sessioninbox.ErrPaused, "inbox_paused"},
 		{sessioninbox.ErrIdempotencyConflict, "inbox_idempotency_conflict"},
+		{sessioninbox.ErrRevisionConflict, "inbox_revision_conflict"},
 	}
 	for _, item := range known {
 		if errors.Is(err, item.target) {
@@ -60,9 +61,13 @@ func inboxWailsError(err error) error {
 
 // InboxItemView is the Wails-facing metadata row (never full body).
 type InboxItemView struct {
-	ID          string `json:"id"`
-	Intent      string `json:"intent"`
-	State       string `json:"state"`
+	ID     string `json:"id"`
+	Intent string `json:"intent"`
+	State  string `json:"state"`
+	// Revision is the item's version at snapshot time. The frontend echoes it
+	// back on edit/move so a write made against a newer row is refused instead
+	// of silently overwriting it.
+	Revision    int64  `json:"revision"`
 	Preview     string `json:"preview"`
 	ByteSize    int64  `json:"byteSize"`
 	Source      string `json:"source,omitempty"`
@@ -111,6 +116,7 @@ type inboxChangedView struct {
 // InboxEnvelopeView is the full body for the editor (fetched by id only).
 type InboxEnvelopeView struct {
 	ID          string `json:"id"`
+	Revision    int64  `json:"revision"`
 	DisplayText string `json:"displayText"`
 	RawText     string `json:"rawText"`
 	SubmitText  string `json:"submitText"`
@@ -123,6 +129,7 @@ func inboxSnapshotView(snap sessioninbox.InboxSnapshot) InboxSnapshotView {
 			ID:          it.ID,
 			Intent:      string(it.Intent),
 			State:       string(it.State),
+			Revision:    it.Revision,
 			Preview:     it.Preview,
 			ByteSize:    it.ByteSize,
 			Source:      it.Source,
@@ -362,6 +369,7 @@ func (a *App) ReadInboxItem(tabID, id string) (InboxEnvelopeView, error) {
 	}
 	return InboxEnvelopeView{
 		ID:          meta.ID,
+		Revision:    meta.Revision,
 		DisplayText: env.DisplayText,
 		RawText:     env.RawText,
 		SubmitText:  env.SubmitText,
@@ -370,11 +378,18 @@ func (a *App) ReadInboxItem(tabID, id string) (InboxEnvelopeView, error) {
 
 // UpdateInboxItem rewrites a durable entry and re-freezes refs.
 func (a *App) UpdateInboxItem(tabID, id, display, submit string) error {
+	return a.UpdateInboxItemIfCurrent(tabID, id, display, submit, 0)
+}
+
+// UpdateInboxItemIfCurrent rewrites an entry and refuses the write when the
+// item changed after the caller read it. A zero expectedRevision keeps the
+// pre-handshake behaviour, so an older frontend still works.
+func (a *App) UpdateInboxItemIfCurrent(tabID, id, display, submit string, expectedRevision int64) error {
 	ctrl, err := a.inboxCtrl(tabID)
 	if err != nil {
 		return err
 	}
-	if _, err := ctrl.UpdateInboxItem(id, display, submit, submit); err != nil {
+	if _, err := ctrl.UpdateInboxItemIfCurrent(id, display, submit, submit, expectedRevision); err != nil {
 		return inboxWailsError(err)
 	}
 	a.emitInboxChanged(tabID)
@@ -396,11 +411,16 @@ func (a *App) DeleteInboxItem(tabID, id string) error {
 
 // MoveInboxItem reorders (toIndex is 0-based).
 func (a *App) MoveInboxItem(tabID, id string, toIndex int) error {
+	return a.MoveInboxItemIfCurrent(tabID, id, toIndex, 0)
+}
+
+// MoveInboxItemIfCurrent reorders with the revision handshake applied.
+func (a *App) MoveInboxItemIfCurrent(tabID, id string, toIndex int, expectedRevision int64) error {
 	ctrl, err := a.inboxCtrl(tabID)
 	if err != nil {
 		return err
 	}
-	if err := ctrl.MoveInboxItem(id, toIndex); err != nil {
+	if err := ctrl.MoveInboxItemIfCurrent(id, toIndex, expectedRevision); err != nil {
 		return inboxWailsError(err)
 	}
 	a.emitInboxChanged(tabID)

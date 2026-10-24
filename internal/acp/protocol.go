@@ -527,16 +527,16 @@ type SessionInboxItemParams struct {
 
 // SessionInboxUpdateParams rewrites an item body.
 type SessionInboxUpdateParams struct {
-	SessionID string `json:"sessionId"`
-	ItemID    string `json:"itemId"`
-	Text      string `json:"text"`
+	SessionInboxItemParams
+	Text     string `json:"text"`
+	Revision int64  `json:"revision,omitempty"` // >0 fences the edit on the item version
 }
 
 // SessionInboxMoveParams reorders an item (toIndex is 0-based).
 type SessionInboxMoveParams struct {
-	SessionID string `json:"sessionId"`
-	ItemID    string `json:"itemId"`
-	ToIndex   int    `json:"toIndex"`
+	SessionInboxItemParams
+	ToIndex  int   `json:"toIndex"`
+	Revision int64 `json:"revision,omitempty"` // >0 fences the move on the item version
 }
 
 // SessionInboxPauseParams toggles pause.

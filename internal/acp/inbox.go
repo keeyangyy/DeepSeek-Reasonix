@@ -111,7 +111,12 @@ func (s *service) sessionInboxUpdate(_ context.Context, raw json.RawMessage) (an
 		return nil, err
 	}
 	text := strings.TrimSpace(p.Text)
-	meta, err := api.UpdateInboxItem(p.ItemID, text, text, text)
+	var meta sessioninbox.InboxItemMeta
+	if p.Revision > 0 {
+		meta, err = api.UpdateInboxItemIfCurrent(p.ItemID, text, text, text, p.Revision)
+	} else {
+		meta, err = api.UpdateInboxItem(p.ItemID, text, text, text)
+	}
 	if err != nil {
 		return nil, &RPCError{Code: ErrInvalidRequest, Message: err.Error()}
 	}
@@ -142,8 +147,14 @@ func (s *service) sessionInboxMove(_ context.Context, raw json.RawMessage) (any,
 	if err != nil {
 		return nil, err
 	}
-	if err := api.MoveInboxItem(p.ItemID, p.ToIndex); err != nil {
-		return nil, &RPCError{Code: ErrInvalidRequest, Message: err.Error()}
+	var moveErr error
+	if p.Revision > 0 {
+		moveErr = api.MoveInboxItemIfCurrent(p.ItemID, p.ToIndex, p.Revision)
+	} else {
+		moveErr = api.MoveInboxItem(p.ItemID, p.ToIndex)
+	}
+	if moveErr != nil {
+		return nil, &RPCError{Code: ErrInvalidRequest, Message: moveErr.Error()}
 	}
 	return map[string]any{"ok": true}, nil
 }
