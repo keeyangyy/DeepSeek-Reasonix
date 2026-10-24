@@ -1,6 +1,7 @@
 import { Fragment, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, CornerDownRight, GripVertical, Pencil, Trash2, Undo2, X } from "lucide-react";
 import { guidanceHasKnownPendingState, guidanceIsEditable, guidanceIsInFlight, guidanceNeedsRetry } from "../lib/composerGuidance";
+import { clearGuidanceDraft, readGuidanceDraft, writeGuidanceDraft } from "../lib/guidanceDraft";
 import { useI18n } from "../lib/i18n";
 import type { StructuredInvocationSubmit } from "../lib/invocationDisplay";
 import { InboxRecoveryBanner } from "./InboxRecoveryBanner";
@@ -10,6 +11,8 @@ export type PendingGuidance = {
   id: string;
   text: string;
   submitText: string;
+  /** Item version from the host snapshot; echoed back on edit/move. */
+  revision?: number;
   state?: string;
   intent?: string;
   source?: string;
@@ -26,6 +29,7 @@ export type InboxRecoveryNotice = {
 };
 
 export function ComposerGuidanceShelf({
+  draftKey,
   recovery,
   recoveryDisabled,
   items,
@@ -45,6 +49,7 @@ export function ComposerGuidanceShelf({
   onMove,
   onRelease,
 }: {
+  draftKey: string;
   recovery: InboxRecoveryNotice | null;
   recoveryDisabled: boolean;
   items: PendingGuidance[];
@@ -81,10 +86,14 @@ export function ComposerGuidanceShelf({
 
   const startEdit = (item: PendingGuidance) => {
     setEditingId(item.id);
-    setEditDraft(item.submitText.trim() || item.text);
+    // A stored draft wins over the saved body: it is text the user typed but
+    // never submitted, so restoring it is the whole point of the draft.
+    setEditDraft(readGuidanceDraft(draftKey, item.id) || item.submitText.trim() || item.text);
   };
 
   const cancelEdit = () => {
+    // Cancelling is an explicit discard, so the draft goes with it.
+    if (editingId) clearGuidanceDraft(draftKey, editingId);
     setEditingId(null);
     setEditDraft("");
     setEditBusy(false);
@@ -97,7 +106,10 @@ export function ComposerGuidanceShelf({
     setEditBusy(true);
     try {
       await onEdit(item, next);
-      cancelEdit();
+      clearGuidanceDraft(draftKey, item.id);
+      setEditingId(null);
+      setEditDraft("");
+      setEditBusy(false);
     } catch {
       setEditBusy(false);
     }
@@ -216,7 +228,12 @@ export function ComposerGuidanceShelf({
                     <input
                       className="composer-guidance-item__editor"
                       value={editDraft}
-                      onChange={(event) => setEditDraft(event.target.value)}
+                      onChange={(event) => {
+                        setEditDraft(event.target.value);
+                        // Persist on every keystroke: the point is to survive a
+                        // remount, and a debounce would lose the last words.
+                        writeGuidanceDraft(draftKey, item.id, event.target.value);
+                      }}
                       aria-label={t("composer.guidanceEdit")}
                       disabled={editBusy}
                       onKeyDown={(event) => {

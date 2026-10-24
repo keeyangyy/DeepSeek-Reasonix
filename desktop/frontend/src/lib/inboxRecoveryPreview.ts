@@ -18,6 +18,7 @@ export function inboxRecoveryPreviewSnapshot(paused = recoveryPaused) {
     id: `recovered-${index + 1}`,
     intent: "followup",
     state: "uncertain",
+    revision: index + 1,
     preview: `${index + 1}. ${PREVIEWS[index % PREVIEWS.length]}`,
     byteSize: RECOVERED_INSTRUCTION_BYTES,
     source: "desktop",

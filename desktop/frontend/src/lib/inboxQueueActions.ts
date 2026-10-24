@@ -8,7 +8,7 @@ import type { PendingGuidance } from "../components/ComposerGuidanceShelf";
 // the draft it belongs to, call the host, then mirror the change locally.
 type InboxQueueBindings = Pick<
   AppBindings,
-  "UpdateInboxItem" | "ReadInboxItem" | "DeleteInboxItem" | "MoveInboxItem" | "ReleaseInboxItem"
+  "UpdateInboxItemIfCurrent" | "ReadInboxItem" | "DeleteInboxItem" | "MoveInboxItemIfCurrent" | "ReleaseInboxItem"
 >;
 
 export type InboxQueueDeps = {
@@ -31,7 +31,7 @@ export function makeInboxQueueActions(deps: InboxQueueDeps) {
     const text = nextText.trim();
     if (!text || local(item)) return;
     try {
-      await app.UpdateInboxItem(tabId, item.id, text, text);
+      await app.UpdateInboxItemIfCurrent(tabId, item.id, text, text, item.revision ?? 0);
       updateItems(draftKey(), (items) =>
         items.map((queued) => queued.id === item.id ? { ...queued, text, submitText: text } : queued),
       );
@@ -68,7 +68,7 @@ export function makeInboxQueueActions(deps: InboxQueueDeps) {
   const moveQueuedGuidance = async (item: PendingGuidance, toIndex: number) => {
     if (local(item)) return;
     try {
-      await app.MoveInboxItem(tabId, item.id, toIndex);
+      await app.MoveInboxItemIfCurrent(tabId, item.id, toIndex, item.revision ?? 0);
       updateItems(draftKey(), (items) => {
         const from = items.findIndex((queued) => queued.id === item.id);
         if (from < 0 || from === toIndex) return items;

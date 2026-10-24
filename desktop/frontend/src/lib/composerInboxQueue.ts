@@ -9,6 +9,7 @@ export type InboxSnapshotLike = {
   sessionPath?: string;
   items?: Array<{
     id: string;
+    revision?: number;
     preview?: string;
     state?: string;
     intent?: string;
@@ -40,6 +41,7 @@ export function guidanceFromInboxSnapshot(snap: InboxSnapshotLike | null | undef
     id: it.id,
     text: it.preview || "",
     submitText: "",
+    revision: it.revision,
     state: it.state,
     intent: it.intent,
     source: it.source,

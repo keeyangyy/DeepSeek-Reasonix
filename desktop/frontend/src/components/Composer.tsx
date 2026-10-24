@@ -4268,6 +4268,7 @@ export function Composer({
       {pendingGuidance.length > 0 && (
         <Suspense fallback={null}>
           <ComposerGuidanceShelf
+            draftKey={draftKey}
             recovery={pendingGuidance[0]?.paused && !pendingGuidance.some((item) => guidanceIsInFlight(item.state)) ? {
               draftKey,
               tabId: tabId || "",

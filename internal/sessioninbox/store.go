@@ -464,7 +464,7 @@ func (s *Store) ReadItem(id string) (InboxItemMeta, PromptEnvelope, error) {
 // deletes the old blob. Pre-commit crashes leave only a GC-able orphan; after
 // commit the checksum always points at the new body.
 func (s *Store) UpdateItem(id string, env PromptEnvelope) (InboxItemMeta, error) {
-	return s.UpdateItemWithIdempotency(id, env, "", PromptEnvelope{})
+	return s.UpdateItemWithIdempotencyIfCurrent(id, env, "", PromptEnvelope{}, 0)
 }
 
 // UpdateItemAllowingAcceptedSteer edits an item this turn already accepted.
@@ -472,17 +472,32 @@ func (s *Store) UpdateItem(id string, env PromptEnvelope) (InboxItemMeta, error)
 // edit is what the consumer reads; once consumed the same call fails closed
 // with ErrInvalidState rather than rewriting a delivered message.
 func (s *Store) UpdateItemAllowingAcceptedSteer(id string, env PromptEnvelope) (InboxItemMeta, error) {
-	return s.updateItem(id, env, "", PromptEnvelope{}, true)
+	return s.UpdateItemAllowingAcceptedSteerIfCurrent(id, env, 0)
+}
+
+// UpdateItemAllowingAcceptedSteerIfCurrent additionally refuses the write when
+// the item changed since expectedRevision was read, so a second surface cannot
+// silently overwrite an edit it never saw. A zero expectedRevision skips the
+// check, which keeps hosts that predate the revision handshake working.
+func (s *Store) UpdateItemAllowingAcceptedSteerIfCurrent(id string, env PromptEnvelope, expectedRevision int64) (InboxItemMeta, error) {
+	return s.updateItem(id, env, "", PromptEnvelope{}, true, expectedRevision)
 }
 
 // UpdateItemWithIdempotency atomically updates an item and optionally binds an
 // additional client idempotency key to it. aliasEnvelope is the original client
 // request, not the merged body, so collect-mode redelivery remains deduplicated.
 func (s *Store) UpdateItemWithIdempotency(id string, env PromptEnvelope, alias string, aliasEnvelope PromptEnvelope) (InboxItemMeta, error) {
-	return s.updateItem(id, env, alias, aliasEnvelope, false)
+	return s.UpdateItemWithIdempotencyIfCurrent(id, env, alias, aliasEnvelope, 0)
 }
 
-func (s *Store) updateItem(id string, env PromptEnvelope, alias string, aliasEnvelope PromptEnvelope, allowAcceptedSteer bool) (InboxItemMeta, error) {
+// UpdateItemWithIdempotencyIfCurrent is UpdateItemWithIdempotency plus the
+// revision handshake. A replayed idempotency alias still succeeds: the caller's
+// write already landed, so a later revision is not a conflict.
+func (s *Store) UpdateItemWithIdempotencyIfCurrent(id string, env PromptEnvelope, alias string, aliasEnvelope PromptEnvelope, expectedRevision int64) (InboxItemMeta, error) {
+	return s.updateItem(id, env, alias, aliasEnvelope, false, expectedRevision)
+}
+
+func (s *Store) updateItem(id string, env PromptEnvelope, alias string, aliasEnvelope PromptEnvelope, allowAcceptedSteer bool, expectedRevision int64) (InboxItemMeta, error) {
 	if s == nil {
 		return InboxItemMeta{}, ErrClosed
 	}
@@ -530,6 +545,11 @@ func (s *Store) updateItem(id string, env PromptEnvelope, alias string, aliasEnv
 	}
 	if replayed {
 		return meta, nil
+	}
+	// The revision handshake sits after the idempotency replay: a repeated
+	// request already landed, so its stale-looking revision is not a conflict.
+	if expectedRevision > 0 && meta.Revision != expectedRevision {
+		return InboxItemMeta{}, fmt.Errorf("%w: item revision %d, expected %d", ErrRevisionConflict, meta.Revision, expectedRevision)
 	}
 	if byteSize > s.limits.MaxItemBytes {
 		return InboxItemMeta{}, ErrItemTooLarge

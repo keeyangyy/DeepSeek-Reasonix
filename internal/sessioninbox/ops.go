@@ -1,6 +1,7 @@
 package sessioninbox
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -164,6 +165,13 @@ func (s *Store) discardPendingItemsOwnedResult(ids []string, source string, stri
 
 // MoveItem reorders the queue. toIndex is 0-based; values past the end append.
 func (s *Store) MoveItem(id string, toIndex int) error {
+	return s.MoveItemIfCurrent(id, toIndex, 0)
+}
+
+// MoveItemIfCurrent reorders an item, refusing the move when it changed since
+// expectedRevision was read. A zero expectedRevision skips the check so hosts
+// that predate the revision handshake keep working.
+func (s *Store) MoveItemIfCurrent(id string, toIndex int, expectedRevision int64) error {
 	if s == nil {
 		return ErrClosed
 	}
@@ -186,6 +194,9 @@ func (s *Store) MoveItem(id string, toIndex int) error {
 	if !isPendingState(next.Items[from].State) {
 		return ErrInvalidState
 	}
+	if expectedRevision > 0 && next.Items[from].Revision != expectedRevision {
+		return fmt.Errorf("%w: item revision %d, expected %d", ErrRevisionConflict, next.Items[from].Revision, expectedRevision)
+	}
 	if toIndex < 0 {
 		toIndex = 0
 	}
@@ -196,6 +207,10 @@ func (s *Store) MoveItem(id string, toIndex int) error {
 		return nil
 	}
 	it := next.Items[from]
+	// A move is a change to the row, so the item's revision has to move with it.
+	// Without this the item keeps reporting the revision it had before the move,
+	// and a later edit holding that revision would pass a check it should fail.
+	it.Revision = next.Revision + 1
 	next.Items = append(next.Items[:from], next.Items[from+1:]...)
 	if toIndex > len(next.Items) {
 		toIndex = len(next.Items)
