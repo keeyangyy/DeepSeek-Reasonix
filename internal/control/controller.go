@@ -5020,24 +5020,14 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 		// while tools and prompt waiters were still live.
 		c.finishing = false
 		c.finishingBoundary.end()
-		// Only a teardown that caught no live turn counts as an orderly quit for
-		// the inbox. A running turn here is exactly the interrupted case the
-		// recovery gate exists for, so it must not be waved through.
+		// Only a teardown with no live turn counts as an orderly quit.
 		turnIdle := !c.running
 		if cancel != nil {
 			c.canceling = true
 		}
 		c.mu.Unlock()
 		if turnIdle {
-			c.inbox.mu.Lock()
-			if c.inbox.store != nil {
-				// Best effort: failing to record the flag only restores the old
-				// conservative behaviour on the next launch.
-				if err := c.inbox.store.MarkCleanShutdown(); err != nil {
-					slog.Debug("controller: mark inbox clean shutdown", "err", err)
-				}
-			}
-			c.inbox.mu.Unlock()
+			c.markInboxCleanShutdown()
 		}
 		if cancel != nil {
 			// clearAll deliberately does not signal waiters. Pair it with the
