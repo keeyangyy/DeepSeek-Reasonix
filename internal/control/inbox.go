@@ -511,6 +511,13 @@ func (c *Controller) ReleaseInboxItem(id string) error {
 	if err := st.ReleaseAcceptedSteer(id); err != nil {
 		return err
 	}
+	// Stop treating the item as owned by this turn. Without this the id survives
+	// in activeItemIDs, and the turn-end sweep walks it into AckDequeue, which
+	// only accepts running/steer_* — a released (queued) row therefore fails as
+	// ErrInvalidState, flips to uncertain, and pauses the whole queue.
+	c.inbox.mu.Lock()
+	c.inbox.untrackActive(id)
+	c.inbox.mu.Unlock()
 	// Drop the in-memory admission too. The store transition alone leaves the
 	// entry queued inside the agent, whose loader would then fail at consume time
 	// and report the guidance as unapplied.
@@ -702,6 +709,15 @@ func (c *Controller) onInboxTurnDone() {
 	for _, id := range ids {
 		if err := st.AckDequeue(id); err != nil {
 			if errors.Is(err, sessioninbox.ErrNotFound) {
+				continue
+			}
+			// ErrInvalidState means the row no longer belongs to this turn: the
+			// user released it back to the queue (or a retry requeued it) while
+			// the turn was finishing. That is a legitimate hand-back, not a lost
+			// acknowledgement, so it must not poison the whole queue. Without
+			// this guard a released steer flips to uncertain and pauses dispatch.
+			if errors.Is(err, sessioninbox.ErrInvalidState) {
+				slog.Info("controller: inbox ack skipped, row no longer owned by turn", "id", id)
 				continue
 			}
 			slog.Warn("controller: inbox ack dequeue", "err", err, "id", id)
