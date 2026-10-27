@@ -116,6 +116,35 @@ func (s *Store) Close() {
 	s.mu.Unlock()
 }
 
+// MarkCleanShutdown records that this run is closing the store on its own, so
+// the next Open can tell an orderly quit apart from a crash. Only a crash keeps
+// freezing the queue for review; an orderly quit leaves already-queued work
+// queued so it resumes by itself.
+//
+// Best effort by design: a store that cannot write simply keeps the previous
+// (conservative) crash-recovery behaviour, which is the safe failure direction.
+func (s *Store) MarkCleanShutdown() error {
+	if s == nil {
+		return ErrClosed
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	release, err := s.beginDiskTransactionLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := s.mutableLocked(); err != nil {
+		return err
+	}
+	if s.man == nil || s.man.CleanShutdown {
+		return nil
+	}
+	next := s.man.clone()
+	next.CleanShutdown = true
+	return s.commitManifestLocked(next)
+}
+
 // OnChange registers a non-blocking snapshot listener.
 func (s *Store) OnChange(fn func(InboxSnapshot)) {
 	if s == nil || fn == nil {
@@ -212,6 +241,12 @@ func (s *Store) loadOrInitLocked() error {
 	// Cross-process recovery: another run left in-flight items.
 	recovered := 0
 	if man.RunID != "" && man.RunID != s.runID {
+		// A clean shutdown means the previous run closed the store on its own:
+		// queued work was merely waiting for a turn that never came, not
+		// interrupted mid-flight, so it must not be gated behind a review.
+		// In-flight states stay exceptions — that turn really did stop half-way,
+		// so those rows still become uncertain and still ask for a look.
+		cleanExit := man.CleanShutdown
 		for i := range man.Items {
 			switch man.Items[i].State {
 			case StateRunning, StateSteerAccepted, StateSteerConsumed:
@@ -219,16 +254,20 @@ func (s *Store) loadOrInitLocked() error {
 				man.Items[i].UpdatedAt = time.Now().UTC()
 				recovered++
 			case StateQueued, StateBlocked, StateUncertain:
-				recovered++
+				if !cleanExit {
+					recovered++
+				}
 			}
 		}
-		if recovered > 0 || len(man.Items) > 0 {
+		if recovered > 0 {
 			man.Paused = true
 			man.Recovered = true
 			man.RecoveredN = recovered
 		}
 	}
 	man.RunID = s.runID
+	// This run is live now; the flag only ever describes the run that just ended.
+	man.CleanShutdown = false
 	s.man = man
 	s.readonly = false
 	if recovered > 0 || migrated {

@@ -24,9 +24,13 @@ type idempotencyReceipt struct {
 
 // manifest is the on-disk revisioned metadata file (no bodies).
 type manifest struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	Revision      int64             `json:"revision"`
-	RunID         string            `json:"runId,omitempty"`
+	SchemaVersion int    `json:"schemaVersion"`
+	Revision      int64  `json:"revision"`
+	RunID         string `json:"runId,omitempty"`
+	// CleanShutdown records that the run owning RunID closed the store on its
+	// own. The next Open uses it to tell "the app quit normally" apart from
+	// "the process died", so only the latter freezes the queue for review.
+	CleanShutdown bool              `json:"cleanShutdown,omitempty"`
 	Paused        bool              `json:"paused"`
 	Recovered     bool              `json:"recovered"`
 	RecoveredN    int               `json:"recoveredCount,omitempty"`
