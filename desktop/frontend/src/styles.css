@@ -21715,6 +21715,32 @@ body > .mermaid-diagram--fullscreen {
   color: var(--fg-dim);
 }
 
+/* Queue dispatch hold. Mirrors the fold button's weight so the header stays a
+   quiet strip; only the paused state earns color, because a frozen queue is the
+   one thing that needs to be noticed. */
+.composer-guidance-head__dispatch {
+  margin-left: auto;
+  padding: 2px 8px 3px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-faint);
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.3;
+}
+
+.composer-guidance-head__dispatch:not(:disabled):hover,
+.composer-guidance-head__dispatch:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--bg-elev-2) 72%, transparent);
+  color: var(--fg-dim);
+}
+
+.composer-guidance-head__dispatch--paused {
+  border-color: color-mix(in srgb, var(--warn, #d08b2c) 55%, transparent);
+  color: var(--warn, #d08b2c);
+}
+
 @media (max-width: 620px) {
   .composer-guidance-shelf {
     padding: 0;
