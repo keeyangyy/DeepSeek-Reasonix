@@ -417,8 +417,12 @@ export function projectTreeTopicHasUnreadActivity(
   return Math.max(readActivity[key] ?? 0, baselineAt) < activityAt;
 }
 
-export function projectTreeShouldRenderTopicActions(isSessionNode: boolean, variant: ProjectTreeVariant, unread: boolean): boolean {
-  return !isSessionNode && variant !== "creation" && !unread;
+// Hover actions stay available on unread rows: the dot is absolutely
+// positioned, so it never occupied the column the actions expand into. The dot
+// slides left while the row is hovered (see styles.css) rather than suppressing
+// the actions entirely.
+export function projectTreeShouldRenderTopicActions(isSessionNode: boolean, variant: ProjectTreeVariant): boolean {
+  return !isSessionNode && variant !== "creation";
 }
 
 // Pinning reorders the classic/workbench trees shared with creation mode, so

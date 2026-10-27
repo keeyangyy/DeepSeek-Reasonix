@@ -309,31 +309,35 @@ eq(
 );
 
 eq(
-  projectTreeShouldRenderTopicActions(false, "workbench", false),
+  projectTreeShouldRenderTopicActions(false, "workbench"),
   true,
-  "read workbench topic renders hover actions",
+  "workbench topic renders hover actions",
 );
 
 eq(
-  projectTreeShouldRenderTopicActions(false, "classic", false),
+  projectTreeShouldRenderTopicActions(false, "classic"),
   true,
-  "read classic topic renders hover actions",
+  "classic topic renders hover actions",
+);
+
+// Unread no longer suppresses the hover actions: the dot is absolutely
+// positioned, so it never held the column they expand into. The dot now slides
+// left on hover (styles.css), which is a layout concern this predicate cannot
+// observe — keep the signature at two parameters so unread cannot creep back in.
+eq(
+  projectTreeShouldRenderTopicActions.length,
+  2,
+  "topic action predicate takes no unread flag",
 );
 
 eq(
-  projectTreeShouldRenderTopicActions(false, "classic", true),
-  false,
-  "unread classic topic reserves the action column for unread attention",
-);
-
-eq(
-  projectTreeShouldRenderTopicActions(false, "creation", false),
+  projectTreeShouldRenderTopicActions(false, "creation"),
   false,
   "creation topic keeps hover actions disabled",
 );
 
 eq(
-  projectTreeShouldRenderTopicActions(true, "classic", false),
+  projectTreeShouldRenderTopicActions(true, "classic"),
   false,
   "runtime session rows do not render topic hover actions",
 );
