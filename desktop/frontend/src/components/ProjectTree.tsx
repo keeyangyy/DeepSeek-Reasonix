@@ -1151,7 +1151,7 @@ export function ProjectTree({
           : "";
       const title = [node.preview || "", label, recoveryLabel, imSourceTitle, statusLabel, metaFull, projectTreeDedupedExactTime(metaFull, exactTimeLabel)].filter(Boolean).join(" · ");
       const topicMenuOpen = menuNodeKey === key;
-      const pinned = Boolean(node.pinned), showTopicActions = projectTreeShouldRenderTopicActions(isSessionNode, variant, unread) && !(node.remoteSession && !node.remoteSession.name);
+      const pinned = Boolean(node.pinned), showTopicActions = projectTreeShouldRenderTopicActions(isSessionNode, variant) && !(node.remoteSession && !node.remoteSession.name);
       const pinLabel = t(pinned ? "projectTree.unpinTopic" : "projectTree.pinTopic");
       const openTopicMenu = (event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>) => {
         event.preventDefault();

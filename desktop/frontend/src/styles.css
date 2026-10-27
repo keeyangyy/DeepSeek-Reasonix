@@ -30956,6 +30956,15 @@ body > .mermaid-diagram--fullscreen {
   transition: opacity var(--dur-fast), transform var(--dur-fast);
 }
 
+/* Unread rows keep their hover actions: the absolutely positioned dot never
+   held the action column, it only overlapped the expanded group. Slide it left
+   by the group's width instead. Scoped to --has-actions so creation mode (which
+   renders no actions) keeps the resting offset. */
+.project-tree__topic--unread.project-tree__topic--has-actions:hover .project-tree__topic-unread-dot,
+.project-tree__topic--unread.project-tree__topic--has-actions:focus-within .project-tree__topic-unread-dot {
+  transform: translateY(-50%) translateX(-70px) scale(1);
+}
+
 .app--classic .project-tree__topic-unread-dot,
 .app--creation .project-tree__topic-unread-dot {
   right: 10px;
