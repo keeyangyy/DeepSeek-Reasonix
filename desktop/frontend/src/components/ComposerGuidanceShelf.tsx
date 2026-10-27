@@ -1,5 +1,6 @@
 import { Fragment, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, CornerDownRight, GripVertical, Pencil, Trash2, Undo2, X } from "lucide-react";
+import { app } from "../lib/bridge";
 import { guidanceHasKnownPendingState, guidanceIsEditable, guidanceIsInFlight, guidanceNeedsRetry } from "../lib/composerGuidance";
 import { clearGuidanceDraft, readGuidanceDraft, writeGuidanceDraft } from "../lib/guidanceDraft";
 import { useI18n } from "../lib/i18n";
@@ -41,6 +42,7 @@ const DISPATCH_COPY = {
 
 export function ComposerGuidanceShelf({
   draftKey,
+  tabId,
   recovery,
   recoveryDisabled,
   items,
@@ -49,9 +51,6 @@ export function ComposerGuidanceShelf({
   disabled,
   readOnly,
   sendingId,
-  paused,
-  pausedBusy,
-  onTogglePaused,
   onReview,
   onRecoveryResumed,
   onRecoveryError,
@@ -64,6 +63,7 @@ export function ComposerGuidanceShelf({
   onRelease,
 }: {
   draftKey: string;
+  tabId: string;
   recovery: InboxRecoveryNotice | null;
   recoveryDisabled: boolean;
   items: PendingGuidance[];
@@ -72,9 +72,6 @@ export function ComposerGuidanceShelf({
   disabled: boolean;
   readOnly: boolean;
   sendingId: string | null;
-  paused: boolean;
-  pausedBusy: boolean;
-  onTogglePaused: () => void;
   onReview: () => void;
   onRecoveryResumed: () => void;
   onRecoveryError: (error: unknown) => void;
@@ -91,7 +88,24 @@ export function ComposerGuidanceShelf({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [editBusy, setEditBusy] = useState(false);
+  const [pauseBusy, setPauseBusy] = useState(false);
   const dragFromRef = useRef<number | null>(null);
+  // Paused is host state carried by the snapshot; the shelf only mirrors it.
+  const paused = Boolean(items[0]?.paused);
+
+  // Flipping the host flag refreshes through the inbox change event, so the
+  // header label and row gates update without an extra reload here.
+  const togglePaused = async () => {
+    if (pauseBusy) return;
+    setPauseBusy(true);
+    try {
+      await app.SetInboxPaused(tabId, !paused);
+    } catch (error) {
+      onRecoveryError(error);
+    } finally {
+      setPauseBusy(false);
+    }
+  };
 
   // A steer-intent row is guidance for the turn that is already running; a
   // followup row waits for the next turn. The two are rendered as separate
@@ -166,8 +180,8 @@ export function ComposerGuidanceShelf({
               className={`composer-guidance-head__dispatch${paused ? " composer-guidance-head__dispatch--paused" : ""}`}
               type="button"
               aria-pressed={paused}
-              disabled={disabled || readOnly || pausedBusy}
-              onClick={onTogglePaused}
+              disabled={disabled || readOnly || pauseBusy}
+              onClick={() => void togglePaused()}
             >
               {paused ? resumeLabel : pauseLabel}
             </button>

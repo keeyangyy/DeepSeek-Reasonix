@@ -241,11 +241,9 @@ func (s *Store) loadOrInitLocked() error {
 	// Cross-process recovery: another run left in-flight items.
 	recovered := 0
 	if man.RunID != "" && man.RunID != s.runID {
-		// A clean shutdown means the previous run closed the store on its own:
-		// queued work was merely waiting for a turn that never came, not
-		// interrupted mid-flight, so it must not be gated behind a review.
-		// In-flight states stay exceptions — that turn really did stop half-way,
-		// so those rows still become uncertain and still ask for a look.
+		// A clean shutdown means queued work was only waiting, not interrupted,
+		// so it must not be gated behind a review. In-flight rows are the real
+		// interruption and still become uncertain below.
 		cleanExit := man.CleanShutdown
 		for i := range man.Items {
 			switch man.Items[i].State {

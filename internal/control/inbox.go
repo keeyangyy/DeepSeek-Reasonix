@@ -499,36 +499,22 @@ func (c *Controller) MoveInboxItemIfCurrent(id string, toIndex int, expectedRevi
 	return st.MoveItemIfCurrent(id, toIndex, expectedRevision)
 }
 
-// ReleaseInboxItem returns an accepted steer to the next-turn queue. The item's
-// body was never inlined into the agent, so dropping it back to queued makes the
-// pending loader fail closed and the guidance is not applied to the running turn.
-func (c *Controller) ReleaseInboxItem(id string) error {
-	st, err := c.ensureInbox()
-	if err != nil {
-		return err
-	}
-	id = strings.TrimSpace(id)
-	if err := st.ReleaseAcceptedSteer(id); err != nil {
-		return err
-	}
-	// Stop treating the item as owned by this turn. Without this the id survives
-	// in activeItemIDs, and the turn-end sweep walks it into AckDequeue, which
-	// only accepts running/steer_* — a released (queued) row therefore fails as
-	// ErrInvalidState, flips to uncertain, and pauses the whole queue.
-	c.inbox.mu.Lock()
-	c.inbox.untrackActive(id)
-	c.inbox.mu.Unlock()
-	// Drop the in-memory admission too. The store transition alone leaves the
-	// entry queued inside the agent, whose loader would then fail at consume time
-	// and report the guidance as unapplied.
-	if c.executor != nil {
-		c.executor.WithdrawSteer(id)
-	}
-	return nil
-}
-
 func (c *Controller) SetInboxPaused(paused bool) error {
 	return c.setInboxPaused(paused, true)
+}
+
+// markInboxCleanShutdown records an orderly quit so the next launch resumes the
+// queue instead of freezing it. Only a teardown that caught no live turn counts.
+func (c *Controller) markInboxCleanShutdown() {
+	c.inbox.mu.Lock()
+	defer c.inbox.mu.Unlock()
+	if c.inbox.store == nil {
+		return
+	}
+	// Best effort: a failed write only restores the conservative behaviour.
+	if err := c.inbox.store.MarkCleanShutdown(); err != nil {
+		slog.Debug("controller: mark inbox clean shutdown", "err", err)
+	}
 }
 
 // SetInboxPausedPassive changes pause state without starting a background turn.
@@ -711,11 +697,8 @@ func (c *Controller) onInboxTurnDone() {
 			if errors.Is(err, sessioninbox.ErrNotFound) {
 				continue
 			}
-			// ErrInvalidState means the row no longer belongs to this turn: the
-			// user released it back to the queue (or a retry requeued it) while
-			// the turn was finishing. That is a legitimate hand-back, not a lost
-			// acknowledgement, so it must not poison the whole queue. Without
-			// this guard a released steer flips to uncertain and pauses dispatch.
+			// Row no longer owned by this turn (the user released it back to the
+			// queue). Not a lost ack, so skipping beats poisoning the queue.
 			if errors.Is(err, sessioninbox.ErrInvalidState) {
 				slog.Info("controller: inbox ack skipped, row no longer owned by turn", "id", id)
 				continue
