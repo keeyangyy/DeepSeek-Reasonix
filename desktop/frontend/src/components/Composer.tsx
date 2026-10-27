@@ -773,6 +773,10 @@ export function Composer({
   const [pendingGuidance, setPendingGuidance] = useState<PendingGuidance[]>([]);
   const [guidanceExpanded, setGuidanceExpanded] = useState(false);
   const [guidanceSendingId, setGuidanceSendingId] = useState<string | null>(null);
+  // Dispatch pause is server-owned state (inbox.paused): the shelf's toggle only
+  // mirrors it, so a reload or another window shows the same answer. This busy
+  // flag keeps the button from firing twice while the round-trip is in flight.
+  const [guidancePauseBusy, setGuidancePauseBusy] = useState(false);
   const [guidanceRetryNonce, setGuidanceRetryNonce] = useState(0);
   const [guidanceDraftKey, setGuidanceDraftKey] = useState(draftKey);
   const pendingGuidanceRef = useRef<PendingGuidance[]>([]);
@@ -2258,6 +2262,24 @@ export function Composer({
         return;
       }
       showToast(formatInboxError(error, locale), "warn");
+    }
+  };
+
+  // Dispatch pause is server state: flip it through the same binding the
+  // recovery banner uses, then force a snapshot refresh so the header label and
+  // every row's disabled state agree with the host immediately.
+  const toggleGuidanceDispatch = async () => {
+    if (guidancePauseBusy) return;
+    const targetTabId = tabId || "";
+    const nextPaused = !pendingGuidanceRef.current[0]?.paused;
+    setGuidancePauseBusy(true);
+    try {
+      await app.SetInboxPaused(targetTabId, nextPaused);
+    } catch (error) {
+      showToast(formatInboxError(error, locale), "warn");
+    } finally {
+      setGuidancePauseBusy(false);
+      setGuidanceRetryNonce((value) => value + 1);
     }
   };
 
@@ -4282,6 +4304,9 @@ export function Composer({
             disabled={Boolean(disabled)}
             readOnly={readOnly}
             sendingId={guidanceSendingId}
+            paused={Boolean(pendingGuidance[0]?.paused)}
+            pausedBusy={guidancePauseBusy}
+            onTogglePaused={() => void toggleGuidanceDispatch()}
             onReview={() => setGuidanceExpanded(true)}
             onRecoveryResumed={() => setGuidanceRetryNonce((value) => value + 1)}
             onRecoveryError={(error) => showToast(formatInboxError(error, locale), "warn")}

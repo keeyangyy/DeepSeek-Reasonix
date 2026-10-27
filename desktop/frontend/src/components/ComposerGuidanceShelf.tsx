@@ -28,6 +28,17 @@ export type InboxRecoveryNotice = {
   recovered: boolean;
 };
 
+// The shelf header carries one control: whether the queue keeps dispatching or
+// is held. It maps to the host's inbox `paused` flag (the same one the recovery
+// banner drives), so "paused" here means "the next turn will not start on its
+// own" — not "this row goes elsewhere". Kept out of the locale bundle because
+// the zh chunk is at its gzip budget; the strings are two labels, not a system.
+const DISPATCH_COPY = {
+  en: ["Pause dispatch", "Resume dispatch"],
+  zh: ["暂停派发", "继续派发"],
+  "zh-TW": ["暫停派發", "繼續派發"],
+} as const;
+
 export function ComposerGuidanceShelf({
   draftKey,
   recovery,
@@ -38,6 +49,9 @@ export function ComposerGuidanceShelf({
   disabled,
   readOnly,
   sendingId,
+  paused,
+  pausedBusy,
+  onTogglePaused,
   onReview,
   onRecoveryResumed,
   onRecoveryError,
@@ -58,6 +72,9 @@ export function ComposerGuidanceShelf({
   disabled: boolean;
   readOnly: boolean;
   sendingId: string | null;
+  paused: boolean;
+  pausedBusy: boolean;
+  onTogglePaused: () => void;
   onReview: () => void;
   onRecoveryResumed: () => void;
   onRecoveryError: (error: unknown) => void;
@@ -69,9 +86,8 @@ export function ComposerGuidanceShelf({
   onMove?: (item: PendingGuidance, toIndex: number) => void | Promise<void>;
   onRelease?: (item: PendingGuidance) => void | Promise<void>;
 }) {
-  const { t } = useI18n();
-  const visible = expanded ? items : items.slice(0, 2);
-  const hiddenCount = Math.max(0, items.length - 2);
+  const { t, locale } = useI18n();
+  const [pauseLabel, resumeLabel] = DISPATCH_COPY[locale] ?? DISPATCH_COPY.en;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [editBusy, setEditBusy] = useState(false);
@@ -82,7 +98,12 @@ export function ComposerGuidanceShelf({
   // groups so the queue reads as "now" and "next", even though the store keeps
   // them in one list.
   const isCurrentTurn = (item: PendingGuidance) => item.intent === "steer" || guidanceIsInFlight(item.state);
-  const ordered = [...visible].sort((a, b) => Number(isCurrentTurn(b)) - Number(isCurrentTurn(a)));
+  // Order first, then truncate. The store keeps one list and an accepted steer
+  // moves to its tail, so slicing before sorting hid the very row the user is
+  // waiting on and showed only the follow-ups queued ahead of it.
+  const orderedAll = [...items].sort((a, b) => Number(isCurrentTurn(b)) - Number(isCurrentTurn(a)));
+  const ordered = expanded ? orderedAll : orderedAll.slice(0, 2);
+  const hiddenCount = Math.max(0, items.length - 2);
 
   const startEdit = (item: PendingGuidance) => {
     setEditingId(item.id);
@@ -141,6 +162,15 @@ export function ComposerGuidanceShelf({
               <CornerDownRight size={14} />
               <span>{t("composer.guidanceCount", { n: items.length })}</span>
             </span>
+            <button
+              className={`composer-guidance-head__dispatch${paused ? " composer-guidance-head__dispatch--paused" : ""}`}
+              type="button"
+              aria-pressed={paused}
+              disabled={disabled || readOnly || pausedBusy}
+              onClick={onTogglePaused}
+            >
+              {paused ? resumeLabel : pauseLabel}
+            </button>
           </div>
           <div
             className="composer-guidance-list"
