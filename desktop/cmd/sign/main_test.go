@@ -57,7 +57,7 @@ func TestGenManifest(t *testing.T) {
 		"Reasonix-darwin-amd64.zip",
 		"Reasonix-darwin-universal.dmg",
 		"Reasonix-windows-amd64-installer.exe",
-		"Reasonix-windows-amd64.zip", // portable download, not the updater channel
+		"Reasonix-windows-amd64-portable.zip", // portable download, not the updater channel
 		"Reasonix-windows-arm64-installer.exe",
 		"Reasonix-windows-arm64.zip", // portable download, not the updater channel
 		"Reasonix-linux-amd64.tar.gz",
@@ -143,7 +143,7 @@ func TestGenManifest(t *testing.T) {
 	if len(m.Downloads) != 2 {
 		t.Fatalf("want 2 website downloads, got %d: %+v", len(m.Downloads), m.Downloads)
 	}
-	for _, name := range []string{"Reasonix-darwin-universal.dmg", "Reasonix-windows-amd64.zip"} {
+	for _, name := range []string{"Reasonix-darwin-universal.dmg", "Reasonix-windows-amd64-portable.zip"} {
 		asset, ok := m.Downloads[name]
 		if !ok {
 			t.Fatalf("website download %q missing", name)

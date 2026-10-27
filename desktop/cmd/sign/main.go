@@ -42,8 +42,8 @@ import (
 var platforms = []string{"darwin-arm64", "darwin-amd64", "windows-amd64", "windows-arm64", "linux-amd64"}
 
 var websiteDownloads = map[string]struct{}{
-	"Reasonix-darwin-universal.dmg": {},
-	"Reasonix-windows-amd64.zip":    {},
+	"Reasonix-darwin-universal.dmg":       {},
+	"Reasonix-windows-amd64-portable.zip": {},
 }
 
 func main() {
