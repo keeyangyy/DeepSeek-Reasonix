@@ -678,7 +678,7 @@ var kindNames = map[event.Kind]string{
 	event.TurnStatusChanged:       "turn_status",
 	event.MCPInteractionRequest:   "mcp_interaction",
 	event.PromptAnswered:          "prompt_answered",
-	event.SessionChanged:          "session_changed",
+	event.SessionChanged:         "session_changed", event.QueuedPromptDispatched: "queued_prompt_dispatched",
 }
 
 // ContextMaintenance is the JSON form of event.ContextMaintenance.

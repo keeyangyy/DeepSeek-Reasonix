@@ -136,6 +136,8 @@ const (
 	MCPInteractionRequest
 	// SessionChanged is a content-free Serve routing barrier for all-session clients.
 	SessionChanged
+	// QueuedPromptDispatched: a queued follow-up became its own turn; Text is the prompt to show.
+	QueuedPromptDispatched
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount
