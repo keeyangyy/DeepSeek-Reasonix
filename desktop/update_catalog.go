@@ -29,7 +29,7 @@ func channelOfVersion(v string) string {
 }
 
 func catalogEndpoints() []string {
-	return []string{githubCatalogFallback}
+	return withMirrors([]string{githubCatalogFallback})
 }
 
 // fetchCatalog reads the catalog from the line's own endpoints.
