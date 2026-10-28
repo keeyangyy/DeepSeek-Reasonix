@@ -26,6 +26,24 @@ export interface UpdateSourceConfig {
   mirrors: UpdateMirror[];
 }
 
+/** 后端 JSON 形状（设置面板读写用）。停用以 disabled 表达，零值即启用。 */
+export interface UpdateSourceMirrorView {
+  url: string;
+  disabled?: boolean;
+}
+
+export interface UpdateSourceView {
+  enabled: boolean;
+  mirrors: UpdateSourceMirrorView[];
+}
+
+/** 后端测速返回：一次一个镜像的结果。 */
+export interface UpdateMirrorProbe {
+  url: string;
+  latencyMs: number;
+  error?: string;
+}
+
 /** 内置镜像：2026-10-28 用真实 latest.json 实测可用。 */
 export const BUILTIN_MIRRORS = [
   "https://gh-proxy.com",
@@ -79,12 +97,29 @@ function sanitize(input: unknown): UpdateSourceConfig {
 /**
  * 优先走后端持久化；后端方法尚未提供时退回 localStorage，让前端可以独立
  * 预览与迭代，接入后自动切到真实配置。
+ *
+ * 后端以 `disabled` 表达停用（零值即启用），前端内部统一用 `enabled`，
+ * 两处转换都收敛在这里，避免「停用的镜像被当成启用」。
  */
+function fromView(view: UpdateSourceView): UpdateSourceConfig {
+  return {
+    enabled: view.enabled !== false,
+    mirrors: (view.mirrors ?? []).map((m) => ({ url: m.url, enabled: m.disabled !== true })),
+  };
+}
+
+function toView(config: UpdateSourceConfig): UpdateSourceView {
+  return {
+    enabled: config.enabled,
+    mirrors: config.mirrors.map((m) => ({ url: m.url, disabled: !m.enabled })),
+  };
+}
+
 async function readConfig(): Promise<UpdateSourceConfig> {
-  const backend = (app as unknown as { GetUpdateSource?: () => Promise<unknown> }).GetUpdateSource;
+  const backend = (app as unknown as { GetUpdateSource?: () => Promise<UpdateSourceView> }).GetUpdateSource;
   if (typeof backend === "function") {
     try {
-      return sanitize(await backend());
+      return sanitize(fromView(await backend()));
     } catch {
       /* 落到本地缓存 */
     }
@@ -98,9 +133,9 @@ async function readConfig(): Promise<UpdateSourceConfig> {
 }
 
 async function writeConfig(next: UpdateSourceConfig): Promise<void> {
-  const backend = (app as unknown as { SetUpdateSource?: (c: UpdateSourceConfig) => Promise<void> }).SetUpdateSource;
+  const backend = (app as unknown as { SetUpdateSource?: (view: UpdateSourceView) => Promise<void> }).SetUpdateSource;
   if (typeof backend === "function") {
-    await backend(next);
+    await backend(toView(next));
     return;
   }
   try {
