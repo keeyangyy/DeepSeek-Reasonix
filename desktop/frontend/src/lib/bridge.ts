@@ -9,6 +9,7 @@ import { makeMockSessionCatalogBindings } from "./sessionCatalogBridge";
 import { makeMockHistoryCatalogBindings, type HistoryCatalogBindings } from "./historyCatalogBridge";
 import { makeMockTaskCatalogBindings, type TaskCatalogBindings } from "./taskCatalogBridge";
 import { makeMockBlankProjectBindings, type BlankProjectBindings } from "./blankProjectBridge";
+import { makeMockUpdateSourceBindings } from "./updateSource";
 import { makeMockQualityFloorBindings, type QualityFloorBindings } from "./deliveryFloorBridge";
 import { t } from "./i18n";
 import { makeMockForkBindings } from "./forkWorktree";
@@ -615,9 +616,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   SetStatusBarItems(items: string[]): Promise<void>; SetReasoningDisplayMode(mode: "hidden" | "summary" | "auto" | "expanded"): Promise<void>;
   SetDesktopLanguage(lang: string): Promise<void>;
   SetDesktopCurrency(currency: string): Promise<void>;
-  GetUpdateSource(): Promise<import("./updateSource").UpdateSourceView>;
-  SetUpdateSource(view: import("./updateSource").UpdateSourceView): Promise<void>;
-  TestUpdateMirrors(urls: string[]): Promise<import("./updateSource").UpdateMirrorProbe[]>;
+  GetUpdateSource(): Promise<import("./updateSource").UpdateSourceView>; SetUpdateSource(view: import("./updateSource").UpdateSourceView): Promise<void>; TestUpdateMirrors(urls: string[]): Promise<import("./updateSource").UpdateMirrorProbe[]>;
   SetDesktopAppearance(theme: string, style: string): Promise<void>;
   SetDesktopThemeSchedule(darkStart: string, darkEnd: string): Promise<void>;
   SetDesktopTerminalTheme(theme: string): Promise<void>;
@@ -2515,20 +2514,7 @@ function makeMockApp(): AppBindings {
   };
   return {
     ...makeMockSessionCatalogBindings(cloneProjectTree),
-    ...makeMockBlankProjectBindings(),
-    async GetUpdateSource() {
-      return {
-        enabled: true,
-        mirrors: [
-          { url: "https://gh-proxy.com" },
-          { url: "https://ghfast.top" },
-        ],
-      };
-    },
-    async SetUpdateSource() {},
-    async TestUpdateMirrors(urls: string[]) {
-      return urls.map((url, index) => ({ url, latencyMs: 400 + index * 900 }));
-    },
+    ...makeMockBlankProjectBindings(), ...makeMockUpdateSourceBindings(),
     async MinimiseMainWindow() {
       console.info("mock MinimiseMainWindow");
     },
