@@ -44,6 +44,25 @@ export interface UpdateMirrorProbe {
   error?: string;
 }
 
+/**
+ * dev mock：没有 `wails generate module` 产物时，给设置面板一组可用的假数据。
+ * 放在这里而不是 bridge.ts，是因为 bridge.ts 已顶到行数预算。
+ */
+export function makeMockUpdateSourceBindings() {
+  return {
+    async GetUpdateSource(): Promise<UpdateSourceView> {
+      return {
+        enabled: true,
+        mirrors: [{ url: "https://gh-proxy.com" }, { url: "https://ghfast.top" }],
+      };
+    },
+    async SetUpdateSource() {},
+    async TestUpdateMirrors(urls: string[]): Promise<UpdateMirrorProbe[]> {
+      return urls.map((url, index) => ({ url, latencyMs: 400 + index * 900 }));
+    },
+  };
+}
+
 /** 内置镜像：2026-10-28 用真实 latest.json 实测可用。 */
 export const BUILTIN_MIRRORS = [
   "https://gh-proxy.com",

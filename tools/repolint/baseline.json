@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1891,
     "essay": 1916,
-    "file-size": 102696,
+    "file-size": 102694,
     "function-size": 8271,
     "layering": 1,
     "marker": 0,
@@ -117,7 +117,7 @@
       "file-size": 141
     },
     "desktop/frontend/src/components/SettingsPanel.tsx": {
-      "file-size": 6451
+      "file-size": 6450
     },
     "desktop/frontend/src/components/StatusBar.tsx": {
       "file-size": 43
@@ -138,7 +138,7 @@
       "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 5014
+      "file-size": 5016
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 213
@@ -324,7 +324,7 @@
     },
     "desktop/updater.go": {
       "essay": 2,
-      "file-size": 583
+      "file-size": 580
     },
     "desktop/updater_app.go": {
       "essay": 4
