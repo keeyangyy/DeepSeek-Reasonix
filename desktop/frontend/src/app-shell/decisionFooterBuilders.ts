@@ -272,6 +272,7 @@ export type ComposerSurfaceInput = {
   transientDismissSignal: ComposerProps["transientDismissSignal"];
   sessionKey: ComposerProps["sessionKey"];
   workspaceScopeKey: ComposerProps["workspaceScopeKey"];
+  inboxSessionPath: ComposerProps["inboxSessionPath"];
   fileRefRefreshKey: ComposerProps["fileRefRefreshKey"];
   guidance: { key: string; itemId?: string; text: string } | null;
   guidanceQueuePreviewItems: ComposerProps["guidanceQueuePreviewItems"];
@@ -320,6 +321,7 @@ export function buildComposerSurface(input: ComposerSurfaceInput): DecisionFoote
       transientDismissSignal: input.transientDismissSignal,
       sessionKey: input.sessionKey,
       workspaceScopeKey: input.workspaceScopeKey,
+      inboxSessionPath: input.inboxSessionPath,
       fileRefRefreshKey: input.fileRefRefreshKey,
       guidanceConsumedKey: input.guidance?.key,
       guidanceConsumedItemId: input.guidance?.itemId,

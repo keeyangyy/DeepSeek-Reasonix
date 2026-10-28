@@ -279,6 +279,9 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
     activeTabId, tabSessionPath: activeTab?.sessionPath, metaSessionPath: state.meta?.sessionPath,
     cwd: state.meta?.cwd, sessionGen: state.sessionGen, workspaceControllerEpoch,
   });
+  // InboxChanged carries the session file path. The Composer compares it against
+  // its own scope key, so it must receive the same path or every event is dropped.
+  const inboxSessionPath = activeTab?.sessionPath ?? state.meta?.sessionPath;
   const workspaceTreeMemoryKey = projectWorkspaceTreeMemoryKey({
     scope: activeTab?.scope, workspaceRoot: activeTab?.workspaceRoot, cwd: state.meta?.cwd,
   });
@@ -728,6 +731,7 @@ export function useAppSessionComposition(input: AppSessionCompositionInput) {
     chatSurfaceVisible,
     composerSessionKey,
     workspaceScopeKey,
+    inboxSessionPath,
     workspaceTreeMemoryKey,
     sessionTurns,
     startupSplashHold,
