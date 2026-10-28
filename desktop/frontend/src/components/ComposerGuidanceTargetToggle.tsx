@@ -15,9 +15,11 @@ const COPY = {
  * Picks where a mid-turn interjection lands: injected into the running turn
  * (steer) or queued for the next one (followup).
  *
- * Uses the shared `composer-modebar` skin so it reads as the same control family
- * as the approval and delivery pills beside it — same pill, same sliding thumb,
- * same item hover states.
+ * Plain text follows this choice. A draft carrying a command or skill entity
+ * does not: those can only start their own turn, because a running turn has
+ * already fixed its input and the steer channel carries text alone. That limit
+ * lives in the submit path, not here — the control stays live so the next plain
+ * message still honours the choice.
  */
 export function ComposerGuidanceTargetToggle({
   target,
@@ -37,11 +39,10 @@ export function ComposerGuidanceTargetToggle({
   ];
 
   return (
-    <div className="composer-meta__control composer-meta__control--target">
+    <div className="composer-meta__control composer-meta__control--target" title={title}>
       <div
         className="composer-modebar composer-modebar--target"
         data-target={target}
-        title={title}
         style={{ "--composer-modebar-index": target === "followup" ? 1 : 0 } as React.CSSProperties}
       >
         <span className="composer-modebar__thumb" aria-hidden="true" />
