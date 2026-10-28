@@ -7520,7 +7520,8 @@ body > .mermaid-diagram--fullscreen {
   max-width: min(168px, 28vw);
 }
 
-.composer-meta__control--floor {
+.composer-meta__control--floor,
+.composer-meta__control--target {
   flex: 0 1 auto;
   min-width: 132px;
   max-width: min(220px, 26vw);
@@ -7586,14 +7587,16 @@ body > .mermaid-diagram--fullscreen {
 /* Two segments instead of three, so the thumb spans half the track. Standard
    needs a solid neutral thumb, not the near-invisible default: otherwise
    leaving delivery reads as the pill vanishing rather than sliding. */
-.composer-modebar--floor {
+.composer-modebar--floor,
+.composer-modebar--target {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   --composer-modebar-active-bg: color-mix(in srgb, var(--fg) 16%, var(--surface-2));
   --composer-modebar-active-border: color-mix(in srgb, var(--fg) 30%, transparent);
   --composer-modebar-active-fg: var(--fg);
 }
 
-.composer-modebar--floor .composer-modebar__thumb {
+.composer-modebar--floor .composer-modebar__thumb,
+.composer-modebar--target .composer-modebar__thumb {
   width: calc((100% - 4px) / 2);
 }
 

@@ -4,7 +4,7 @@
     "commented-code": 0,
     "complexity": 1891,
     "essay": 1916,
-    "file-size": 102692,
+    "file-size": 102696,
     "function-size": 8271,
     "layering": 1,
     "marker": 0,
@@ -96,7 +96,7 @@
       "file-size": 2643
     },
     "desktop/frontend/src/components/Composer.tsx": {
-      "file-size": 4002
+      "file-size": 4006
     },
     "desktop/frontend/src/components/ContextPanel.tsx": {
       "file-size": 36
