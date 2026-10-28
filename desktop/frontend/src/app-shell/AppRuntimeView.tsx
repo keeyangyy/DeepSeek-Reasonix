@@ -418,6 +418,7 @@ export function AppRuntimeView(props: AppRuntimeViewProps) {
               transientDismissSignal: shell.transientOverlayDismissSignal,
               sessionKey: session.composerSessionKey,
               workspaceScopeKey: session.workspaceScopeKey,
+              inboxSessionPath: session.inboxSessionPath,
               fileRefRefreshKey: local.composerFileRefRefreshKey,
               guidance: session.transcript.latestGuidanceConsumed,
               guidanceQueuePreviewItems: navigation.guidanceQueueMockItems,
