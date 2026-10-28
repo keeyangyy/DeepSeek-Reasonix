@@ -1,6 +1,7 @@
 package control
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -14,7 +15,12 @@ import (
 // 气泡。steer 有专门的 event.Steer 承担这件事；本测试固定 followup 路径同样
 // 必须有事件携带文本，否则前端只能等重新加载会话才看得到。
 func TestFollowupDispatchAnnouncesPromptText(t *testing.T) {
-	dir := t.TempDir()
+	// Not t.TempDir(): the inbox store can still be flushing at cleanup, which
+	// fails on "directory not empty" under -race; clean up best-effort instead.
+	dir, err := os.MkdirTemp("", "followup-announce-*")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
 
 	var mu sync.Mutex
 	type seen struct {
@@ -42,6 +48,7 @@ func TestFollowupDispatchAnnouncesPromptText(t *testing.T) {
 	t.Cleanup(func() {
 		c.Close()
 		c.autosaveWG.Wait()
+		_ = os.RemoveAll(dir)
 	})
 
 	const prompt = "队列里写的话"
