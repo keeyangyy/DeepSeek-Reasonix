@@ -26,6 +26,7 @@ import { providerBaseURLForSave, providerEndpointMismatchDetail, providerRequest
 import { providerModelVisionCapability, providerVisionModelsForView } from "../lib/providerVisionCapability";
 import { useUpdater } from "../lib/useUpdater";
 import { UpdateVersionList } from "./UpdateVersionList";
+import { UpdateSourceSettings } from "./UpdateSourceSettings";
 import {
   applyTheme,
   getTheme,
@@ -7084,10 +7085,8 @@ function UpdatesSection({
           </Tooltip>
         </div>
       </SettingsField>
-      <div
-        className="updates-control__hint"
-        style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 8px" }}
-      >
+      <UpdateSourceSettings settingsBusy={settingsBusy} />
+      <div className="updates-control__hint" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 8px" }}>
         <span>{t("updater.officialReleaseHint")}</span>
         <button
           className="btn btn--small"

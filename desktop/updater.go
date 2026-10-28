@@ -115,9 +115,9 @@ func runningUpdateChannel() string {
 // so the release anchor is the single source.
 func manifestEndpoints(selected string) []string {
 	_ = selected
-	return []string{
+	return withMirrors([]string{
 		githubManifestFallback,
-	}
+	})
 }
 
 // updaterUserAgent identifies updater traffic. Go's default Go-http-client UA
@@ -873,22 +873,19 @@ func downloadForChannel(ctx context.Context, c, fallback *http.Client, selected,
 	if total < 0 || total > maxDesktopReleaseAssetSize {
 		return nil, fmt.Errorf("update: invalid expected asset size %d", total)
 	}
-	expectedSize := total
-	var buf bytes.Buffer
-	err := retryTransient(ctx, func(attempt int) error {
-		client := c
-		if attempt > 1 && fallback != nil {
-			client = fallback
+	// Mirrors only rewrite the address we dial; the size check below and the
+	// caller's minisign verification still run against the same bytes, so a
+	// hostile proxy can fail an update but never substitute one.
+	candidates := withMirrors([]string{url})
+	var lastErr error
+	for _, candidate := range candidates {
+		data, err := downloadOnce(ctx, c, fallback, selected, candidate, total, onProgress)
+		if err == nil {
+			return data, nil
 		}
-		return downloadInto(ctx, client, selected, url, expectedSize, &buf, &total, onProgress)
-	})
-	if err != nil {
-		return nil, err
+		lastErr = err
 	}
-	if expectedSize > 0 && int64(buf.Len()) != expectedSize {
-		return nil, fmt.Errorf("update: downloaded size mismatch: got %d want %d", buf.Len(), expectedSize)
-	}
-	return buf.Bytes(), nil
+	return nil, lastErr
 }
 
 // downloadInto appends url's body to buf, resuming from buf's current length via a
