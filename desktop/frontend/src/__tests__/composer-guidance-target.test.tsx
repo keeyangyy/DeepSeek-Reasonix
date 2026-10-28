@@ -33,7 +33,7 @@ function installDom() {
   return dom;
 }
 
-type Calls = { followup: number; steer: number; steerForTurn: number };
+type Calls = { followup: number; steer: number; steerForTurn: number; withInvocations: number };
 
 function makeBinding(calls: Calls) {
   return {
@@ -41,7 +41,7 @@ function makeBinding(calls: Calls) {
     EnqueueInboxFollowup: async () => { calls.followup += 1; return { itemId: "f1" }; },
     EnqueueInboxSteer: async () => { calls.steer += 1; return { itemId: "s1" }; },
     EnqueueInboxSteerForTurn: async () => { calls.steerForTurn += 1; return { itemId: "s2" }; },
-    EnqueueInboxFollowupWithInvocations: async () => ({ itemId: "fi1" }),
+    EnqueueInboxFollowupWithInvocations: async () => { calls.withInvocations += 1; return { itemId: "fi1" }; },
   } as never;
 }
 
@@ -61,6 +61,26 @@ process.stdout.write("\n插话去处：提交路由\n");
   await enqueueInboxGuidanceForActiveTurn(makeBinding(calls), "tab-a", "排队的话", "排队的话", undefined, "turn-1", true);
   process.stdout.write(`  队列调用 = ${JSON.stringify(calls)}\n`);
   ok(calls.followup === 1 && calls.steerForTurn === 0 && calls.steer === 0, "切到队列后只走 followup");
+}
+
+{
+  // 带技能/命令实体的消息无视开关，始终排队：实体需要自己的回合，
+  // 而 steer 通道只承载文本，强行注入会丢掉实体。
+  const calls: Calls = { followup: 0, steer: 0, steerForTurn: 0, withInvocations: 0 };
+  await enqueueInboxGuidanceForActiveTurn(
+    makeBinding(calls),
+    "tab-a",
+    "/skill 做点事",
+    "/skill 做点事",
+    { display: "/skill 做点事", input: "/skill 做点事", invocations: [{ name: "skill", kind: "skill", offset: 0 }] } as never,
+    "turn-1",
+    false,
+  );
+  process.stdout.write(`  带实体且选本轮 = ${JSON.stringify(calls)}\n`);
+  ok(
+    calls.withInvocations === 1 && calls.steerForTurn === 0 && calls.followup === 0,
+    "带技能/命令的消息无视开关，只进后续队列",
+  );
 }
 
 process.stdout.write("\n插话去处：会话隔离\n");

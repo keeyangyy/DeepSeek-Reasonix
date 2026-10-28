@@ -85,6 +85,10 @@ export function enqueueInboxGuidance(
   opts?: { steer?: boolean; turnId?: string },
 ) {
   if (structured) {
+    // Commands and skill entities always queue, whatever the interjection
+    // target says. They need their own turn: a running turn has already fixed
+    // its input, and the steer channel carries text only, so steering would
+    // drop the entity. Guarded by composer-guidance-target.test.tsx.
     return binding.EnqueueInboxFollowupWithInvocations(
       tabId,
       structured.display.trim() || display,
