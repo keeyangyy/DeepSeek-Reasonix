@@ -269,7 +269,7 @@ const HISTORY_PAGE_TURNS = 60;
 
 export type TurnPhaseName = "working" | "checking" | "verifying" | "reviewing" | string;
 export type Item =
-  | { kind: "user"; id: string; submissionId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
+  | { kind: "user"; id: string; submissionId?: string; inboxItemId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[]; messageID?: string }
   | { kind: "phase"; id: string; text: string }
   | { kind: "notice"; id: string; level: "info" | "warn"; text: string; detail?: string; code?: string; title?: string; variant?: "delivery" | "completion"; action?: "continue_delivery" | "open_changes" | "recover_context"; recoveryId?: string; completionSummary?: WireCompletionSummary; decisionReceipt?: WireDecisionReceipt; missing?: string[]; inboxItemId?: string }
@@ -1897,6 +1897,18 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       // Notice rows have no id merge: a re-projected steer must not append a second copy.
       if (e.itemId !== undefined && s.items.some((item) => item.kind === "notice" && item.inboxItemId === e.itemId)) return s;
       return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "notice", id: ephemeralItemId("notice"), level: "info", text: `${STEER_NOTICE_PREFIX}${e.text ?? ""}`, inboxItemId: e.itemId }] };
+    case "queued_prompt_dispatched": {
+      // A queued follow-up became its own turn. Nothing on this side submitted
+      // it, so the backend echoes the prompt and we draw the user bubble here —
+      // the follow-up counterpart of the steer notice above.
+      const dispatched = (e.text ?? "").trim();
+      if (!dispatched) return s;
+      // One bubble per inbox item: a replay or retry must not stack copies.
+      if (e.itemId !== undefined && s.items.some((item) => item.kind === "user" && item.inboxItemId === e.itemId)) return s;
+      const nextItems: Item[] = [...s.items, { kind: "user", id: ephemeralItemId("user"), inboxItemId: e.itemId, text: dispatched, createdAt: Date.now() }];
+      if (s.meta?.sessionPath) refreshCompactionAnchors(s.meta.sessionPath, nextItems);
+      return { ...s, seq: s.seq + 1, items: nextItems };
+    }
     case "approval_request": {
       if (s.cancelRequested) return s;
       // A delayed re-delivery of a prompt the user already answered locally

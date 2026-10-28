@@ -634,6 +634,7 @@ func (c *Controller) TrySubmitInboxItem(id string) (sessioninbox.InboxReceipt, e
 		}
 		return c.receiptForAdmissionResult(id, st, result), nil
 	}
+	c.sink.Emit(event.Event{Kind: event.QueuedPromptDispatched, Text: firstNonEmptyStr(env.DisplayText, env.RawText, env.SubmitText), ItemID: id})
 	return sessioninbox.InboxReceipt{
 		ItemID:      id,
 		Disposition: sessioninbox.DispositionStarted,
