@@ -63,14 +63,16 @@ export async function enqueueInboxGuidanceForActiveTurn(
   submit: string,
   structured?: StructuredInvocationSubmit,
   knownTurnId?: string,
+  preferQueue?: boolean,
 ) {
-  const needsTurnId = !structured && typeof binding.EnqueueInboxSteerForTurn === "function";
+  const needsTurnId = !structured && !preferQueue && typeof binding.EnqueueInboxSteerForTurn === "function";
   const turnId = needsTurnId ? await resolveActiveTurnId(binding, tabId, knownTurnId) : knownTurnId;
   // A steer can only be admitted while a turn is running. Without one the row
   // has nowhere to go this turn, so it becomes a next-turn follow-up instead of
   // failing the submit the user just made. Hosts that predate the exact-turn
   // binding keep the legacy EnqueueInboxSteer path, which needs no turn id.
-  const steer = !needsTurnId || Boolean(turnId);
+  // preferQueue skips admission entirely: the user asked for the next turn.
+  const steer = !preferQueue && (!needsTurnId || Boolean(turnId));
   return enqueueInboxGuidance(binding, tabId, display, submit, structured, { steer, turnId });
 }
 

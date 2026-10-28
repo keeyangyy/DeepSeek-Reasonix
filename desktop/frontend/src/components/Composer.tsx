@@ -15,6 +15,8 @@ import { useComposerInboxRefresh } from "../lib/useComposerInboxRefresh";
 import { useComposerImeGuard } from "../lib/useComposerImeGuard";
 import { useComposerCommandCatalog } from "../lib/useComposerCommandCatalog";
 import { guidanceIsInFlight, guidanceNeedsRetry, guidanceTextMatches, kickIdleGuidance, markGuidanceQueued, markGuidanceSteered } from "../lib/composerGuidance";
+import { useGuidanceTarget } from "../lib/composerGuidanceTarget";
+import { ComposerGuidanceTargetToggle } from "./ComposerGuidanceTargetToggle";
 import { canUsePromptHistory, composerEnterAction, composerEscapeAction, composerMenuKeyAction, insertComposerNewline, isFnKeyEvent, isImeKeyEvent, promptHistoryDirectionFromEvent } from "../lib/composerKeyboard";
 import { cacheGeneration, loadOlder } from "../lib/composerHistory";
 import { sessionTurnsLabel } from "../lib/sessionTurnsPresentation";
@@ -725,6 +727,7 @@ export function Composer({
   const redoComboLabel = useShortcutComboLabel("composer.redo");
   const yoloComboLabel = useShortcutComboLabel("toolApproval.yolo");
   const draftKey = sessionKey || tabId || DEFAULT_COMPOSER_DRAFT_KEY;
+  const [guidanceTarget, setGuidanceTarget] = useGuidanceTarget(draftKey);
   const inboxSessionKey = inboxScopeKey(inboxSessionPath, workspaceScopeKey);
   const now = useTick(running);
   const [text, setText] = useState("");
@@ -2125,7 +2128,7 @@ export function Composer({
           const receiptTracker = guidanceReceiptTrackerRef.current;
           receiptTracker?.start(submitDraftKey);
           try {
-            const receipt = await enqueueInboxGuidanceForActiveTurn(app, submitTabId || "", guidanceText, guidanceSubmitText, structured, turnId);
+            const receipt = await enqueueInboxGuidanceForActiveTurn(app, submitTabId || "", guidanceText, guidanceSubmitText, structured, turnId, guidanceTarget === "followup");
             if (receipt?.error) throw new Error(receipt.error);
             const consumedBeforeReceipt = receiptTracker?.takeConsumed(submitDraftKey, receipt.itemId) ?? false;
             if (!consumedBeforeReceipt) {
@@ -4656,6 +4659,7 @@ export function Composer({
                 </Tooltip>
               </div>
             )}
+            {running && <ComposerGuidanceTargetToggle target={guidanceTarget} onChange={setGuidanceTarget} disabled={disabled} />}
             {!heroMode && (
               <div className="composer-meta__control composer-meta__control--approval">
                 {/* A pending tool approval disables the composer, but the approval
