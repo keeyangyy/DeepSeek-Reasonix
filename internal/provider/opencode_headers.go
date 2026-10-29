@@ -26,9 +26,17 @@ func NewClientIdentityHeaders() http.Header {
 	return http.Header{"User-Agent": []string{"Reasonix"}, "X-Opencode-Session": []string{NewCacheSessionID()}}
 }
 
-// ApplyOpenCodeGoHeaders implements Go's client identification/cache contract
+// ApplyClientHeaders identifies the client on every wire adapter: the opencode
+// contract first when the endpoint is opencode.ai, then the shared Reasonix
+// identity as a fallback. A configured custom User-Agent always wins.
+func ApplyClientHeaders(req *http.Request, baseURL string, fallback http.Header) {
+	applyOpenCodeGoHeaders(req, baseURL, fallback)
+	ApplyClientIdentity(req)
+}
+
+// applyOpenCodeGoHeaders implements Go's client identification/cache contract
 // for all three wire adapters. It never changes model input or other vendors.
-func ApplyOpenCodeGoHeaders(req *http.Request, baseURL string, fallback http.Header) {
+func applyOpenCodeGoHeaders(req *http.Request, baseURL string, fallback http.Header) {
 	path, ok := officialOpenCodeGoPath(baseURL)
 	if !ok || (path != openCodeGoChatPath && path != openCodeGoAnthropicPath) {
 		return

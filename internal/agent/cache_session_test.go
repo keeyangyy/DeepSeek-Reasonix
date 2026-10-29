@@ -12,7 +12,7 @@ func TestProviderCacheSessionLifecycle(t *testing.T) {
 	makeAgent := func() *Agent { a := &Agent{}; a.sess.conversation = NewSession(""); return a }
 	id := func(a *Agent, ctx context.Context) string {
 		req, _ := http.NewRequestWithContext(a.withProviderCacheSession(ctx), http.MethodPost, "https://opencode.ai/zen/go/v1/responses", nil)
-		provider.ApplyOpenCodeGoHeaders(req, "https://opencode.ai/zen/go/v1", provider.NewClientIdentityHeaders())
+		provider.ApplyClientHeaders(req, "https://opencode.ai/zen/go/v1", provider.NewClientIdentityHeaders())
 		return req.Header.Get("x-opencode-session")
 	}
 	a := makeAgent()

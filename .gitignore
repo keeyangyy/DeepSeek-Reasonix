@@ -7,6 +7,8 @@
 /reasonix.exe
 /e2ebench
 /e2ebench.exe
+/desktop/desktop
+/desktop/desktop.exe
 
 # Website (Astro) build output
 /site/dist/

@@ -518,7 +518,7 @@ func (c *client) openStream(ctx context.Context, targetURL string, wireReq chatR
 		applyAPIKeyHeader(httpReq.Header, c.baseURL, c.apiKey)
 		httpReq.Header.Set("Accept", "text/event-stream")
 		applyCustomHeaders(httpReq.Header, c.headers)
-		provider.ApplyOpenCodeGoHeaders(httpReq, c.baseURL, c.identityHeaders)
+		provider.ApplyClientHeaders(httpReq, c.baseURL, c.identityHeaders)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)

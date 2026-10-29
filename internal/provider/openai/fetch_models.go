@@ -105,6 +105,7 @@ func FetchModelCatalogWithOptions(ctx context.Context, baseURL, apiKey string, o
 	applyModelFetchAPIKeyHeader(req.Header, baseURL, apiKey, opts.AuthMode)
 	req.Header.Set("Accept", "application/json")
 	applyCustomHeaders(req.Header, opts.Headers)
+	provider.ApplyClientIdentity(req)
 
 	resp, err := cli.Do(req)
 	if err != nil {
