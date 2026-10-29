@@ -21,15 +21,7 @@ import (
 func readMirrorPrefixes() []string {
 	cfg, err := config.LoadUserConfigReadOnly()
 	if err != nil || cfg == nil {
-		return builtinUpdateMirrors
-	}
-	if !cfg.UpdateSourceMirrorsEnabled() {
 		return nil
-	}
-	// A config that never saved a list still means "use the defaults": the
-	// settings panel shows the built-in mirrors for exactly that state.
-	if len(cfg.Desktop.UpdateMirrors) == 0 {
-		return builtinUpdateMirrors
 	}
 	return cfg.UpdateMirrorPrefixes()
 }

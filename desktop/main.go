@@ -107,6 +107,7 @@ func preparePrimaryDesktopRuntime(app *App) {
 
 func prepareDesktopProcess() {
 	provider.SetClientVersion(version)
+	ensureDefaultUpdateMirrors()
 	prepareLinuxRendererCompatibilityEnvironment()
 }
 
