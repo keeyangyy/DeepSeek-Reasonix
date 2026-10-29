@@ -4,8 +4,8 @@
     "commented-code": 0,
     "complexity": 1891,
     "essay": 1916,
-    "file-size": 102694,
-    "function-size": 8271,
+    "file-size": 102697,
+    "function-size": 8275,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
@@ -150,7 +150,7 @@
       "file-size": 1636
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4505
+      "file-size": 4508
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -401,7 +401,7 @@
       "essay": 1
     },
     "internal/agent/compact_projection.go": {
-      "function-size": 28
+      "function-size": 32
     },
     "internal/agent/context_manager.go": {
       "essay": 1
