@@ -47,7 +47,7 @@ import { hydrateIdentityCurrent, normalizeSessionGeneration, preserveSessionIden
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
 import { ephemeralItemId } from "./transcriptItemIds";
-import { preserveLiveCompactions, recordCompactionDone, refreshCompactionAnchors } from "./compactionAnchor";
+import { preserveLiveCompactions, recordCompactionDone, recordCompactionStarted, refreshCompactionAnchors } from "./compactionAnchor";
 import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
@@ -1866,13 +1866,16 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     }
     case "phase":
       return { ...s, seq: s.seq + 1, items: [...s.items, { kind: "phase", id: ephemeralItemId("phase"), text: e.text ?? "" }] };
-    case "compaction_started":
+    case "compaction_started": {
       // Compression starting means the backend accepted the submission:
       // clear the optimistic pending indicator (slash path has no turn events).
       const pendingClear = s.pendingSubmissionId && s.pendingUser !== undefined && !s.turnActive
         ? { pendingUser: undefined, pendingSubmissionId: undefined }
         : {};
-      return { ...s, ...pendingClear, seq: s.seq + 1, items: [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }] };
+      const items: Item[] = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }];
+      recordCompactionStarted(s.meta?.sessionPath, items);
+      return { ...s, ...pendingClear, seq: s.seq + 1, items };
+    }
     case "compaction_done": {
       const c = e.compaction;
       const idx = [...s.items].reverse().findIndex((it) => it.kind === "compaction" && it.pending);

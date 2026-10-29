@@ -67,14 +67,21 @@ type explicitCompressionSnapshot struct {
 	projectionVersion uint64
 	generation        uint64
 	promptCacheKey    string
+	// conversation 与 sessionPath 在压缩开始时捕获。切走会话后
+	// a.sess.conversation / a.sess.path 会指向新会话，用实时值校验会让
+	// 进行中的压缩一律判过期。
+	conversation *Session
+	sessionPath  string
 }
 
 func (a *Agent) snapshotExplicitCompression() explicitCompressionSnapshot {
-	canonical, version := a.sess.conversation.snapshotMessagesVersion()
-	cacheKey := a.currentPromptCacheKey()
 	a.sess.compactionMu.Lock()
+	conv := a.sess.conversation
+	path := a.sess.path
 	state := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
+	canonical, version := conv.snapshotMessagesVersion()
+	cacheKey := a.currentPromptCacheKey()
 	visible := canonical
 	if projectionValid(state, canonical) {
 		if projected := modelVisibleFromProjection(state.Projection, canonical); len(projected) > 0 {
@@ -89,6 +96,8 @@ func (a *Agent) snapshotExplicitCompression() explicitCompressionSnapshot {
 		projectionVersion: state.Projection.ProjectionVersion,
 		generation:        state.Generation,
 		promptCacheKey:    cacheKey,
+		conversation:      conv,
+		sessionPath:       path,
 	}
 }
 
@@ -273,7 +282,8 @@ func (a *Agent) compressVisibleRange(
 		transcriptVersion: snap.transcriptVersion, projectionVersion: snap.projectionVersion, generation: snap.generation,
 		activeTurn: a.activeTurnCreatedAt.Load(), trigger: trigger, summary: summary,
 		inputHash: inputHash, outputHash: outputHash, sourceTokens: result.SourceTokens, projectionTokens: projectionTokens,
-		covered: len(snap.canonical),
+		covered:      len(snap.canonical),
+		conversation: snap.conversation, sessionPath: snap.sessionPath,
 	})
 	if err != nil {
 		if errors.Is(err, errCompressStaleContext) {
@@ -308,18 +318,6 @@ func foldMatchesVisiblePrefix(visible, fold []provider.Message) bool {
 	}
 	return providerVisibleFingerprint(modelInputMessages(fold)) ==
 		providerVisibleFingerprint(modelInputMessages(visible[head:head+len(fold)]))
-}
-
-func (a *Agent) explicitCompressionSnapshotCurrent(snap explicitCompressionSnapshot) bool {
-	current, version := a.sess.conversation.snapshotMessagesVersion()
-	a.sess.compactionMu.Lock()
-	projectionVersion := a.sess.compactionState.Projection.ProjectionVersion
-	generation := a.sess.compactionState.Generation
-	a.sess.compactionMu.Unlock()
-	return version == snap.transcriptVersion && len(current) == len(snap.canonical) &&
-		coveredPrefixHash(current, len(current)) == snap.coveredHash &&
-		projectionVersion == snap.projectionVersion && generation == snap.generation &&
-		a.currentPromptCacheKey() == snap.promptCacheKey
 }
 
 func (a *Agent) planVisibleCompression(snap explicitCompressionSnapshot, direction string, anchorIndex int, preview string) (visibleCompressionPlan, bool) {
@@ -504,7 +502,9 @@ func (a *Agent) summarizeFold(ctx context.Context, trigger string, fold []provid
 
 func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instructions string, req foldRequest) (CompactionOutcome, error) {
 	activeTurn := a.activeTurnCreatedAt.Load()
-	canonical, transcriptVersion := a.sess.conversation.snapshotMessagesVersion()
+	// 固定开始时所属会话：之后校验与落盘都以它为准，途中切走不会作废。
+	conv := a.sess.conversation
+	canonical, transcriptVersion := conv.snapshotMessagesVersion()
 	a.sess.compactionMu.Lock()
 	stateSnapshot := a.sess.compactionState
 	startProjectionVersion := a.sess.compactionState.Projection.ProjectionVersion
@@ -631,6 +631,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		generation: startGeneration, activeTurn: activeTurn, trigger: trigger,
 		summary: summary, inputHash: viewInputHash, outputHash: viewOutputHash,
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
+		conversation: conv, sessionPath: sidecarPath,
 	})
 	if err != nil {
 		a.emitCompactionAborted(trigger, "commit failed: "+err.Error())

@@ -18,6 +18,10 @@ type summaryProjectionCommit struct {
 	// covered is the canonical length the frozen projection body represents;
 	// messages past it splice live from the transcript.
 	covered int
+	// 压缩开始时捕获：途中切走会让 a.sess.* 指向新会话，用实时值校验和
+	// 落盘会把已经算好的摘要整份丢掉，写错会话。
+	conversation *Session
+	sessionPath  string
 }
 
 // commitSummaryProjection CAS-installs a checkpoint under compactionMu:
@@ -26,29 +30,57 @@ type summaryProjectionCommit struct {
 // that re-enters ContextMaintenanceSnapshot cannot deadlock.
 func (a *Agent) commitSummaryProjection(commit summaryProjectionCommit) (CompactionState, error) {
 	state := a.summaryProjectionState(commit)
+
+	// 校验与落盘都以「压缩开始时捕获的会话」为准。压缩途中切走会话会让
+	// a.sess.conversation / a.sess.path 指向新会话，拿实时值比对会把已经
+	// 算好的摘要整份判成过期丢掉——用户等的那次压缩就白跑了。
+	conv := commit.conversation
+	if conv == nil {
+		conv = a.sess.conversation
+	}
+	targetPath := commit.sessionPath
+	if targetPath == "" {
+		targetPath = a.sess.path
+	}
+
 	a.sess.compactionMu.Lock()
-	current, currentVersion := a.sess.conversation.snapshotMessagesVersion()
+	current, currentVersion := conv.snapshotMessagesVersion()
 	if currentVersion != commit.transcriptVersion ||
 		len(current) != len(commit.canonical) ||
-		coveredPrefixHash(current, len(current)) != coveredPrefixHash(commit.canonical, len(commit.canonical)) ||
-		a.sess.compactionState.Projection.ProjectionVersion != commit.projectionVersion ||
-		a.sess.compactionState.Generation != commit.generation {
+		coveredPrefixHash(current, len(current)) != coveredPrefixHash(commit.canonical, len(commit.canonical)) {
 		a.sess.compactionMu.Unlock()
 		return CompactionState{}, errCompressStaleContext
 	}
-	prev := a.sess.compactionState
-	a.sess.compactionState = state
-	if err := a.persistCompactionStateLocked(); err != nil {
-		a.sess.compactionState = prev
+	// 目标仍是当前会话时才比对内存里的投影版本/generation；切走后内存状态
+	// 已属于别的会话，比对无意义，也不该被这次结果覆盖。
+	stillCurrent := targetPath == "" || targetPath == a.sess.path
+	if stillCurrent && (a.sess.compactionState.Projection.ProjectionVersion != commit.projectionVersion ||
+		a.sess.compactionState.Generation != commit.generation) {
+		a.sess.compactionMu.Unlock()
+		return CompactionState{}, errCompressStaleContext
+	}
+	if stillCurrent {
+		prev := a.sess.compactionState
+		a.sess.compactionState = state
+		if err := a.persistCompactionStateLocked(); err != nil {
+			a.sess.compactionState = prev
+			a.sess.compactionMu.Unlock()
+			if errors.Is(err, errCompressStaleContext) {
+				return CompactionState{}, err
+			}
+			return CompactionState{}, fmt.Errorf("persist projection: %w", err)
+		}
+		a.sess.checkpointState = "applied"
+		if commit.activeTurn != 0 && commit.trigger != CompactionTriggerManual {
+			a.sess.compaction.lastTurn.Store(commit.activeTurn)
+		}
+	} else if err := SaveCompactionState(targetPath, state); err != nil {
+		// 切走了：只把结果写回压缩开始时那个会话，不动当前会话的内存状态。
 		a.sess.compactionMu.Unlock()
 		if errors.Is(err, errCompressStaleContext) {
 			return CompactionState{}, err
 		}
 		return CompactionState{}, fmt.Errorf("persist projection: %w", err)
-	}
-	a.sess.checkpointState = "applied"
-	if commit.activeTurn != 0 && commit.trigger != CompactionTriggerManual {
-		a.sess.compaction.lastTurn.Store(commit.activeTurn)
 	}
 	receipt := state.LastReceipt
 	a.sess.compactionMu.Unlock()
