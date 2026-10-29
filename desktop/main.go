@@ -22,6 +22,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	// Blank imports wire compile-time built-ins into their registries, exactly as
 	// cmd/reasonix does — boot.Build resolves providers/tools from these registries.
+	"reasonix/internal/provider"
 	_ "reasonix/internal/provider/anthropic"
 	_ "reasonix/internal/provider/openai"
 	_ "reasonix/internal/provider/responses"
@@ -104,8 +105,13 @@ func preparePrimaryDesktopRuntime(app *App) {
 	capturePendingUpdateHealthIdentity(app)
 }
 
-func main() {
+func prepareDesktopProcess() {
+	provider.SetClientVersion(version)
 	prepareLinuxRendererCompatibilityEnvironment()
+}
+
+func main() {
+	prepareDesktopProcess()
 	// Detached macOS self-update child: wait for the old PID, hold the shared
 	// repair mutation lock, then swap the .app bundle. Must run before Wails.
 	if handled, exitCode := maybeRunMacUpdateHandoff(os.Args[1:]); handled {

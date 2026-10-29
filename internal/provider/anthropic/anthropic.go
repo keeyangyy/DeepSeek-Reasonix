@@ -349,7 +349,7 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 			httpReq.Header.Set("anthropic-beta", "files-api-2025-04-14")
 		}
 		applyCustomHeaders(httpReq.Header, c.headers)
-		provider.ApplyOpenCodeGoHeaders(httpReq, c.baseURL, c.identityHeaders)
+		provider.ApplyClientHeaders(httpReq, c.baseURL, c.identityHeaders)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)

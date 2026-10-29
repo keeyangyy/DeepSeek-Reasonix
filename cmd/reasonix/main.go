@@ -9,6 +9,7 @@ import (
 	"reasonix/internal/config"
 	"reasonix/internal/crashreport"
 	"reasonix/internal/plugin"
+	"reasonix/internal/provider"
 
 	// Blank imports wire compile-time built-ins into their registries.
 	_ "reasonix/internal/provider/anthropic"
@@ -37,6 +38,7 @@ var runCLI = func(args []string, buildVersion string) int {
 }
 
 func main() {
+	provider.SetClientVersion(version)
 	plugin.SetMCPClientVersion(version)
 	os.Exit(runWithCrashCapture(os.Args[1:], version))
 }

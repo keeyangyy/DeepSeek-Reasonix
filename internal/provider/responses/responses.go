@@ -271,7 +271,7 @@ func (c *client) send(ctx context.Context, body map[string]any) (*http.Response,
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		provider.ApplyOpenCodeGoHeaders(req, c.baseURL, c.identityHeaders)
+		provider.ApplyClientHeaders(req, c.baseURL, c.identityHeaders)
 		if c.caps.sessionCacheHeader && c.sessionCache {
 			req.Header.Set("x-dashscope-session-cache", "enable")
 		}

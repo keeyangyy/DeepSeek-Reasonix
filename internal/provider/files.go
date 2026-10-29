@@ -86,6 +86,7 @@ func UploadUserDataFile(ctx context.Context, u FileUpload) (string, error) {
 	} else {
 		req.Header.Set("Authorization", "Bearer "+u.APIKey)
 	}
+	ApplyClientIdentity(req)
 	client := u.Client
 	if client == nil {
 		client = &http.Client{Timeout: 2 * time.Minute}
