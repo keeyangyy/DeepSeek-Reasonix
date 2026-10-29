@@ -85,7 +85,7 @@ process.stdout.write("\n压缩中切走 → 切回（真实路径：reset → hi
   ok(after === beforeSwitch, `进行中的卡片回到原位（前 ${beforeSwitch} vs 后 ${after}）`);
 }
 
-// ── 场景 2b：压缩已完成再切走 → 按既有语义在顶部 ────────────────────────
+// ── 场景 2b：压缩已完成再切走 → 回到压缩关闭的那一轮结束处（末尾） ──────
 {
   const sessionA = nextSession();
   let a = reducer(freshState(sessionA), historyAction(turnHistory(6, "A")));
@@ -100,7 +100,7 @@ process.stdout.write("\n压缩中切走 → 切回（真实路径：reset → hi
   const after = back.items.findIndex((it) => it.kind === "compaction");
 
   process.stdout.write(`    完成后切走：切回后 index=${after} / 总长=${back.items.length}\n`);
-  ok(after === 0, `已完成的卡片按既有语义落在顶部（实际 index=${after}）`);
+  ok(after === back.items.length - 1, `已完成的卡片回到压缩点所在的末尾（实际 index=${after}）`);
 }
 
 // ── 场景 3：切回时没有任何缓存（模拟 pending 卡片未进 cache） ────────────

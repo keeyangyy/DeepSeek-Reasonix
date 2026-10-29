@@ -6712,6 +6712,69 @@ body > .mermaid-diagram--fullscreen {
   word-break: break-word;
 }
 
+/* 压缩卡片：一行药丸状摘要，点开看完整压缩摘要。
+   TranscriptCards.CompactionCard 的 DOM 结构；此前只有 __meta 的字体规则，
+   卡片本体是裸 button，和工具栏 / 提示行不成体系。 */
+.compaction {
+  margin: 8px auto;
+  color: var(--fg-faint);
+}
+/* 收起态与「压缩中」共用同一外壳：同一底色、描边、圆角与字号，
+   只有文字不同，避免压缩过程中和完成后的观感跳变。 */
+.compaction__head,
+.compaction--pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  background: var(--bg-soft);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 45%, var(--fg-faint));
+  border-radius: 999px;
+  color: var(--fg-dim);
+  font: inherit;
+  text-align: left;
+}
+.compaction__head {
+  cursor: pointer;
+}
+.compaction__head:hover {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--border-soft) 25%, var(--fg-faint));
+}
+.compaction__head > svg {
+  flex: 0 0 auto;
+}
+.compaction__head > svg:last-child {
+  transition: transform 0.15s ease;
+}
+.compaction__chevron--open {
+  transform: rotate(90deg);
+}
+.compaction__meta {
+  color: var(--fg-faint);
+  opacity: 0.85;
+}
+.compaction__body {
+  margin: 6px 0 0;
+  padding: 10px 14px;
+  max-height: 320px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--bg-soft) 58%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--fg-dim);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.compaction--pending {
+  /* 外壳由上面的共享规则提供，这里只补它作为非按钮元素需要的排版。 */
+  font-size: var(--text-sm);
+}
+
 /* ── footer: composer + status line ──────────────────────────────────────── */
 .footer {
   flex: 0 0 auto;

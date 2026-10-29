@@ -1,9 +1,10 @@
 // compaction-anchor-restore.test.ts — 切回（hydrate）后压缩卡片按锚点恢复原位：
-// 压缩卡片是 live 事件产物（不持久化），切走再切回时按 usersAfter 锚点插回
-// 原位置（倒数第 N 个 user 行之前），锚点失效回退 append 末尾（旧行为）。
+// 压缩卡片是 live 事件产物（不持久化），锚点是 anchorUsers（压缩分界前有多少
+// 条 user 消息，压缩时写入，后端 sidecar 同名字段）。卡片落在第 anchorUsers+1
+// 个 user 行之前，即压缩关闭的那一轮结束处；没有锚点的旧记录落到末尾。
 // 注意：liveCompactionsCache 是模块级单例，各场景必须使用独立 sessionPath。
 // 运行：pnpm exec tsx src/__tests__/compaction-anchor-restore.test.ts
-import { initialState, reducer } from "../lib/useController";
+import { initialState, reducer, type Item } from "../lib/useController";
 import type { HistoryMessage } from "../lib/types";
 
 let passed = 0;
@@ -98,9 +99,8 @@ console.log("\ncompaction anchor restore");
   ok((cards[0] as { summary?: string }).summary === "压一", "摘要内容正确");
 }
 
-// 场景 2：压缩后无新回合（usersAfter=0）→ 切回后卡片在保留历史之前（顶部）。
-// 462 条 manual 压缩实测：压缩完成后未发新消息，重建的历史全部是压缩之后的
-// 内容，卡片逻辑位置在它们之前——append 末尾会把它甩到消息流最底部。
+// 场景 2：压缩后无新回合 → 锚点等于当前 user 总数 → 卡片落在末尾（压缩点就是
+// 最新一轮之后）。
 {
   const SESSION = "t2.jsonl";
   let s = reducer(initialState, {
@@ -136,8 +136,8 @@ console.log("\ncompaction anchor restore");
   } as never);
   const cards = compactionCards(back.items);
   ok(
-    cards.length === 1 && back.items[0].kind === "compaction",
-    "无新回合时卡片恢复在保留历史之前（顶部），不是最底部",
+    cards.length === 1 && back.items[back.items.length - 1].kind === "compaction",
+    "无新回合时卡片落在末尾（压缩点就是最新一轮之后）",
   );
 }
 
@@ -159,11 +159,12 @@ console.log("\ncompaction anchor restore");
     tabId: SESSION,
     record: { trigger: "manual", messages: 462, summary: "重启恢复" },
   } as never);
+  const recovered = s.items[s.items.length - 1];
   ok(
-    s.items[0].kind === "compaction" &&
-      (s.items[0] as { summary?: string }).summary === "重启恢复" &&
-      s.items[1].kind === "user",
-    "重启 sidecar 恢复的卡片插在历史之前（顶部）",
+    recovered.kind === "compaction" &&
+      (recovered as { summary?: string }).summary === "重启恢复" &&
+      s.items[0].kind === "user",
+    "无锚点的旧 sidecar 记录恢复后落在末尾，不插到历史顶部",
   );
   // 重复 hydrate（同 summary）不堆叠。
   s = reducer(s, {
@@ -317,9 +318,9 @@ console.log("\ncompaction anchor restore");
   );
 }
 
-// 场景 6：多张卡片 → 各自按语义归位，互不干扰、不重复。
-// 压A 后有新回合（锚点刷新 usersAfter=1）→ 插回四回合前；压B 后无新回合
-// （usersAfter=0）→ 重建历史全是其后内容 → 卡片在顶部。
+// 场景 6：多张卡片 → 各自按锚点归位，互不干扰、不重复。
+// 压A 锚点=3、压B 锚点=4；重建历史只有 2 条 user，两个锚点都在窗口之外 →
+// 两张卡按发生顺序落在末尾，不会被塞进无关回合。
 {
   const SESSION = "t6.jsonl";
   let s = reducer(initialState, {
@@ -395,13 +396,13 @@ console.log("\ncompaction anchor restore");
     (it) => it.kind === "user" && it.text === "四",
   );
   ok(
-    idxB === 0 && idxA === u4Idx - 1,
-    "压B（无新回合）在顶部、压A 在四回合前（各自语义）",
+    idxA > u4Idx && idxB === idxA + 1,
+    "锚点越出页面的两张卡按发生顺序落在末尾（压A 在压B 前）",
   );
 }
 
-// 场景 7：锚点计数越界（压缩后又聊了多轮，切回页面只含最近几轮）→ 卡片在顶部，
-// 不沉到消息流最底部。长会话里压缩边界滚出 60-turn 页面窗口时触发。
+// 场景 7：锚点计数越界（压缩后又聊了多轮，切回页面只含最近几轮）→ 卡片仍按
+// anchorUsers 落在页面内的对应轮次边界（分页窗口内的近似位置），不丢失。
 {
   const SESSION = "t7.jsonl";
   let s = reducer(initialState, {
@@ -448,10 +449,85 @@ console.log("\ncompaction anchor restore");
   } as never);
   const cards = compactionCards(back.items);
   ok(cards.length === 1, "越界场景卡片不丢失");
+  const cardIdx = back.items.findIndex((it) => it.kind === "compaction");
+  const u6Idx = back.items.findIndex((it) => it.kind === "user" && it.text === "六");
   ok(
-    back.items[0].kind === "compaction",
-    "锚点计数越界（锚点轮次滚出页面窗口）时卡片在顶部，而非消息流最底部",
+    cardIdx >= 0 && cardIdx === u6Idx - 1,
+    `分页窗口内卡片紧贴在第 anchorUsers+1 个 user 之前（card=${cardIdx} 六=${u6Idx}）`,
   );
+}
+
+// 场景 8：重启后从 sidecar 恢复（latest_compaction）之后，又发生一次 items 重建
+// （重复 hydrate / 翻页 replace）→ 卡片必须还在。重启时模块缓存是空的，恢复
+// 动作自己必须登记，否则下一次 history_replace 会把刚插好的卡片冲掉。
+{
+  const SESSION = "t8.jsonl";
+  const page: Item[] = [
+    { kind: "user", id: "he:u1", text: "一" },
+    { kind: "assistant", id: "he:a1", text: "答一", reasoning: "", streaming: false },
+    { kind: "user", id: "he:u2", text: "二" },
+  ];
+  const hydrate = (state: ReturnType<typeof reducer>) =>
+    reducer(state, { type: "history_replace", items: page, startTurn: 1, totalTurns: 2, hasOlder: false } as never);
+  let s = reducer(initialState, { type: "meta", meta: { sessionPath: SESSION } } as never);
+  s = hydrate(s);
+  s = reducer(s, {
+    type: "latest_compaction",
+    tabId: SESSION,
+    record: { trigger: "manual", messages: 39, summary: "重启恢复二", anchorUsers: 1 },
+  } as never);
+  const before = compactionCards(s.items).length;
+  s = hydrate(s);
+  const after = compactionCards(s.items);
+  ok(before === 1 && after.length === 1, `重启恢复后再次 hydrate 卡片仍在（before=${before} after=${after.length}）`);
+  const cardIdx = s.items.findIndex((it) => it.kind === "compaction");
+  const u2Idx = s.items.findIndex((it) => it.kind === "user" && it.text === "二");
+  ok(cardIdx === u2Idx - 1, "且回到原来的轮次边界（第 2 个 user 之前）");
+}
+
+// 场景 9：重启早期 state.meta 还没落地（会话路径只在 action 上）→ 恢复的卡片
+// 也必须登记进缓存，否则 meta 后到的那次 hydrate 会把它冲掉。
+{
+  const SESSION = "t9.jsonl";
+  const page: Item[] = [
+    { kind: "user", id: "he:u1", text: "一" },
+    { kind: "assistant", id: "he:a1", text: "答一", reasoning: "", streaming: false },
+  ];
+  const hydrate = (state: ReturnType<typeof reducer>) =>
+    reducer(state, { type: "history_replace", items: page, startTurn: 1, totalTurns: 1, hasOlder: false } as never);
+  let s = hydrate(initialState);
+  s = reducer(s, {
+    type: "latest_compaction",
+    tabId: SESSION,
+    sessionPath: SESSION,
+    record: { trigger: "manual", messages: 39, summary: "重启恢复三", anchorUsers: 1 },
+  } as never);
+  ok(compactionCards(s.items).length === 1, "meta 未落地时 latest_compaction 仍插入卡片");
+  // meta 后到，然后再次 hydrate：此时 sessionPath 有值，只能靠缓存找回。
+  s = reducer(s, { type: "meta", meta: { sessionPath: SESSION } } as never);
+  s = hydrate(s);
+  ok(compactionCards(s.items).length === 1, "meta 后到的 hydrate 不会冲掉卡片（action 的会话路径已登记）");
+}
+
+// 场景 10：锚点等于当前 user 总数（压缩就发生在最新一轮之后）→ 卡片落在末尾，
+// 也就是用户触发压缩时所处的位置。
+{
+  const SESSION = "t10.jsonl";
+  const page: Item[] = [];
+  for (let index = 0; index < 18; index += 1) {
+    page.push({ kind: "user", id: `he:u${index}`, text: `问${index}` });
+    page.push({ kind: "assistant", id: `he:a${index}`, text: `答${index}`, reasoning: "", streaming: false });
+  }
+  let s = reducer(initialState, { type: "meta", meta: { sessionPath: SESSION } } as never);
+  s = reducer(s, { type: "history_replace", items: page, startTurn: 1, totalTurns: 18, hasOlder: false } as never);
+  s = reducer(s, {
+    type: "latest_compaction",
+    tabId: SESSION,
+    sessionPath: SESSION,
+    record: { trigger: "manual", messages: 39, summary: "末尾恢复", anchorUsers: 18 },
+  } as never);
+  const last = s.items[s.items.length - 1];
+  ok(last.kind === "compaction", `锚点=user 总数时卡片落在末尾（末条为 ${last.kind}，共 ${s.items.length} 条）`);
 }
 
 console.log(`\ncompaction anchor restore: ${passed} passed, ${failed} failed`);

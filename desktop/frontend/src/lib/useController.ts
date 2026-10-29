@@ -47,7 +47,7 @@ import { hydrateIdentityCurrent, normalizeSessionGeneration, preserveSessionIden
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
 import { ephemeralItemId } from "./transcriptItemIds";
-import { preserveLiveCompactions, recordCompactionDone, recordCompactionStarted, refreshCompactionAnchors } from "./compactionAnchor";
+import { compactionUserCount, insertCompactionCards, placeCompactionCard, preserveLiveCompactions, recordCompactionDone, recordCompactionStarted, refreshCompactionAnchors } from "./compactionAnchor";
 import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
@@ -281,6 +281,8 @@ export type Item =
       messages: number;
       summary: string;
       archive: string;
+      /** anchorUsers＝压缩分界前的 user 条数（落位锚点）；sessionPath＝卡片所属会话（重建时兜底用）。 */
+      anchorUsers?: number; sessionPath?: string;
     }
   | {
       kind: "tool";
@@ -832,7 +834,7 @@ type Action =
   | { type: "history_items_patch"; patches: Record<string, Item> }
   | { type: "history_older_start" }
   | { type: "history_older_error"; error?: string }
-  | { type: "latest_compaction"; tabId: string; record: { inProgress?: boolean; trigger?: string; messages?: number; summary?: string } }
+  | { type: "latest_compaction"; tabId: string; sessionPath?: string; record: { inProgress?: boolean; trigger?: string; messages?: number; summary?: string; anchorUsers?: number; afterMessageId?: string } }
   | { type: "local_notice"; level: "info" | "warn"; text: string; preserveRuntime?: boolean }
   | { type: "clearApproval" }
   | { type: "clearAsk" }
@@ -1872,19 +1874,19 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       const pendingClear = s.pendingSubmissionId && s.pendingUser !== undefined && !s.turnActive
         ? { pendingUser: undefined, pendingSubmissionId: undefined }
         : {};
-      const items: Item[] = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "" }];
+      const items: Item[] = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "", anchorUsers: compactionUserCount(s.items), sessionPath: s.meta?.sessionPath }];
       recordCompactionStarted(s.meta?.sessionPath, items);
       return { ...s, ...pendingClear, seq: s.seq + 1, items };
     }
     case "compaction_done": {
       const c = e.compaction;
-      const idx = [...s.items].reverse().findIndex((it) => it.kind === "compaction" && it.pending);
-      const at = idx < 0 ? -1 : s.items.length - 1 - idx;
+      const at = s.items.reduce((found, item, index) => (item.kind === "compaction" && item.pending ? index : found), -1);
+      const previous = at < 0 ? undefined : (s.items[at] as Extract<Item, { kind: "compaction" }>);
       if (!c?.summary) {
         const items = at < 0 ? s.items : s.items.filter((_, i) => i !== at);
         return { ...s, running: s.turnActive ? s.running : false, items };
       }
-      const filled: Item = { kind: "compaction", id: at < 0 ? ephemeralItemId("compaction") : (s.items[at] as Extract<Item, { kind: "compaction" }>).id, pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "" };
+      const filled: Item = { kind: "compaction", id: previous?.id ?? ephemeralItemId("compaction"), pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "", anchorUsers: previous?.anchorUsers ?? compactionUserCount(s.items), sessionPath: previous?.sessionPath ?? s.meta?.sessionPath };
       const items = at < 0 ? [...s.items, filled] : s.items.map((it, i) => (i === at ? filled : it));
       // Record the finished compaction in the module-level cache so the row
       // survives a tab switch (controller state may be rebuilt entirely).
@@ -2389,30 +2391,29 @@ export function reducer(s: State, a: Action): State {
     }
     case "latest_compaction": {
       // Hydrate-time restoration of a compaction that finished (or is still
-      // running) while the tab was released (switch-away mid-run). InProgress
-      // mounts a pending card; a finished record fills the pending card or
-      // appends (dedup by summary so repeated hydrates do not stack cards).
+      // running) while the tab was released. The card belongs at the turn
+      // boundary the compaction closed (anchorUsers), not at the top or the
+      // tail: both existing placements were guesses that moved on every rebuild.
+      const anchorUsers = typeof a.record?.anchorUsers === "number" && a.record.anchorUsers > 0 ? a.record.anchorUsers : undefined;
       if (a.record?.inProgress) {
         if (s.items.some((it) => it.kind === "compaction" && it.pending)) return s;
-        const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "" }];
+        const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "", anchorUsers: compactionUserCount(s.items) }];
         assertNoDuplicateItems(items, "latest_compaction");
         return { ...s, seq: s.seq + 1, items };
       }
-      if (!a.record?.summary || s.items.some((it) => it.kind === "compaction" && !it.pending && it.summary === a.record.summary)) return s;
-      const pendingIdx = s.items.findIndex((it) => it.kind === "compaction" && it.pending);
-      const filled: Item[] | undefined = pendingIdx >= 0
-        ? s.items.map((it, i) => (i === pendingIdx ? { ...it, pending: false, trigger: a.record!.trigger ?? "", messages: a.record!.messages ?? 0, summary: a.record!.summary ?? "", archive: "" } : it))
-        : undefined;
-      if (filled) {
-        assertNoDuplicateItems(filled, "latest_compaction");
-        return { ...s, items: filled };
-      }
-      // 重启后从 sidecar 恢复：hydrate 的历史行全部是压缩之后的内容，卡片
-      // 的逻辑位置在它们之前（顶部）——append 会把它甩到消息流最底部
-      // （462 条 manual 压缩实测）。
-      const card: Item = { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "" };
-      const items: Item[] = [card, ...s.items];
+      if (!a.record?.summary) return s;
+      const existing = s.items.find((it): it is Extract<Item, { kind: "compaction" }> => it.kind === "compaction" && (it.pending || it.summary === a.record!.summary));
+      // 会话路径优先用 action 带来的：重启早期 state.meta 可能还没落地。
+      const rememberPath = a.sessionPath || s.meta?.sessionPath;
+      const card: Item = existing
+        ? { ...existing, pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "", anchorUsers: existing.anchorUsers ?? anchorUsers, sessionPath: existing.sessionPath ?? rememberPath }
+        : { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "", anchorUsers, sessionPath: rememberPath };
+      if (existing && !existing.pending && existing.anchorUsers === card.anchorUsers) return s;
+      const items = existing ? placeCompactionCard(s.items, card) : insertCompactionCards(s.items, [card]);
       assertNoDuplicateItems(items, "latest_compaction");
+      // 重启后模块缓存是空的：这次恢复必须自己登记，否则紧接着的第二次
+      // hydrate（history_replace/rebase/prepend）会把刚插好的卡片冲掉。
+      if (rememberPath) recordCompactionDone(rememberPath, items, items.indexOf(card), card);
       return { ...s, seq: s.seq + 1, items };
     }
     case "history_prepend": {
@@ -2420,11 +2421,10 @@ export function reducer(s: State, a: Action): State {
       const rebasedAssistant = rebaseLiveAssistantToPage(a.items, s), pageItems = rebasedAssistant?.items ?? a.items;
       const remove = a.removeIds.length ? new Set(a.removeIds) : undefined;
       const rest = remove ? s.items.filter((item) => !remove.has(item.id)) : s.items;
-      const carriedCompactions = rest.filter((item) => item.kind === "compaction");
       const nonCompactionRest = rest.filter((item) => item.kind !== "compaction");
       const prefix = s.items.slice(0, Math.min(s.historyPrefixCount, s.items.length));
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
-      const merged = compactArchivedToolItems([...carriedCompactions, ...liftLiveToolStatus(pageItems, s.items), ...nonCompactionRest]);
+      const merged = compactArchivedToolItems(insertCompactionCards([...liftLiveToolStatus(pageItems, s.items), ...nonCompactionRest], rest.filter((item): item is Extract<Item, { kind: "compaction" }> => item.kind === "compaction")));
       assertNoDuplicateItems(merged, "history_prepend");
       noteDedupDrop(s.meta?.sessionPath ?? "", "prepend", a.removeIds.length);
       const prependResidual = duplicateItemRows(merged).length;
@@ -3127,14 +3127,14 @@ export function useController() {
       if (sessionPath) {
         const pollForCompaction = (attempt: number) => {
           void app.LatestCompactionForTab(tabId).then((rec) => {
-            if (!stillCurrent() || activeTabIdRef.current !== tabId) return;
+            // 启动早期 activeTabIdRef 可能还没指向本 tab，不能据此丢弃结果。
+            if (!stillCurrent()) return;
             if (rec?.summary) {
-              dispatchTo(tabId, { type: "latest_compaction", tabId, record: { trigger: rec.trigger ?? "", messages: rec.messages ?? 0, summary: rec.summary } });
+              dispatchTo(tabId, { type: "latest_compaction", tabId, sessionPath, record: { trigger: rec.trigger ?? "", messages: rec.messages ?? 0, summary: rec.summary, anchorUsers: rec.anchorUserMessages, afterMessageId: rec.afterMessageId } });
               return;
             }
-            if (rec?.inProgress && attempt < 30) {
-              setTimeout(() => pollForCompaction(attempt + 1), 3000);
-            }
+            // 空结果也可能只是控制器还没就绪（重启早期），补几次短重试。
+            if (attempt < (rec?.inProgress ? 30 : 6)) setTimeout(() => pollForCompaction(attempt + 1), rec?.inProgress ? 3000 : 1500);
           }).catch(() => {});
         };
         pollForCompaction(0);
@@ -3748,9 +3748,6 @@ export function useController() {
       const acceptedEpoch = runtimeEpochByTabRef.current.get(targetTabId);
       if (e.runtimeEpoch) {
         if (!acceptsRuntimeEventEpoch(acceptedEpoch, e.runtimeEpoch)) {
-          if (e.kind === "compaction_started" || e.kind === "compaction_done") {
-
-          }
           return;
         }
         if (!acceptedEpoch) runtimeEpochByTabRef.current.set(targetTabId, e.runtimeEpoch);
@@ -3761,9 +3758,13 @@ export function useController() {
       if (e.sessionGeneration !== undefined && currentMeta && currentMeta.sessionGeneration !== undefined && e.sessionGeneration !== currentMeta.sessionGeneration) return;
       // replayProjected = 投影通道回流（已过 seq 门，见 projectEnvelope）；
       // 只有 live 摄取路径需要 acceptLive 判定。
-      if (!e.replayProjected && !turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
-      if (e.kind === "compaction_started" || e.kind === "compaction_done") {
-
+      if (!e.replayProjected && !turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) {
+        // 序号判定只用于增量行；轮次/压缩边界的状态刷新不能因此跳过，否则切走再回来会停在旧值。
+        if (e.kind === "turn_done" || e.kind === "context_maintenance" || e.kind === "compaction_done") {
+          invalidateSharedQuery("MetaForTab", [targetTabId]);
+          void refreshMetaForTab(targetTabId);
+        }
+        return;
       }
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
@@ -3775,15 +3776,14 @@ export function useController() {
         dispatchTo(targetTabId, { type: "event", e });
       }
       if (e.kind === "turn_done" || e.kind === "context_maintenance" || e.kind === "compaction_done") {
-        void app.ContextUsageForTab(targetTabId).then((context) => dispatchTo(targetTabId, { type: "context", context })).catch(() => {});
+        invalidateSharedQuery("MetaForTab", [targetTabId]);
+        void refreshMetaForTab(targetTabId);
       }
       if (e.kind === "turn_done") {
         invalidateSharedQuery("BalanceForTab", [targetTabId]);
         void refreshBalanceForTab(targetTabId);
         app.EffortForTab(targetTabId).then((effort) => dispatchTo(targetTabId, { type: "effort", effort })).catch(() => {});
         void refreshCheckpoints(targetTabId);
-        invalidateSharedQuery("MetaForTab", [targetTabId]);
-        void refreshMetaForTab(targetTabId);
       }
       if (e.kind === "turn_done" || e.kind === "notice") {
         app.JobsForTab(targetTabId).then((jobs) => dispatchTo(targetTabId, { type: "jobs", jobs: asArray(jobs) })).catch(() => {});

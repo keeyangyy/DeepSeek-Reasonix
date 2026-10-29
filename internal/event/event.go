@@ -437,16 +437,16 @@ type ExtensionNotificationView struct {
 }
 
 // Compaction carries a context-compaction pass for the CompactionStarted /
-// CompactionDone events. On CompactionStarted only Trigger is set. On
-// CompactionDone, Messages/Summary/Archive are filled in (an aborted pass leaves
-// Summary empty). Trigger is "auto" (the prompt reached the window threshold) or
-// "manual" (the user ran /compact).
+// CompactionDone events. CompactionStarted sets only Trigger; CompactionDone
+// fills Messages/Summary/Archive (an aborted pass leaves Summary empty).
+// Trigger is "auto" (window threshold) or "manual" (the user ran /compact).
 type Compaction struct {
-	Trigger  string // "auto" | "manual"
-	Messages int    // Done: how many messages were folded into the summary
-	Summary  string // Done: the briefing the agent keeps relying on
-	Archive  string // Done: path the dropped originals were archived to ("" if none)
-	Reason   string // Aborted: why the pass did not complete ("" on success)
+	Trigger        string // "auto" | "manual"
+	Messages       int    // Done: how many messages were folded into the summary
+	Summary        string // Done: the briefing the agent keeps relying on
+	Archive        string // Done: path the dropped originals were archived to ("" if none)
+	Reason         string // Aborted: why the pass did not complete ("" on success)
+	AfterMessageID string // Done: ULID of the last folded message; "" = no anchor
 }
 
 // ContextMaintenance is the typed wire-safe receipt for snip/prune/noop/
