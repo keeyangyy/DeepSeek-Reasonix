@@ -21,8 +21,8 @@ func TestEveryDesktopKeyIsRendered(t *testing.T) {
 	cfg.Desktop.ConversationWidth = "full"
 	cfg.Desktop.SessionExperience = "deep"
 	rendered := RenderTOMLForScope(cfg, RenderScopeUser)
-	typ := reflect.TypeOf(cfg.Desktop)
-	for i := 0; i < typ.NumField(); i++ {
+	typ := reflect.TypeFor[DesktopConfig]()
+	for i := range typ.NumField() {
 		key := strings.Split(typ.Field(i).Tag.Get("toml"), ",")[0]
 		if key == "" || legacyDesktopKeys[key] {
 			continue
@@ -37,7 +37,7 @@ func TestEveryDesktopKeyIsRendered(t *testing.T) {
 // are rendered too; only the enumerations the renderer gates on are pinned.
 func fillDesktopForRenderTest(d *DesktopConfig) {
 	v := reflect.ValueOf(d).Elem()
-	for i := 0; i < v.NumField(); i++ {
+	for i := range v.NumField() {
 		f := v.Field(i)
 		switch f.Kind() {
 		case reflect.String:
@@ -46,7 +46,7 @@ func fillDesktopForRenderTest(d *DesktopConfig) {
 			f.SetBool(true)
 		case reflect.Slice:
 			f.Set(reflect.MakeSlice(f.Type(), 1, 1))
-		case reflect.Ptr:
+		case reflect.Pointer:
 			if f.Type().Elem().Kind() == reflect.Bool {
 				on := true
 				f.Set(reflect.ValueOf(&on))
