@@ -142,10 +142,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		}
 		renderDesktopSessionExperience(&b, c)
 		renderDesktopReasoningDisplayMode(&b, c)
-		fmt.Fprintf(&b, "display_mode = %q   # desktop: standard|compact transcript display mode\n", c.DesktopDisplayMode())
-		if width := c.DesktopConversationWidth(); width == "full" {
-			fmt.Fprintf(&b, "conversation_width = %q   # desktop: standard|full transcript width; empty = standard\n", width)
-		}
+		renderDesktopPrefsTail(&b, c)
 		b.WriteString("\n")
 		b.WriteString("[billing]\n")
 		if pref := c.DisplayCurrencyPref(); pref != "" {
