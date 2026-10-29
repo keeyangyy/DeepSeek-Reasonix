@@ -17,6 +17,11 @@ type LatestCompactionView struct {
 	Trigger    string `json:"trigger,omitempty"`
 	Messages   int    `json:"messages"`
 	Summary    string `json:"summary"`
+	// AnchorUserMessages 是压缩发生在第几轮之后（压缩覆盖的真实用户消息数）。
+	// 前端据此把卡片插回轮次边界；缺失（0）表示旧记录没有位置，前端不渲染。
+	AnchorUserMessages int `json:"anchorUserMessages,omitempty"`
+	// AfterMessageID 是压缩分界处最后一条消息的 ULID，前端据此精确定位卡片。
+	AfterMessageID string `json:"afterMessageId,omitempty"`
 }
 
 // LatestCompactionForTab returns the most recent compaction record persisted
@@ -40,7 +45,9 @@ func (a *App) LatestCompactionForTab(tabID string) (*LatestCompactionView, error
 	if err == nil {
 		var rec agent.CompactionRecord
 		if err := json.Unmarshal(b, &rec); err == nil {
-			return &LatestCompactionView{Trigger: rec.Trigger, Messages: rec.Messages, Summary: rec.Summary}, nil
+			return &LatestCompactionView{Trigger: rec.Trigger, Messages: rec.Messages, Summary: rec.Summary,
+				AnchorUserMessages: rec.AnchorUserMessages,
+				AfterMessageID:     rec.AfterMessageID}, nil
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err

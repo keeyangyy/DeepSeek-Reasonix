@@ -295,11 +295,11 @@ func (a *Agent) compressVisibleRange(
 	}
 	a.emitCompactionTelemetry(tele)
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
-		Trigger: trigger, Messages: len(plan.fold), Summary: summary, Archive: state.LastReceipt.Archive,
+		Trigger: trigger, Messages: len(plan.fold), Summary: summary, Archive: state.LastReceipt.Archive, AfterMessageID: lastCompactedMessageID(snap.canonical, len(snap.canonical)),
 	}})
 	// Same sidecar contract as /compact so the button path also survives a
 	// mid-run switch-away and re-opens with the result.
-	sidecarRec := &CompactionRecord{Trigger: trigger, Messages: len(plan.fold), Summary: summary}
+	sidecarRec := &CompactionRecord{Trigger: trigger, Messages: len(plan.fold), Summary: summary, AnchorUserMessages: countCompactionAnchorUsers(snap.canonical, len(snap.canonical)), AfterMessageID: lastCompactedMessageID(snap.canonical, len(snap.canonical))}
 	a.setLastCompaction(sidecarRec)
 	writeCompactionSidecar(sidecarPath, "record", sidecarRec)
 	sidecarSettled = true
@@ -638,11 +638,11 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, err
 	}
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
-		Trigger: trigger, Messages: len(fold), Summary: summary,
+		Trigger: trigger, Messages: len(fold), Summary: summary, AfterMessageID: lastCompactedMessageID(canonical, covered),
 	}})
 	// Persist to memory and the session sidecar (up-front path) so a mid-run
 	// switch-away still re-opens with the result.
-	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary}
+	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary, AnchorUserMessages: countCompactionAnchorUsers(canonical, len(canonical)), AfterMessageID: lastCompactedMessageID(canonical, covered)}
 	a.setLastCompaction(rec)
 	writeCompactionSidecar(sidecarPath, "record", rec)
 	sidecarSettled = true

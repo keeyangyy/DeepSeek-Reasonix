@@ -1,7 +1,8 @@
-// compaction-prepend-order.test.ts — 卡片先到、历史后到时压缩卡片保持顶部：
-// 切回走 runtime.rebuilt 时，latest_compaction 先 unshift 卡片（items=[card]），
-// 随后 history_prepend 把历史页插到前面——合并必须把 rest 中的卡片重新放回
-// 顶部（日志实证：c.c5.0 落到 97 条历史之后成为最后一条）。
+// compaction-prepend-order.test.ts — 卡片先到、历史后到时按锚点落位：
+// 切回走 runtime.rebuilt 时，latest_compaction 可能先到（items 只有卡片），
+// 随后 history_prepend 才把历史页插进来。卡片必须按 anchorUsers 找回原来的
+// 轮次边界；没有锚点的旧记录落到末尾（压缩边界就是最新一轮），不能悬在
+// 历史之前——旧实现把卡片固定在顶部，重建后位置与压缩点无关。
 // 运行：pnpm exec tsx src/__tests__/compaction-prepend-order.test.ts
 import { initialState, reducer } from "../lib/useController";
 import type { Item } from "../lib/useController";
@@ -51,12 +52,12 @@ console.log("\ncompaction prepend order");
   } as never);
 
   ok(
-    s.items[0].kind === "compaction",
-    "history_prepend 合并后卡片仍在顶部（而不是落在历史之后）",
+    s.items[s.items.length - 1].kind === "compaction",
+    "无锚点的旧记录在 history_prepend 后落到历史末尾（不悬在历史之前）",
   );
   ok(
-    s.items[s.items.length - 1].kind !== "compaction",
-    "卡片不再是最后一条",
+    s.items.filter((it) => it.kind === "compaction").length === 1,
+    "合并后只有一张卡片",
   );
   ok(s.items.length === 98, `合并后总数 98（实际 ${s.items.length}）`);
 }
@@ -86,7 +87,39 @@ console.log("\ncompaction prepend order");
     revision: 2,
   } as never);
 
-  ok(s.items[0].kind === "compaction", "live 行被页覆盖后卡片仍保持顶部");
+  ok(s.items[s.items.length - 1].kind === "compaction", "live 行被页覆盖后卡片仍只有一张，落在页之后");
+}
+
+// 场景 3：卡片带锚点（anchorUsers）时，prepend 后落在第 anchorUsers+1 个 user
+// 之前——即压缩关闭的那一轮结束处。
+{
+  let s = reducer(initialState, {
+    type: "meta",
+    meta: { sessionPath: "t3.jsonl" },
+  } as never);
+  s = reducer(s, {
+    type: "latest_compaction",
+    record: { trigger: "manual", messages: 12, summary: "压三", anchorUsers: 2 },
+  } as never);
+  const page: Item[] = [];
+  for (let i = 0; i < 5; i += 1) {
+    page.push({ kind: "user", id: `he:u${i}`, text: `问${i}` } as unknown as Item);
+    page.push({ kind: "assistant", id: `he:a${i}`, text: `答${i}` } as unknown as Item);
+  }
+  s = reducer(s, {
+    type: "history_prepend",
+    items: page,
+    removeIds: [],
+    startTurn: 1,
+    totalTurns: 5,
+    hasOlder: false,
+    revision: 3,
+  } as never);
+  const cardIndex = s.items.findIndex((it) => it.kind === "compaction");
+  const thirdUserIndex = s.items.findIndex((it, index) =>
+    it.kind === "user" && s.items.slice(0, index).filter((row) => row.kind === "user").length === 2,
+  );
+  ok(cardIndex >= 0 && cardIndex === thirdUserIndex - 1, `有锚点的卡片紧贴在第 3 个 user 之前（card=${cardIndex} 第三个user=${thirdUserIndex}）`);
 }
 
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

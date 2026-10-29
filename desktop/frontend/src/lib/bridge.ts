@@ -425,7 +425,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   ToolResultForTab(tabID: string, toolID: string): Promise<{ args: string; output: string; execution?: import("./types").WireShellExecution; mcpApp?: import("./types").MCPAppPresentation } | null>;
   Meta(): Promise<Meta>;
   MetaForTab(tabID: string): Promise<Meta>; DismissTodoBatchForTab(tabID: string, batchKey: string): Promise<void>;
-  LatestCompactionForTab(tabID: string): Promise<{ inProgress?: boolean; trigger?: string; messages?: number; summary?: string } | null>;
+  LatestCompactionForTab(tabID: string): Promise<{ inProgress?: boolean; trigger?: string; messages?: number; summary?: string; anchorUserMessages?: number; afterMessageId?: string } | null>;
   Commands(): Promise<CommandInfo[]>;
   Capabilities(): Promise<CapabilitiesView>;
   MCPServers(): Promise<ServerView[]>;

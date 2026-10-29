@@ -214,7 +214,7 @@ func ToWire(e event.Event) Event {
 		w.Compaction = &Compaction{
 			Trigger: e.Compaction.Trigger, Messages: e.Compaction.Messages,
 			Summary: e.Compaction.Summary, Archive: e.Compaction.Archive,
-			Reason: e.Compaction.Reason,
+			Reason: e.Compaction.Reason, AfterMessageID: e.Compaction.AfterMessageID,
 		}
 	case event.ContextMaintenanceEvent:
 		if m := e.Maintenance; m != nil {
@@ -358,13 +358,13 @@ func ToWireMemoryCitations(in []provider.MemoryCitation) []MemoryCitation {
 	return out
 }
 
-// Compaction is the JSON form of an event.Compaction.
 type Compaction struct {
-	Trigger  string `json:"trigger,omitempty"`
-	Messages int    `json:"messages,omitempty"`
-	Summary  string `json:"summary,omitempty" externalizable:"true"`
-	Archive  string `json:"archive,omitempty" externalizable:"true"`
-	Reason   string `json:"reason,omitempty" externalizable:"true"`
+	Trigger        string `json:"trigger,omitempty"`
+	Messages       int    `json:"messages,omitempty"`
+	Summary        string `json:"summary,omitempty" externalizable:"true"`
+	Archive        string `json:"archive,omitempty" externalizable:"true"`
+	Reason         string `json:"reason,omitempty" externalizable:"true"`
+	AfterMessageID string `json:"afterMessageId,omitempty"` // 卡片定位用，不对外暴露
 }
 
 // AskOption is one JSON-formatted choice in a structured ask request.
@@ -678,7 +678,7 @@ var kindNames = map[event.Kind]string{
 	event.TurnStatusChanged:       "turn_status",
 	event.MCPInteractionRequest:   "mcp_interaction",
 	event.PromptAnswered:          "prompt_answered",
-	event.SessionChanged:         "session_changed", event.QueuedPromptDispatched: "queued_prompt_dispatched",
+	event.SessionChanged:          "session_changed", event.QueuedPromptDispatched: "queued_prompt_dispatched",
 }
 
 // ContextMaintenance is the JSON form of event.ContextMaintenance.
