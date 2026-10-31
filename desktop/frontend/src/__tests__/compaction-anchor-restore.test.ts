@@ -381,11 +381,12 @@ console.log("\ncompaction anchor restore");
     remote: false,
   } as never);
   const cards = compactionCards(back.items);
-  ok(cards.length === 2, "两张卡片都恢复（不重复）");
-  const idxA = back.items.findIndex(
-    (it) =>
-      it.kind === "compaction" &&
-      (it as { summary?: string }).summary === "压A",
+  // 一个会话只保留最新一次压缩的卡片：sidecar 也只有一条记录，
+  // 旧卡不该在重建时被缓存插回来。
+  ok(cards.length === 1, "只恢复最新一张卡片，旧卡片不再泄漏");
+  ok(
+    (cards[0] as { summary?: string }).summary === "压B",
+    "恢复的是最新一次压缩",
   );
   const idxB = back.items.findIndex(
     (it) =>
@@ -395,10 +396,7 @@ console.log("\ncompaction anchor restore");
   const u4Idx = back.items.findIndex(
     (it) => it.kind === "user" && it.text === "四",
   );
-  ok(
-    idxA > u4Idx && idxB === idxA + 1,
-    "锚点越出页面的两张卡按发生顺序落在末尾（压A 在压B 前）",
-  );
+  ok(idxB > u4Idx, "锚点越界时卡片落在末尾");
 }
 
 // 场景 7：锚点计数越界（压缩后又聊了多轮，切回页面只含最近几轮）→ 卡片仍按

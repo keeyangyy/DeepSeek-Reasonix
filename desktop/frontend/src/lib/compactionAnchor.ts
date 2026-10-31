@@ -118,12 +118,9 @@ export function recordCompactionDone<T extends AnchorRowLike>(
   card: T,
 ): void {
   const entry = entryForCard(items, cardIndex, card);
-  const cacheKey = sessionPath ?? "";
-  const existing = liveCompactionsCache.get(cacheKey) ?? [];
-  const nextCache = existing.some((item) => item.card.id === entry.card.id)
-    ? existing.map((item) => (item.card.id === entry.card.id ? (entry as CompactionCacheEntry<AnchorRowLike>) : item))
-    : [...existing, entry as CompactionCacheEntry<AnchorRowLike>];
-  liveCompactionsCache.set(cacheKey, nextCache);
+  // 一个会话只留最新一张：后一次压缩替换前一次，而不是在旁边并列。
+  // sidecar 同样只有一条记录，重建时不能把记录已经不描述的旧卡插回来。
+  liveCompactionsCache.set(sessionPath ?? "", [entry as CompactionCacheEntry<AnchorRowLike>]);
 }
 
 // New user rows never move the anchor — it is the boundary the compaction
