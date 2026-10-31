@@ -5,10 +5,18 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"reasonix/internal/agent"
 	"reasonix/internal/store"
 )
+
+// compactionMarkerStaleAfter bounds how long a persisted "compacting" marker is
+// trusted. The marker is written before a fold starts and removed when it
+// finishes; a process killed mid-fold leaves one behind, and without a bound the
+// session would read "compacting" forever.
+const compactionMarkerStaleAfter = 10 * time.Minute
 
 // LatestCompactionView is the persisted compaction record for one session.
 // InProgress is true when a compaction is still running (marker present).
@@ -40,7 +48,20 @@ func (a *App) LatestCompactionForTab(tabID string) (*LatestCompactionView, error
 	if path == "" {
 		return nil, nil
 	}
-	ckptDir := store.SessionCheckpointDir(path)
+	return latestCompactionForSession(path)
+}
+
+// latestCompactionForSession reads one session's compaction sidecar. Split from
+// the tab lookup so the ordering rules (running marker first, then the record)
+// are testable without an App.
+func latestCompactionForSession(sessionPath string) (*LatestCompactionView, error) {
+	ckptDir := store.SessionCheckpointDir(sessionPath)
+	// A run in flight outranks the record it is about to replace: the sidecar
+	// keeps the previous run's record until this one commits, so reading the
+	// record first would show a finished card while a fold is still running.
+	if compactionRunning(ckptDir) {
+		return &LatestCompactionView{InProgress: true}, nil
+	}
 	b, err := os.ReadFile(filepath.Join(ckptDir, "latest-compaction.json"))
 	if err == nil {
 		var rec agent.CompactionRecord
@@ -52,8 +73,32 @@ func (a *App) LatestCompactionForTab(tabID string) (*LatestCompactionView, error
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	if _, err := os.Stat(filepath.Join(ckptDir, "compacting.json")); err == nil {
-		return &LatestCompactionView{InProgress: true}, nil
-	}
 	return nil, nil
+}
+
+// compactionRunning reports whether a fold is in flight, treating a marker older
+// than compactionMarkerStaleAfter as a crash leftover and clearing it so the
+// session does not stay stuck on "compacting".
+func compactionRunning(ckptDir string) bool {
+	markerPath := filepath.Join(ckptDir, "compacting.json")
+	fi, err := os.Stat(markerPath)
+	if err != nil {
+		return false
+	}
+	started := fi.ModTime()
+	if b, err := os.ReadFile(markerPath); err == nil {
+		var marker struct {
+			StartedAt string `json:"startedAt"`
+		}
+		if json.Unmarshal(b, &marker) == nil {
+			if ms, err := strconv.ParseInt(marker.StartedAt, 10, 64); err == nil && ms > 0 {
+				started = time.UnixMilli(ms)
+			}
+		}
+	}
+	if time.Since(started) > compactionMarkerStaleAfter {
+		_ = os.Remove(markerPath)
+		return false
+	}
+	return true
 }
