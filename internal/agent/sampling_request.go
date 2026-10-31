@@ -93,10 +93,12 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		}
 		shape := a.requestCalibrationShape(rebuilt.req)
 		a.sess.output.activeReqShape.Store(&shape)
+		a.sess.output.usageAnchor.Store(&usageAnchor{visible: shape, projectionVersion: a.currentProjectionVersion()})
 		return samplingRequest{req: freezeProviderRequest(rebuilt.req)}, nil
 	}
 	shape := a.requestCalibrationShape(frozen.req)
 	a.sess.output.activeReqShape.Store(&shape)
+	a.sess.output.usageAnchor.Store(&usageAnchor{visible: shape, projectionVersion: a.currentProjectionVersion()})
 	return samplingRequest{req: freezeProviderRequest(frozen.req)}, nil
 }
 

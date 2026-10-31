@@ -10,6 +10,7 @@ type contextUsage struct {
 	transcriptVersion  uint64
 	projectionVersion  uint64
 	calibration        *promptTokenCalibration
+	anchor             *usageAnchor
 	tools              *tool.Registry
 	toolSchemaRevision uint64
 	tokens             int
@@ -31,21 +32,29 @@ func (a *Agent) ContextUsedTokens() int {
 	transcriptVersion := session.TranscriptVersion()
 	projectionVersion := a.currentProjectionVersion()
 	calibration := a.sess.output.promptCalibration.Load()
+	anchor := a.sess.output.usageAnchor.Load()
 	tools := a.svc.tools
 	toolSchemaRevision := tools.SchemaRevision()
 	if cached := a.sess.output.contextUsage.Load(); cached != nil &&
 		cached.transcriptVersion == transcriptVersion &&
 		cached.projectionVersion == projectionVersion &&
 		cached.calibration == calibration &&
+		cached.anchor == anchor &&
 		cached.tools == tools &&
 		cached.toolSchemaRevision == toolSchemaRevision {
 		return cached.tokens
 	}
-	tokens := a.estimatedVisibleRequestTokens(a.modelVisibleMessages())
+	// The gauge and the fold trigger read one number: the provider's own count
+	// plus the growth since, when a request is anchored, and the local estimate
+	// otherwise (after a fold, on a rebound session, before the first usage).
+	visible := a.modelVisibleMessages()
+	shape := a.visibleRequestShape(visible)
+	tokens := a.promptPressure(shape, projectionVersion, a.estimatedShapeTokens(shape))
 	a.sess.output.contextUsage.Store(&contextUsage{
 		transcriptVersion:  transcriptVersion,
 		projectionVersion:  projectionVersion,
 		calibration:        calibration,
+		anchor:             anchor,
 		tools:              tools,
 		toolSchemaRevision: toolSchemaRevision,
 		tokens:             tokens,
