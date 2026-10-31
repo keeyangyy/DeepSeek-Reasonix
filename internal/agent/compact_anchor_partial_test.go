@@ -14,7 +14,7 @@ import (
 // 锚点必须来自同一个 covered，否则前端拿到的两个坐标互相矛盾。
 func TestCompactionAnchorUsesTheFoldedPrefixNotTheWholeTranscript(t *testing.T) {
 	var msgs []provider.Message
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		msgs = append(msgs,
 			provider.Message{ID: fmt.Sprintf("u%d", i), Role: provider.RoleUser, Content: "q"},
 			provider.Message{ID: fmt.Sprintf("a%d", i), Role: provider.RoleAssistant, Content: "a"},
