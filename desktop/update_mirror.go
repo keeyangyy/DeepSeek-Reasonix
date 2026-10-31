@@ -74,3 +74,47 @@ func downloadOnce(ctx context.Context, c, fallback *http.Client, selected, url s
 	}
 	return buf.Bytes(), nil
 }
+
+// fetchBytesWithMirrors tries every mirror prefix before the official URL. Small
+// fetches (signature, auxiliary pages) cannot tolerate a blocked official route:
+// a successful artifact download would still be thrown away when its signature
+// step fell through to GitHub.
+func fetchBytesWithMirrors(
+	ctx context.Context,
+	c, fallback *http.Client,
+	selected, url string,
+	maxBytes int64,
+) ([]byte, error) {
+	var lastErr error
+	for _, candidate := range withMirrors([]string{url}) {
+		data, err := fetchBytesOnceWithRetry(ctx, c, fallback, selected, candidate, maxBytes)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+// fetchBytesOnceWithRetry retries one candidate URL, switching to the IPv4 client
+// on later attempts because a reset usually means the IPv6 route is the problem.
+func fetchBytesOnceWithRetry(
+	ctx context.Context,
+	c, fallback *http.Client,
+	selected, url string,
+	maxBytes int64,
+) ([]byte, error) {
+	var data []byte
+	err := retryTransient(ctx, func(attempt int) error {
+		client := c
+		if attempt > 1 && fallback != nil {
+			client = fallback
+		}
+		var e error
+		attemptCtx, cancel := context.WithTimeout(ctx, fetchAttemptTimeout)
+		data, e = fetchBytesOnce(attemptCtx, client, selected, url, maxBytes)
+		cancel()
+		return e
+	})
+	return data, err
+}

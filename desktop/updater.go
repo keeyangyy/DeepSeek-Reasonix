@@ -811,20 +811,7 @@ func fetchBytesFallbackForChannelSized(
 	selected, url string,
 	maxBytes int64,
 ) ([]byte, error) {
-	selected = normalizeUpdateChannel(selected)
-	var data []byte
-	err := retryTransient(ctx, func(attempt int) error {
-		client := c
-		if attempt > 1 && fallback != nil {
-			client = fallback
-		}
-		var e error
-		attemptCtx, cancel := context.WithTimeout(ctx, fetchAttemptTimeout)
-		data, e = fetchBytesOnce(attemptCtx, client, selected, url, maxBytes)
-		cancel()
-		return e
-	})
-	return data, err
+	return fetchBytesWithMirrors(ctx, c, fallback, normalizeUpdateChannel(selected), url, maxBytes)
 }
 
 var errUpdateResponseTooLarge = errors.New("update: response exceeds allowed size")
