@@ -812,6 +812,29 @@ func fetchBytesFallbackForChannelSized(
 	maxBytes int64,
 ) ([]byte, error) {
 	selected = normalizeUpdateChannel(selected)
+	// Mirrors first, official last — the signature is fetched separately from the
+	// artifact, so it needs the same expansion: on a network where GitHub is
+	// blocked but a mirror works, the artifact succeeds and the signature alone
+	// fails the whole update.
+	var lastErr error
+	for _, candidate := range withMirrors([]string{url}) {
+		data, err := fetchBytesOnceWithRetry(ctx, c, fallback, selected, candidate, maxBytes)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+// fetchBytesOnceWithRetry retries one candidate URL, switching to the IPv4 client
+// on later attempts because a reset usually means the IPv6 route is the problem.
+func fetchBytesOnceWithRetry(
+	ctx context.Context,
+	c, fallback *http.Client,
+	selected, url string,
+	maxBytes int64,
+) ([]byte, error) {
 	var data []byte
 	err := retryTransient(ctx, func(attempt int) error {
 		client := c
