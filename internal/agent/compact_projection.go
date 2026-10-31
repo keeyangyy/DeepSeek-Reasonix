@@ -642,7 +642,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	}})
 	// Persist to memory and the session sidecar (up-front path) so a mid-run
 	// switch-away still re-opens with the result.
-	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary, AnchorUserMessages: countCompactionAnchorUsers(canonical, len(canonical)), AfterMessageID: lastCompactedMessageID(canonical, covered)}
+	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary, AnchorUserMessages: countCompactionAnchorUsers(canonical, covered), AfterMessageID: lastCompactedMessageID(canonical, covered)}
 	a.setLastCompaction(rec)
 	writeCompactionSidecar(sidecarPath, "record", rec)
 	sidecarSettled = true
