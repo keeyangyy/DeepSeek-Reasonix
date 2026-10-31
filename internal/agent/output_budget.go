@@ -36,6 +36,7 @@ type outputBudgetState struct {
 	// The run loop writes it while a frontend reads it, so it is atomic.
 	lastUsage         atomic.Pointer[provider.Usage]
 	activeReqShape    atomic.Pointer[requestCalibrationShape]
+	usageAnchor       atomic.Pointer[usageAnchor] // provider count anchored to the view it replied to
 	promptCalibration atomic.Pointer[promptTokenCalibration]
 	contextUsage      atomic.Pointer[contextUsage] // gauge's memoised prompt size
 	learned           atomic.Pointer[learnedContextBudget]
@@ -106,6 +107,7 @@ type requestCalibrationShape struct {
 func (o *outputBudgetState) reset() {
 	o.lastUsage.Store(nil)
 	o.activeReqShape.Store(nil)
+	o.usageAnchor.Store(nil)
 	o.admission.Store(nil)
 }
 
@@ -138,6 +140,7 @@ func (a *Agent) setPromptTokenCalibrationFromUsage(usage *provider.Usage) {
 		return
 	}
 	a.setPromptTokenCalibrationFromActive(usage.LatestPromptTokens())
+	a.anchorUsage(usage)
 }
 
 func outputBudgetOf(p provider.Provider) int {
@@ -337,6 +340,16 @@ func (a *Agent) calibratedPromptTokens(shape requestCalibrationShape) (int, bool
 // planning budgets only; against the window it would compact 4x early.
 func (a *Agent) estimatedPromptTokens(msgs []provider.Message) int {
 	return a.estimatedShapeTokens(a.requestCalibrationShape(provider.Request{Messages: msgs}))
+}
+
+// visibleRequestShape sizes the view a request would send with the same
+// normalisation and tool schemas the estimate uses, so the anchor's delta is
+// measured on the same scale as the provider's own count.
+func (a *Agent) visibleRequestShape(visible []provider.Message) requestCalibrationShape {
+	return a.requestCalibrationShape(provider.Request{
+		Messages: a.normalizeModelRequestMessages(visible),
+		Tools:    a.providerToolSchemas(),
+	})
 }
 
 func (a *Agent) estimatedRequestTokens(req provider.Request) int {
