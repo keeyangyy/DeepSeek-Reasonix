@@ -71,9 +71,16 @@ func countCompactionAnchorUsers(msgs []provider.Message, covered int) int {
 	}
 	n := 0
 	for _, m := range msgs[:covered] {
-		if m.Role == provider.RoleUser && !isCompactionSummary(m) && !isHostOnlyUserMessage(m.Content) {
-			n++
+		if m.Role != provider.RoleUser || isCompactionSummary(m) || isHostOnlyUserMessage(m.Content) {
+			continue
 		}
+		// A mid-turn steer renders as a guidance notice, not a turn boundary, so
+		// counting it would push the anchor past the last visible turn and drop
+		// the card at the end of the transcript.
+		if _, steered := SteerText(m.Content); steered {
+			continue
+		}
+		n++
 	}
 	return n
 }
