@@ -11,10 +11,13 @@ import (
 	"reasonix/desktop/internal/instanceidentity"
 )
 
-var verifyTraySignatureFn = verifyTraySignature
-
-func signedTrayIdentity(dev, exe, id string, verify func(string) error) string {
-	if dev != "" || exe == "" || verify(exe) != nil {
+// trayIdentity returns the shell GUID that keeps the notification-area
+// preference when the executable moves between versions/<version>/ directories.
+// Authenticode is not consulted: this fork ships unsigned builds, and the GUID
+// carries only a visibility preference. Deriving it per data home keeps
+// independent instances apart.
+func trayIdentity(dev, exe, id string) string {
+	if dev != "" || exe == "" {
 		return ""
 	}
 	return instanceidentity.TrayGUID(id)
@@ -23,7 +26,7 @@ func signedTrayIdentity(dev, exe, id string, verify func(string) error) string {
 func startDesktopTray(onReady, onExit func()) func() {
 	go runDesktopTrayLoop(func() {
 		exe, _ := os.Executable()
-		if id := signedTrayIdentity(os.Getenv("REASONIX_DEV"), exe, singleInstanceID(), verifyTraySignatureFn); id != "" {
+		if id := trayIdentity(os.Getenv("REASONIX_DEV"), exe, singleInstanceID()); id != "" {
 			if err := systray.SetIconID(id); err != nil {
 				slog.Warn("desktop: configure tray identity", "err", err)
 			}

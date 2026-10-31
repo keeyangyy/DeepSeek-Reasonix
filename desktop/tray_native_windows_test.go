@@ -11,12 +11,10 @@ import (
 
 	"fyne.io/systray"
 	"golang.org/x/sys/windows"
-
-	"reasonix/desktop/internal/instanceidentity"
 )
 
-// Opt-in subprocess acceptance: production signature selection and tray loop,
-// checked against Explorer, including independently signed or moved fixtures.
+// Opt-in subprocess acceptance: production tray identity selection and tray loop,
+// checked against Explorer, including independently moved fixtures.
 func TestNativeTrayAcceptanceWorker(t *testing.T) {
 	marker := os.Getenv("REASONIX_TEST_TRAY_MARKER")
 	if marker == "" {
@@ -39,11 +37,12 @@ func TestNativeTrayAcceptanceWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signed := verifyTraySignature(exe) == nil
-	guid, err := windows.GUIDFromString(instanceidentity.TrayGUID(singleInstanceID()))
+	identity := trayIdentity(os.Getenv("REASONIX_DEV"), exe, singleInstanceID())
+	guid, err := windows.GUIDFromString(identity)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("tray identity %q: %v", identity, err)
 	}
+	usesGUID := identity != ""
 	user := windows.NewLazySystemDLL("user32.dll")
 	find := user.NewProc("FindWindowExW")
 	getPID := user.NewProc("GetWindowThreadProcessId")
@@ -67,7 +66,7 @@ func TestNativeTrayAcceptanceWorker(t *testing.T) {
 		GUID   windows.GUID
 	}{Window: hwnd, ID: 100}
 	identifier.Size = uint32(unsafe.Sizeof(identifier))
-	if signed {
+	if usesGUID {
 		identifier.Window = 0
 		identifier.ID = 0
 		identifier.GUID = guid
@@ -76,9 +75,9 @@ func TestNativeTrayAcceptanceWorker(t *testing.T) {
 	query := windows.NewLazySystemDLL("shell32.dll").NewProc("Shell_NotifyIconGetRect")
 	result, _, _ := query.Call(uintptr(unsafe.Pointer(&identifier)), uintptr(unsafe.Pointer(&rect)))
 	if int32(result) < 0 {
-		t.Fatalf("Explorer cannot resolve tray identity: HRESULT %#x (signed=%v)", result, signed)
+		t.Fatalf("Explorer cannot resolve tray identity: HRESULT %#x (usesGUID=%v)", result, usesGUID)
 	}
-	data, _ := json.Marshal(map[string]any{"pid": os.Getpid(), "signed": signed, "guid": guid.String(), "rect": rect, "version": version})
+	data, _ := json.Marshal(map[string]any{"pid": os.Getpid(), "usesGUID": usesGUID, "guid": guid.String(), "rect": rect, "version": version})
 	if err := os.WriteFile(marker, data, 0600); err != nil {
 		t.Fatal(err)
 	}
