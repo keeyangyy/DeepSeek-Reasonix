@@ -66,9 +66,12 @@ func (a *Agent) ContextMaintenanceSnapshot() ContextMaintenanceSnapshot {
 	if valid && len(state.Projection.Messages) > 0 {
 		uiCheckpoint = stateCheckpointState(checkpointState, state)
 	}
+	// The gauge and the fold trigger read one number: provider-anchored where a
+	// request is anchored, the local estimate otherwise.
+	visibleShape := a.visibleRequestShape(visible)
 	snapshot := ContextMaintenanceSnapshot{
 		CanonicalTokens:   a.estimatedVisibleRequestTokens(canonical),
-		ProjectedTokens:   a.estimatedVisibleRequestTokens(visible),
+		ProjectedTokens:   a.promptPressure(visibleShape, state.Projection.ProjectionVersion, a.estimatedShapeTokens(visibleShape)),
 		FoldTrigger:       trigger,
 		TriggerTokens:     trigger,
 		CheckpointState:   uiCheckpoint,
