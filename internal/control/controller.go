@@ -2168,7 +2168,7 @@ func (c *Controller) PendingPrompt() bool {
 func (c *Controller) RuntimeStatus() RuntimeStatus {
 	c.mu.Lock()
 	running := c.running
-	active := running || c.finishing
+	active := running || c.finishing || c.rotating
 	canceling := c.canceling
 	c.mu.Unlock()
 	pending := c.approval.hasPending()

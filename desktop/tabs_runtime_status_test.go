@@ -294,6 +294,17 @@ func TestTopicActivityStatusPresentsReadinessSeparatelyFromPause(t *testing.T) {
 	}
 }
 
+// 压缩结束后必须把 CompactionStarted 写下的「思考中」清掉，否则会话列表会一直
+// 转到下一轮 turn 结束——那是唯一还会把状态写回空串的地方。
+func TestCompactionDoneClearsRuntimeStatus(t *testing.T) {
+	if status, ok := topicActivityStatusFromEvent(event.Event{Kind: event.CompactionStarted}); !ok || status != topicStatusThinking {
+		t.Fatalf("compaction start = (%q, %v), want (%q, true)", status, ok, topicStatusThinking)
+	}
+	if status, ok := topicActivityStatusFromEvent(event.Event{Kind: event.CompactionDone}); !ok || status != "" {
+		t.Fatalf("compaction done = (%q, %v), want cleared status", status, ok)
+	}
+}
+
 func TestCatalogRuntimeStatusPreservesDeliveryCheckWhenIdle(t *testing.T) {
 	got := catalogRuntimeStatus(topicStatusAwaitingDelivery, control.RuntimeStatus{})
 	if got != topicStatusAwaitingDelivery {
