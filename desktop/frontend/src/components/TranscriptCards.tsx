@@ -121,7 +121,14 @@ export function CompactionCard({ item }: { item: CompactionItem }) {
   const [open, setOpen] = useState(false);
   const beginUserResize = useTranscriptUserResizeIntent();
   if (item.pending) {
-    return <div className="compaction compaction--pending" data-entrance={item.id} data-transcript-layout-variant="static"><ProcessCompactIcon size={12} /><span>{t("compaction.working")}</span></div>;
+    return (
+      <div className="compaction" data-entrance={item.id} data-transcript-layout-variant="static">
+        <div className="compaction--pending">
+          <ProcessCompactIcon size={12} />
+          <span>{t("compaction.working")}</span>
+        </div>
+      </div>
+    );
   }
   return (
     <div className="compaction" data-entrance={item.id} data-transcript-layout-variant={open ? "compaction-expanded" : "compaction-collapsed"}>

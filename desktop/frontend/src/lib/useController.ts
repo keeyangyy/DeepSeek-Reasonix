@@ -2321,7 +2321,7 @@ export function reducer(s: State, a: Action): State {
       const nextItems = a.mode === "prepend" ? [...items, ...s.items] : items;
       return {
         ...s,
-        items: compactArchivedToolItems(nextItems),
+        items: compactArchivedToolItems(preserveLiveCompactions(s.meta?.sessionPath, s.items, nextItems)),
         historyPrefixCount: a.mode === "prepend" ? items.length + s.historyPrefixCount : items.length,
         pendingSubmissionId: a.mode === "replace" ? undefined : s.pendingSubmissionId,
         seq: Math.max(s.seq, seq),
@@ -3124,11 +3124,11 @@ export function useController() {
       // on EVERY hydrate path (including cache-skip) so a switched-back tab
       // shows the pending card immediately and polls until the finished
       // record lands.
-      if (sessionPath) {
+      if (sessionPath || stateMeta?.sessionPath) {
         const pollForCompaction = (attempt: number) => {
           void app.LatestCompactionForTab(tabId).then((rec) => {
-            // 启动早期 activeTabIdRef 可能还没指向本 tab，不能据此丢弃结果。
-            if (!stillCurrent()) return;
+            // 只要求本次加载未被顶掉：重启早期 meta 未落地时 stillCurrent 会丢掉首次查询与重试。
+            if (!sessionLoadCurrent(tabId, seq)) return;
             if (rec?.summary) {
               dispatchTo(tabId, { type: "latest_compaction", tabId, sessionPath, record: { trigger: rec.trigger ?? "", messages: rec.messages ?? 0, summary: rec.summary, anchorUsers: rec.anchorUserMessages, afterMessageId: rec.afterMessageId } });
               return;

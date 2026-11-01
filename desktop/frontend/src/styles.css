@@ -6737,6 +6737,9 @@ body > .mermaid-diagram--fullscreen {
 }
 .compaction__head {
   cursor: pointer;
+  /* 在 flex/grid 上下文里 inline-flex 的按钮会塌成 0 宽，只剩边框看不见；
+     显式按内容撑开，保证药丸和外部容器一样可辨。 */
+  width: fit-content;
 }
 .compaction__head:hover {
   color: var(--fg);

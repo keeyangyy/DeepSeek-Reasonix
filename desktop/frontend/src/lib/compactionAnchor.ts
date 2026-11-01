@@ -151,11 +151,12 @@ function cachedCards<T extends AnchorRowLike>(
   const cached = liveCompactionsCache.get(sessionPath ?? "");
   if (cached && cached.length > 0) return cached.map((entry) => entry.card as T);
   // 卡片自带会话归属时只取同会话的：重启 / 切回来重建 items 时，prevItems 里的
-  // 卡片就是这一张，必须能兜底找回；不同会话的卡片才丢弃，避免串会话。没有
-  // 归属标记的旧卡片只在会话未知时使用（保持原行为）。
+  // 卡片就是这一张，必须能兜底找回；不同会话的卡片才丢弃，避免串会话。
+  // 归属未知（重启早期 meta 还没落地）不能算作别的会话：那种卡片正是本次恢复
+  // 刚插进去的，丢掉它就等于重启后永远看不到压缩卡片。
   return prevItems.reduce<T[]>((cards, item, index) => {
     if (item.kind !== "compaction") return cards;
-    if (sessionPath && item.sessionPath !== sessionPath) return cards;
+    if (sessionPath && item.sessionPath && item.sessionPath !== sessionPath) return cards;
     const withAnchor = typeof item.anchorUsers === "number"
       ? item
       : { ...item, anchorUsers: userCountBefore(prevItems, index) };
