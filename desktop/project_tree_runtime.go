@@ -69,9 +69,20 @@ func (a *App) catalogRuntimeSnapshots() []catalogRuntimeSnapshot {
 	}
 	a.mu.RLock()
 	snapshots := make([]catalogRuntimeSnapshot, 0, len(a.tabs)+len(a.detachedSessions))
+	// 同一会话可能同时挂在 a.tabs 与 a.detachedSessions 上，两处 topicID 未必
+	// 一致（恢复的标签带着重锚前的旧 ID）。不去重就会投影成两行同名条目；
+	// 可见标签排在前面，所以保留的是它。
+	seenSessions := make(map[string]bool, len(a.tabs)+len(a.detachedSessions))
 	collect := func(tab *WorkspaceTab, open bool) {
 		if tab == nil || strings.TrimSpace(tab.TopicID) == "" {
 			return
+		}
+		if path := strings.TrimSpace(tab.SessionPath); path != "" {
+			key := sessionRuntimeKey(path)
+			if seenSessions[key] {
+				return
+			}
+			seenSessions[key] = true
 		}
 		snapshots = append(snapshots, catalogRuntimeSnapshot{
 			scope: tab.Scope, workspaceRoot: tab.WorkspaceRoot, topicID: tab.TopicID,
