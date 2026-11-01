@@ -33,6 +33,11 @@ func writeCompactionSidecar(sessionPath, kind string, rec *CompactionRecord) {
 		if rec != nil && rec.AnchorUserMessages > 0 {
 			payload["anchorUserMessages"] = rec.AnchorUserMessages
 		}
+		// 压缩开始时对话停在哪条消息。完成时转写进 record，重启后前端按这个 id
+		// 找位置：找不到就说明那条消息还没加载，卡片不显示（而不是猜一个位置）。
+		if rec != nil && rec.AnchorMessageID != "" {
+			payload["anchorMessageId"] = rec.AnchorMessageID
+		}
 		b, _ := json.Marshal(payload)
 		_ = os.WriteFile(filepath.Join(dir, "compacting.json"), b, 0o644)
 	case "record":
@@ -69,6 +74,48 @@ func compactionMarkerAnchor(sessionPath string) int {
 	return payload.AnchorUserMessages
 }
 
+// compactionMarkerMessageID reads the ULID of the message the conversation had
+// reached when the compaction started. Empty means no snapshot (older marker).
+func compactionMarkerMessageID(sessionPath string) string {
+	if sessionPath == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(store.SessionCheckpointDir(sessionPath), "compacting.json"))
+	if err != nil {
+		return ""
+	}
+	var payload struct {
+		AnchorMessageID string `json:"anchorMessageId"`
+	}
+	if json.Unmarshal(b, &payload) != nil {
+		return ""
+	}
+	return payload.AnchorMessageID
+}
+
+// compactionAnchorMessageIDForRecord prefers the message id snapshotted when the
+// compaction started: that is where the live card was inserted, and it stays
+// valid no matter how many pages the frontend has loaded. Falling back to the
+// current conversation tail keeps records written by older builds placeable.
+func compactionAnchorMessageIDForRecord(canonical []provider.Message, sessionPath string) string {
+	if id := compactionMarkerMessageID(sessionPath); id != "" {
+		return id
+	}
+	return lastMessageID(canonical)
+}
+
+// lastMessageID returns the ULID of the newest message that still carries one.
+// Messages without an ID are skipped: host-generated protocol rows can lack it,
+// and anchoring on an empty ID would make the card unplaceable.
+func lastMessageID(msgs []provider.Message) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ID != "" {
+			return msgs[i].ID
+		}
+	}
+	return ""
+}
+
 // compactionAnchorForRecord prefers the turn count snapshotted when the
 // compaction started: that is the boundary the user pressed compact at, and
 // where the live card was inserted. The folded prefix is only a fallback for
@@ -94,6 +141,10 @@ type CompactionRecord struct {
 	// AfterMessageID 是压缩分界处最后一条消息的 ULID。前端据此把卡片精确插在
 	// 它之后：ID 不受分页窗口、rewind、轮次计数影响。空串表示旧记录无位置。
 	AfterMessageID string `json:"afterMessageId,omitempty"`
+	// AnchorMessageID 是压缩开始时对话最后一条消息的 ULID：卡片插在它之后。
+	// 前端按 id 查找，找不到（那条消息还没加载）就不显示——这比数「第几轮」可靠，
+	// 既不受注入消息类型影响，也不会随分页加载多少而变位置。
+	AnchorMessageID string `json:"anchorMessageId,omitempty"`
 }
 
 // countCompactionAnchorUsers 数 covered 前缀里有多少条真实用户消息，作为

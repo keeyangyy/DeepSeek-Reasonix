@@ -37,8 +37,8 @@ function compactionCards(state: ReturnType<typeof reducer>) {
 
 const turnHistory = (n: number, label: string): HistoryMessage[] =>
   Array.from({ length: n }, (_, i) => [
-    { role: "user", content: `${label} 问题 ${i + 1}` },
-    { role: "assistant", content: `${label} 回答 ${i + 1}` },
+    { role: "user", content: `${label} 问题 ${i + 1}`, id: `${label}-U${i + 1}` },
+    { role: "assistant", content: `${label} 回答 ${i + 1}`, id: `${label}-A${i + 1}` },
   ]).flat() as HistoryMessage[];
 
 let scenario = 0;
@@ -98,9 +98,10 @@ process.stdout.write("\n压缩中切走 → 切回（真实路径：reset → hi
   let back = reducer(freshState(sessionA), resetAction());
   back = reducer(back, historyAction(turnHistory(6, "A")));
   const after = back.items.findIndex((it) => it.kind === "compaction");
+  const anchorIdx = back.items.findIndex((it) => (it as { messageID?: string }).messageID === "A-A6");
 
-  process.stdout.write(`    完成后切走：切回后 index=${after} / 总长=${back.items.length}\n`);
-  ok(after === back.items.length - 1, `已完成的卡片回到压缩点所在的末尾（实际 index=${after}）`);
+  process.stdout.write(`    完成后切走：切回后 index=${after} / 锚点=${anchorIdx} / 总长=${back.items.length}\n`);
+  ok(anchorIdx >= 0 && after === anchorIdx + 1, `已完成的卡片落在压缩点那条消息之后（index=${after}, 锚点=${anchorIdx}）`);
 }
 
 // ── 场景 3：切回时没有任何缓存（模拟 pending 卡片未进 cache） ────────────
