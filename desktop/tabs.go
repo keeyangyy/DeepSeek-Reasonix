@@ -181,11 +181,9 @@ type WorkspaceTab struct {
 	sink                *tabEventSink          // routes events with this tab's ID
 	buildCancel         context.CancelFunc     // cancels in-flight boot for tabs removed before Ready
 	buildGeneration     uint64                 // identifies the current in-flight build
-	// buildDone is closed exactly once when the build that owns buildDoneGen
-	// terminates (success, failure, or superseded abandon). Topic-activation
-	// completions wait on it to learn that the controller build finished
-	// without polling. Guarded by App.mu alongside buildGeneration; always
-	// nil-ed after close so a replacement build can install a fresh channel.
+	// buildDone is closed exactly once when its owning build terminates (success,
+	// failure, or superseded abandon); topic-activation completions wait on it
+	// instead of polling. Guarded by App.mu; nil-ed after close.
 	buildDone    chan struct{}
 	buildDoneGen uint64
 	removed      bool       // set when the visible tab is pruned/closed before build completes
@@ -1962,8 +1960,10 @@ func (e *asyncRuntimeEmitter) run() {
 
 func topicActivityStatusFromEvent(e event.Event) (string, bool) {
 	switch e.Kind {
-	case event.TurnStarted, event.Reasoning, event.ToolDispatch, event.ToolProgress, event.ToolResultPreview, event.ToolResult, event.CompactionStarted, event.CompactionDone, event.Retrying:
+	case event.TurnStarted, event.Reasoning, event.ToolDispatch, event.ToolProgress, event.ToolResultPreview, event.ToolResult, event.CompactionStarted, event.Retrying:
 		return topicStatusThinking, true
+	case event.CompactionDone:
+		return "", true
 	case event.Text, event.Message:
 		return topicStatusStreaming, true
 	case event.ApprovalRequest, event.AskRequest:
