@@ -3341,7 +3341,7 @@ func (a *App) openTransientBlankRuntime(scope, workspaceRoot string) error {
 	}
 	a.mu.Lock()
 	tab.ID = a.newUniqueTabIDLocked()
-	tab.sink = &tabEventSink{tabID: tab.ID, app: a}
+	tab.sink = &tabEventSink{tabID: tab.ID, app: a, ctx: a.ctx}
 	a.tabs[tab.ID] = tab
 	a.tabOrder = append(a.tabOrder, tab.ID)
 	a.activeTabID = tab.ID
@@ -4141,7 +4141,7 @@ func (a *App) buildSessionRebindCandidate(
 	if strings.TrimSpace(sessionDir) == "" {
 		sessionDir = filepath.Dir(sessionPath)
 	}
-	sink := &tabEventSink{tabID: tab.ID, app: a}
+	sink := &tabEventSink{tabID: tab.ID, app: a, ctx: a.ctx}
 	runtimeProfile := normalizedRuntimeForSessionProfile(profile)
 	sharedHost := a.lookupSharedHost(source.sharedHostKey)
 	ownsSharedHostRef := false
