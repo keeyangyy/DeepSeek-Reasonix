@@ -67,7 +67,6 @@ func CoreProviderToolNames() []string {
 		"write_file",
 		"compress",
 		"recall",
-		"context_budget",
 		"use_capability",
 		"web_search",
 	}

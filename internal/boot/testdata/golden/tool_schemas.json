@@ -241,16 +241,6 @@
     }
   },
   {
-    "Name": "context_budget",
-    "Description": "Report how much context room is left before this conversation is automatically compacted. Call it before committing to work whose output you may not be able to finish reading — a broad search, a large file, a long build log — so you can narrow the command instead of spending the rest of the window discovering it was too big. `tokens_remaining` counts down to the compaction trigger, not to the physical window, because the fold is what you can still act ahead of.",
-    "ReadOnly": true,
-    "Schema": {
-      "additionalProperties": false,
-      "properties": {},
-      "type": "object"
-    }
-  },
-  {
     "Name": "edit_file",
     "Description": "Replace an exact string in a file with another. old_string must occur exactly once; add surrounding context to disambiguate. Use for targeted edits instead of rewriting the whole file.",
     "ReadOnly": false,
