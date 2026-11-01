@@ -47,7 +47,7 @@ import { hydrateIdentityCurrent, normalizeSessionGeneration, preserveSessionIden
 import { historyPageRequestBudget } from "./historyPaging";
 import { createUniqueItemIDAllocator } from "./historyItemIds";
 import { ephemeralItemId } from "./transcriptItemIds";
-import { compactionUserCount, insertCompactionCards, placeCompactionCard, preserveLiveCompactions, recordCompactionDone, recordCompactionStarted, refreshCompactionAnchors } from "./compactionAnchor";
+import { compactionAnchorMessageID, insertCompactionCards, placeCompactionCard, preserveLiveCompactions, recordCompactionDone, recordCompactionStarted, refreshCompactionAnchors } from "./compactionAnchor";
 import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
@@ -269,7 +269,7 @@ const HISTORY_PAGE_TURNS = 60;
 
 export type TurnPhaseName = "working" | "checking" | "verifying" | "reviewing" | string;
 export type Item =
-  | { kind: "user"; id: string; submissionId?: string; inboxItemId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
+  | { kind: "user"; id: string; messageID?: string; submissionId?: string; inboxItemId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[]; messageID?: string }
   | { kind: "phase"; id: string; text: string }
   | { kind: "notice"; id: string; level: "info" | "warn"; text: string; detail?: string; code?: string; title?: string; variant?: "delivery" | "completion"; action?: "continue_delivery" | "open_changes" | "recover_context"; recoveryId?: string; completionSummary?: WireCompletionSummary; decisionReceipt?: WireDecisionReceipt; missing?: string[]; inboxItemId?: string }
@@ -281,8 +281,8 @@ export type Item =
       messages: number;
       summary: string;
       archive: string;
-      /** anchorUsers＝压缩分界前的 user 条数（落位锚点）；sessionPath＝卡片所属会话（重建时兜底用）。 */
-      anchorUsers?: number; sessionPath?: string;
+      /** anchorMessageId＝压缩开始时对话停在的那条消息；sessionPath＝卡片所属会话（重建时兜底用）。 */
+      anchorMessageId?: string; sessionPath?: string;
     }
   | {
       kind: "tool";
@@ -834,7 +834,7 @@ type Action =
   | { type: "history_items_patch"; patches: Record<string, Item> }
   | { type: "history_older_start" }
   | { type: "history_older_error"; error?: string }
-  | { type: "latest_compaction"; tabId: string; sessionPath?: string; record: { inProgress?: boolean; trigger?: string; messages?: number; summary?: string; anchorUsers?: number; afterMessageId?: string } }
+  | { type: "latest_compaction"; tabId: string; sessionPath?: string; record: { inProgress?: boolean; trigger?: string; messages?: number; summary?: string; anchorMessageId?: string; afterMessageId?: string } }
   | { type: "local_notice"; level: "info" | "warn"; text: string; preserveRuntime?: boolean }
   | { type: "clearApproval" }
   | { type: "clearAsk" }
@@ -933,7 +933,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
     }
     if (m.role === "user") {
       if (m.content.trim() === "") continue;
-      items.push({ kind: "user", id: `${idPrefix}${seq}`, text: m.content, submitText: m.submitText, createdAt: m.createdAt, checkpointTurn: m.checkpointTurn });
+      items.push({ kind: "user", id: `${idPrefix}${seq}`, messageID: m.id, text: m.content, submitText: m.submitText, createdAt: m.createdAt, checkpointTurn: m.checkpointTurn });
       seq++;
       continue;
     }
@@ -1874,7 +1874,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       const pendingClear = s.pendingSubmissionId && s.pendingUser !== undefined && !s.turnActive
         ? { pendingUser: undefined, pendingSubmissionId: undefined }
         : {};
-      const items: Item[] = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "", anchorUsers: compactionUserCount(s.items), sessionPath: s.meta?.sessionPath }];
+      const items: Item[] = [...s.items, { kind: "compaction", id: ephemeralItemId("compaction"), pending: true, trigger: e.compaction?.trigger ?? "", messages: 0, summary: "", archive: "", anchorMessageId: compactionAnchorMessageID(s.items), sessionPath: s.meta?.sessionPath }];
       recordCompactionStarted(s.meta?.sessionPath, items);
       return { ...s, ...pendingClear, seq: s.seq + 1, items };
     }
@@ -1886,7 +1886,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
         const items = at < 0 ? s.items : s.items.filter((_, i) => i !== at);
         return { ...s, running: s.turnActive ? s.running : false, items };
       }
-      const filled: Item = { kind: "compaction", id: previous?.id ?? ephemeralItemId("compaction"), pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "", anchorUsers: previous?.anchorUsers ?? compactionUserCount(s.items), sessionPath: previous?.sessionPath ?? s.meta?.sessionPath };
+      const filled: Item = { kind: "compaction", id: previous?.id ?? ephemeralItemId("compaction"), pending: false, trigger: c.trigger ?? "", messages: c.messages ?? 0, summary: c.summary, archive: c.archive ?? "", anchorMessageId: previous?.anchorMessageId ?? compactionAnchorMessageID(s.items), sessionPath: previous?.sessionPath ?? s.meta?.sessionPath };
       const items = at < 0 ? [...s.items, filled] : s.items.map((it, i) => (i === at ? filled : it));
       // Record the finished compaction in the module-level cache so the row
       // survives a tab switch (controller state may be rebuilt entirely).
@@ -2390,14 +2390,13 @@ export function reducer(s: State, a: Action): State {
       };
     }
     case "latest_compaction": {
-      // Hydrate-time restoration of a compaction that finished (or is still
-      // running) while the tab was released. The card belongs at the turn
-      // boundary the compaction closed (anchorUsers), not at the top or the
-      // tail: both existing placements were guesses that moved on every rebuild.
-      const anchorUsers = typeof a.record?.anchorUsers === "number" && a.record.anchorUsers > 0 ? a.record.anchorUsers : undefined;
+      // The card is anchored on the message the conversation had reached when the
+      // compaction started: a real row id, so it neither drifts with the loaded
+      // page count nor with how the host wraps injected user-role messages.
+      const anchorMessageId = a.record?.anchorMessageId || undefined;
       if (a.record?.inProgress) {
         if (s.items.some((it) => it.kind === "compaction" && it.pending)) return s;
-        const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "", anchorUsers: compactionUserCount(s.items) }];
+        const items = [...s.items, { kind: "compaction" as const, id: ephemeralItemId("compaction"), pending: true, trigger: "manual", messages: 0, summary: "", archive: "", anchorMessageId }];
         assertNoDuplicateItems(items, "latest_compaction");
         return { ...s, seq: s.seq + 1, items };
       }
@@ -2406,9 +2405,9 @@ export function reducer(s: State, a: Action): State {
       // 会话路径优先用 action 带来的：重启早期 state.meta 可能还没落地。
       const rememberPath = a.sessionPath || s.meta?.sessionPath;
       const card: Item = existing
-        ? { ...existing, pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "", anchorUsers: existing.anchorUsers ?? anchorUsers, sessionPath: existing.sessionPath ?? rememberPath }
-        : { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "", anchorUsers, sessionPath: rememberPath };
-      if (existing && !existing.pending && existing.anchorUsers === card.anchorUsers) return s;
+        ? { ...existing, pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "", anchorMessageId: existing.anchorMessageId ?? anchorMessageId, sessionPath: existing.sessionPath ?? rememberPath }
+        : { kind: "compaction", id: ephemeralItemId("compaction"), pending: false, trigger: a.record.trigger ?? "", messages: a.record.messages ?? 0, summary: a.record.summary, archive: "", anchorMessageId, sessionPath: rememberPath };
+      if (existing && !existing.pending && existing.anchorMessageId === card.anchorMessageId) return s;
       const items = existing ? placeCompactionCard(s.items, card) : insertCompactionCards(s.items, [card]);
       assertNoDuplicateItems(items, "latest_compaction");
       // 重启后模块缓存是空的：这次恢复必须自己登记，否则紧接着的第二次
@@ -3130,7 +3129,7 @@ export function useController() {
             // 只要求本次加载未被顶掉：重启早期 meta 未落地时 stillCurrent 会丢掉首次查询与重试。
             if (!sessionLoadCurrent(tabId, seq)) return;
             if (rec?.summary) {
-              dispatchTo(tabId, { type: "latest_compaction", tabId, sessionPath, record: { trigger: rec.trigger ?? "", messages: rec.messages ?? 0, summary: rec.summary, anchorUsers: rec.anchorUserMessages, afterMessageId: rec.afterMessageId } });
+              dispatchTo(tabId, { type: "latest_compaction", tabId, sessionPath, record: { trigger: rec.trigger ?? "", messages: rec.messages ?? 0, summary: rec.summary, anchorMessageId: rec.anchorMessageId, afterMessageId: rec.afterMessageId } });
               return;
             }
             // 空结果也可能只是控制器还没就绪（重启早期），补几次短重试。
