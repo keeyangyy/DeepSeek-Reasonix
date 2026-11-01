@@ -200,7 +200,7 @@ func (a *Agent) compressVisibleRange(
 	// Sidecar in-progress marker (same contract as /compact): capture the
 	// session path up front so a tab released mid-run still lands the record.
 	sidecarPath := a.SessionPath()
-	writeCompactionSidecar(sidecarPath, "marker", nil)
+	writeCompactionSidecar(sidecarPath, "marker", &CompactionRecord{AnchorUserMessages: countCompactionAnchorUsers(snap.canonical, len(snap.canonical))})
 	sidecarSettled := false
 	defer func() {
 		if !sidecarSettled {
@@ -299,7 +299,7 @@ func (a *Agent) compressVisibleRange(
 	}})
 	// Same sidecar contract as /compact so the button path also survives a
 	// mid-run switch-away and re-opens with the result.
-	sidecarRec := &CompactionRecord{Trigger: trigger, Messages: len(plan.fold), Summary: summary, AnchorUserMessages: countCompactionAnchorUsers(snap.canonical, len(snap.canonical)), AfterMessageID: lastCompactedMessageID(snap.canonical, len(snap.canonical))}
+	sidecarRec := &CompactionRecord{Trigger: trigger, Messages: len(plan.fold), Summary: summary, AnchorUserMessages: compactionAnchorForRecord(snap.canonical, len(snap.canonical), sidecarPath), AfterMessageID: lastCompactedMessageID(snap.canonical, len(snap.canonical))}
 	a.setLastCompaction(sidecarRec)
 	writeCompactionSidecar(sidecarPath, "record", sidecarRec)
 	sidecarSettled = true
@@ -530,7 +530,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	// clear it (the tab may be released while the summarizer runs) and record
 	// compaction activity so a re-opened tab can poll for the finished record.
 	sidecarPath := a.SessionPath()
-	writeCompactionSidecar(sidecarPath, "marker", nil)
+	writeCompactionSidecar(sidecarPath, "marker", &CompactionRecord{AnchorUserMessages: countCompactionAnchorUsers(canonical, len(canonical))})
 	sidecarSettled := false
 	defer func() {
 		if !sidecarSettled {
@@ -642,7 +642,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	}})
 	// Persist to memory and the session sidecar (up-front path) so a mid-run
 	// switch-away still re-opens with the result.
-	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary, AnchorUserMessages: countCompactionAnchorUsers(canonical, covered), AfterMessageID: lastCompactedMessageID(canonical, covered)}
+	rec := &CompactionRecord{Trigger: trigger, Messages: len(fold), Summary: summary, AnchorUserMessages: compactionAnchorForRecord(canonical, covered, sidecarPath), AfterMessageID: lastCompactedMessageID(canonical, covered)}
 	a.setLastCompaction(rec)
 	writeCompactionSidecar(sidecarPath, "record", rec)
 	sidecarSettled = true

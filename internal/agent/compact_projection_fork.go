@@ -26,7 +26,14 @@ func writeCompactionSidecar(sessionPath, kind string, rec *CompactionRecord) {
 	}
 	switch kind {
 	case "marker":
-		b, _ := json.Marshal(map[string]string{"startedAt": strconv.FormatInt(time.Now().UnixMilli(), 10)})
+		payload := map[string]any{"startedAt": strconv.FormatInt(time.Now().UnixMilli(), 10)}
+		// 压缩开始时对话进行到第几轮。完成时用它写锚点，重启后卡片才能回到
+		// 用户按下压缩的那一轮边界；「折叠覆盖到哪」是另一回事（默认会保留
+		// 最近若干轮），拿它当锚点会让卡片在重启后往前跳一大段。
+		if rec != nil && rec.AnchorUserMessages > 0 {
+			payload["anchorUserMessages"] = rec.AnchorUserMessages
+		}
+		b, _ := json.Marshal(payload)
 		_ = os.WriteFile(filepath.Join(dir, "compacting.json"), b, 0o644)
 	case "record":
 		if rec == nil {
@@ -41,6 +48,36 @@ func writeCompactionSidecar(sessionPath, kind string, rec *CompactionRecord) {
 	case "clear":
 		_ = os.Remove(filepath.Join(dir, "compacting.json"))
 	}
+}
+
+// compactionMarkerAnchor reads the turn count snapshotted when the compaction
+// started. Zero means the marker is gone or predates the snapshot.
+func compactionMarkerAnchor(sessionPath string) int {
+	if sessionPath == "" {
+		return 0
+	}
+	b, err := os.ReadFile(filepath.Join(store.SessionCheckpointDir(sessionPath), "compacting.json"))
+	if err != nil {
+		return 0
+	}
+	var payload struct {
+		AnchorUserMessages int `json:"anchorUserMessages"`
+	}
+	if json.Unmarshal(b, &payload) != nil {
+		return 0
+	}
+	return payload.AnchorUserMessages
+}
+
+// compactionAnchorForRecord prefers the turn count snapshotted when the
+// compaction started: that is the boundary the user pressed compact at, and
+// where the live card was inserted. The folded prefix is only a fallback for
+// markers written before that snapshot existed.
+func compactionAnchorForRecord(canonical []provider.Message, covered int, sessionPath string) int {
+	if anchor := compactionMarkerAnchor(sessionPath); anchor > 0 {
+		return anchor
+	}
+	return countCompactionAnchorUsers(canonical, covered)
 }
 
 // CompactionRecord is the persisted summary of the most recent compaction.
