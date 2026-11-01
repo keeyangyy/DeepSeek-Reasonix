@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reasonix/internal/provider"
 	"reasonix/internal/store"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -108,7 +109,7 @@ func compactionAnchorMessageIDForRecord(canonical []provider.Message, sessionPat
 // Messages without an ID are skipped: host-generated protocol rows can lack it,
 // and anchoring on an empty ID would make the card unplaceable.
 func lastMessageID(msgs []provider.Message) string {
-	for i := len(msgs) - 1; i >= 0; i-- {
+	for i := range slices.Backward(msgs) {
 		if msgs[i].ID != "" {
 			return msgs[i].ID
 		}

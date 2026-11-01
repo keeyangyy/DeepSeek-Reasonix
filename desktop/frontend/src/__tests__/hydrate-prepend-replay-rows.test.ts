@@ -176,7 +176,8 @@ eq(
   const trailing = next.items.filter((item) => item.id.startsWith(`a:${TURN}:`));
   eq(trailing.map((item) => item.id), [], "页已含当前轮输出时，重建行不再排在页后（bug 修复点）");
   eq(next.items.filter((item) => item.id === "call_00_BEUF0lNlXUcijDpv81qh1488").length, 1, "同 id 的 tool 行只保留页内一份");
-  eq(next.items[next.items.length - 1]?.kind, "compaction", "无锚点的压缩卡片落在末尾");
+  // 卡片没有锚点消息 → 不显示（新语义）。这里真正要守的是「回放行不再排在页后」。
+  eq(next.items.some((item) => item.kind === "compaction"), false, "无锚点的压缩卡片不显示");
   eq(next.items[next.items.length - 1]?.id.startsWith(`a:${TURN}:`), false, "最末一条不再是回放行");
 }
 
