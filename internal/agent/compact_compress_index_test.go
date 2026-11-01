@@ -46,22 +46,3 @@ func TestFoldIndexAttachedOnCompressToolPath(t *testing.T) {
 		t.Fatalf("recall after compress missing the original:\n%s", recalled.Text)
 	}
 }
-
-// context_budget reports the distance to the compaction trigger, never a raw
-// window figure, and stays measurable before any fold.
-func TestContextBudgetReportsTriggerDistance(t *testing.T) {
-	a, _, _ := newFoldIndexAgent("digest", []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "hello"},
-	})
-	budget := a.ContextBudget()
-	if budget.Window <= 0 || budget.CompactAt <= 0 {
-		t.Fatalf("budget unmeasured: %+v", budget)
-	}
-	if budget.TokensRemaining < 0 || budget.TokensUsed < 0 {
-		t.Fatalf("budget negative: %+v", budget)
-	}
-	if budget.CompactAt > budget.Window {
-		t.Fatalf("trigger %d above window %d", budget.CompactAt, budget.Window)
-	}
-}

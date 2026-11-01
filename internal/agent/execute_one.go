@@ -526,7 +526,6 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// compressor: parent and child agents share one tool schema without
 	// sharing projection state.
 	cctx = tool.WithContextRecaller(cctx, a)
-	cctx = tool.WithContextBudgetReporter(cctx, a)
 	if a.svc.interactionBroker != nil {
 		cctx = mcpinteraction.WithBroker(cctx, a.svc.interactionBroker)
 	}

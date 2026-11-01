@@ -9,7 +9,7 @@ process.env.PLAYWRIGHT_BROWSERS_PATH = !process.env.PLAYWRIGHT_BROWSERS_PATH || 
   ? path.join(frontendDir, ".pw-browsers")
   : process.env.PLAYWRIGHT_BROWSERS_PATH;
 
-const toolNames = ["bash", "read_file", "todo_write", "web_search", "ask", "task", "write_file", "edit_file", "context_budget", "subagent"];
+const toolNames = ["bash", "read_file", "todo_write", "web_search", "ask", "task", "write_file", "edit_file", "subagent"];
 
 function syntheticHistory() {
   const messages = [{ role: "system", content: "synthetic replay system message" }];

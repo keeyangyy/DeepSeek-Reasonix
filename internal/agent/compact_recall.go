@@ -146,25 +146,6 @@ func (a *Agent) recallSpan(canonical []provider.Message, pos int) []provider.Mes
 	return span
 }
 
-// ContextBudget reports the distance to the compaction trigger: the fold is
-// the event the model can still act ahead of, and it fires well before the
-// window is physically full.
-func (a *Agent) ContextBudget() tool.ContextBudget {
-	window := a.effectiveContextWindow()
-	if window <= 0 {
-		return tool.ContextBudget{Status: "unmeasured", Reason: "provider context window unknown"}
-	}
-	compactAt := a.compactTrigger()
-	used := a.estimatedVisibleRequestTokens(a.modelVisibleMessages())
-	return tool.ContextBudget{
-		Status:          "ok",
-		TokensRemaining: max(0, compactAt-used),
-		TokensUsed:      used,
-		CompactAt:       compactAt,
-		Window:          window,
-	}
-}
-
 func positionsText(positions []int) string {
 	if len(positions) == 0 {
 		return "the request"
@@ -177,4 +158,3 @@ func positionsText(positions []int) string {
 }
 
 var _ tool.ContextRecaller = (*Agent)(nil)
-var _ tool.ContextBudgetReporter = (*Agent)(nil)
