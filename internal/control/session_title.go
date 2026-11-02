@@ -39,12 +39,13 @@ func (c *Controller) GenerateSessionTitle(ctx context.Context, transcript string
 	if runes := []rune(transcript); len(runes) > sessionTitleMaxTranscriptRunes {
 		transcript = string(runes[:sessionTitleMaxTranscriptRunes])
 	}
-	prov, ref, err := c.sessionTitleProvider()
+	prov, ref, price, err := c.sessionTitleProvider()
 	if err != nil {
 		return "", err
 	}
 	raw, err := boundedllm.Call(ctx, boundedllm.Config{
 		Provider:       prov,
+		Pricing:        price,
 		ModelRef:       ref,
 		Sink:           c.sink,
 		UsageSource:    event.UsageSourceTitle,
@@ -63,21 +64,22 @@ func (c *Controller) GenerateSessionTitle(ctx context.Context, transcript string
 	return title, nil
 }
 
-func (c *Controller) sessionTitleProvider() (provider.Provider, string, error) {
+func (c *Controller) sessionTitleProvider() (provider.Provider, string, *provider.Pricing, error) {
 	if c == nil {
-		return nil, "", fmt.Errorf("session title: controller unavailable")
+		return nil, "", nil, fmt.Errorf("session title: controller unavailable")
 	}
 	c.mu.Lock()
 	resolver := c.providerResolver
 	ref := strings.TrimSpace(c.modelRef)
 	c.mu.Unlock()
 	if resolver == nil {
-		return nil, "", fmt.Errorf("session title: no provider resolver available")
+		return nil, "", nil, fmt.Errorf("session title: no provider resolver available")
 	}
 	if ref == "" {
-		return nil, "", fmt.Errorf("session title: no model configured for this session")
+		return nil, "", nil, fmt.Errorf("session title: no model configured for this session")
 	}
-	selection := sessionTitleSelection(resolver.Catalog(), ref)
+	catalog := resolver.Catalog()
+	selection := sessionTitleSelection(catalog, ref)
 	prov, err := resolver.Resolve(selection)
 	if err != nil && selection.Effort != nil {
 		// Capability metadata can outlive an extension provider generation. Keep
@@ -86,9 +88,30 @@ func (c *Controller) sessionTitleProvider() (provider.Provider, string, error) {
 		prov, err = resolver.Resolve(provider.Selection{Ref: ref})
 	}
 	if err != nil {
-		return nil, "", fmt.Errorf("session title: %w", err)
+		return nil, "", nil, fmt.Errorf("session title: %w", err)
 	}
-	return prov, ref, nil
+	return prov, ref, sessionTitlePricing(catalog, ref), nil
+}
+
+// sessionTitlePricing returns the list price the catalog carries for ref so the
+// title call's usage event is priced like any other. Nil means the catalog has
+// no price for that model, and the event simply carries no cost.
+func sessionTitlePricing(catalog []provider.Descriptor, ref string) *provider.Pricing {
+	for _, descriptor := range catalog {
+		if strings.TrimSpace(descriptor.Ref) != ref {
+			continue
+		}
+		if descriptor.CacheHitPerMillion <= 0 && descriptor.InputPerMillion <= 0 && descriptor.OutputPerMillion <= 0 {
+			return nil
+		}
+		return &provider.Pricing{
+			CacheHit: descriptor.CacheHitPerMillion,
+			Input:    descriptor.InputPerMillion,
+			Output:   descriptor.OutputPerMillion,
+			Currency: descriptor.PricingCurrency,
+		}
+	}
+	return nil
 }
 
 func sessionTitleSelection(catalog []provider.Descriptor, ref string) provider.Selection {
