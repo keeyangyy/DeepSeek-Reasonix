@@ -210,15 +210,27 @@ func (l *Ledger) Total(display string) CostQuote {
 	}
 	quotes := make([]CostQuote, 0, len(l.Entries))
 	for _, ent := range l.Entries {
-		q := ent.Quote
-		// Refresh valuation moneys already summed in entries.
-		quotes = append(quotes, q)
+		// A bucket with no token count contributed nothing, yet its quote hides
+		// the whole price. Drop it here so older ledgers recover without a
+		// data migration.
+		if !ent.hasBillableTokens() {
+			continue
+		}
+		quotes = append(quotes, ent.Quote)
 	}
 	// Stable order for determinism.
 	sort.Slice(quotes, func(i, j int) bool {
 		return quotes[i].ModelRef+quotes[i].UsageSource < quotes[j].ModelRef+quotes[j].UsageSource
 	})
 	return AggregateQuotes(quotes, display)
+}
+
+// hasBillableTokens reports whether a bucket ever saw a token count. Buckets
+// with only a request count came from calls the provider answered without a
+// usage block: they cost nothing and must not taint the aggregate.
+func (e LedgerEntry) hasBillableTokens() bool {
+	return e.PromptTokens > 0 || e.CompletionTokens > 0 || e.TotalTokens > 0 ||
+		e.CacheHitTokens > 0 || e.CacheMissTokens > 0
 }
 
 // SelectDisplay rebinds Selected on every entry and the total without

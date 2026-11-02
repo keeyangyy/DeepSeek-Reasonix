@@ -161,3 +161,44 @@ func TestLedgerMixedOriginalBucketsContinueAccumulating(t *testing.T) {
 		t.Fatalf("ledger buckets = %+v", q)
 	}
 }
+
+// A ledger written before the ingest-side skip still holds buckets that never
+// recorded a token count. They contributed nothing to the total, yet their
+// quotes mark the aggregate incomplete and hide the whole price. Total() must
+// drop them at read time so existing sessions recover without a migration.
+func TestLedgerTotalIgnoresBucketsWithoutTokens(t *testing.T) {
+	l := NewLedger()
+	unpriced := CostQuote{
+		Original:     Money{Amount: "0", Currency: "CNY"},
+		Valuations:   map[string]Valuation{"CNY": {Money: Money{Amount: "0", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete: false, DisplayComplete: false, Complete: false,
+		DisplayStatus: DisplayStatusUnavailable, IncompleteReason: "missing_price_or_usage",
+		ModelRef: "axon/deepseek-flash", PricingFingerprint: "fp-empty",
+	}
+	priced := CostQuote{
+		Original:     Money{Amount: "1.5", Currency: "CNY"},
+		Valuations:   map[string]Valuation{"CNY": {Money: Money{Amount: "1.5", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete: true, DisplayComplete: true, Complete: true,
+		DisplayStatus: DisplayStatusMatched, ModelRef: "axon/deepseek-flash-st", PricingFingerprint: "fp-priced",
+	}
+	l.Add(unpriced, UsageTokens{}, time.Time{})
+	l.Add(priced, UsageTokens{PromptTokens: 100}, time.Time{})
+	got := l.Total("CNY")
+	if !got.Complete || !got.CostComplete || got.Selected == nil || got.Selected.Amount != "1.5" {
+		t.Fatalf("total = %+v, want only the priced bucket", got)
+	}
+}
+
+// All buckets empty: nothing was ever billed, so the total stays unavailable
+// rather than reporting a confident zero.
+func TestLedgerTotalWithoutAnyTokenStaysUnavailable(t *testing.T) {
+	l := NewLedger()
+	l.Add(CostQuote{
+		Original: Money{Amount: "0", Currency: "CNY"}, Valuations: map[string]Valuation{},
+		IncompleteReason: "missing_price_or_usage", ModelRef: "m", PricingFingerprint: "fp",
+	}, UsageTokens{}, time.Time{})
+	got := l.Total("CNY")
+	if got.Complete || got.Selected != nil || got.DisplayStatus != DisplayStatusUnavailable {
+		t.Fatalf("total = %+v, want unavailable", got)
+	}
+}
