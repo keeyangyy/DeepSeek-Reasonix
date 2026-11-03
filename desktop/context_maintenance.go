@@ -18,6 +18,11 @@ type ContextInfo struct {
 	SessionCurrency     string                      `json:"sessionCurrency,omitempty"`
 	CacheHitTokens      int                         `json:"cacheHitTokens,omitempty"`
 	CacheMissTokens     int                         `json:"cacheMissTokens,omitempty"`
+	// Reported* cover only calls whose provider returned cache counters; the
+	// pair above keeps the billing fallback for zero-hit input.
+	ReportedCacheHitTokens  int  `json:"reportedCacheHitTokens,omitempty"`
+	ReportedCacheMissTokens int  `json:"reportedCacheMissTokens,omitempty"`
+	CacheMarkerSeen         bool `json:"cacheMarkerSeen,omitempty"`
 	Estimated           bool                        `json:"estimated,omitempty"`
 	SessionCostComplete bool                        `json:"sessionCostComplete,omitempty"`
 	SessionCostQuote    *billing.CostQuote          `json:"sessionCostQuote,omitempty"`

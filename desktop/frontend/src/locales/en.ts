@@ -3634,6 +3634,7 @@ export const en = {
   "context.sourceCost": "Cost",
   "context.sourceDetails": "Details",
   "context.cacheNotReported": "not reported",
+  "context.cacheCoverage": "covers {pct}% of tokens",
   "context.sourceExecutor": "Main",
   "context.sourcePlanner": "Planner",
   "context.sourceSubagent": "Subagent",

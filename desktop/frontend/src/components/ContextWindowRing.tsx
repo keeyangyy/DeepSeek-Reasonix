@@ -110,7 +110,7 @@ export function ContextWindowRing({ enabled = true, context, tabId, turnCost, tu
 
   const turnCacheHit = cacheHitTokens ?? info?.cacheHitTokens ?? 0;
   const turnCacheMiss = cacheMissTokens ?? info?.cacheMissTokens ?? 0;
-  const turnCacheRate = formatCacheHitRate(turnCacheHit, turnCacheMiss);
+  const turnCacheRate = info?.cacheReported === false ? "-" : formatCacheHitRate(turnCacheHit, turnCacheMiss);
   const compactTokens = windowTokens > 0 ? Math.round(windowTokens * compactRatio) : 0;
   const tokensToCompact = compactTokens > used ? compactTokens - used : 0;
   const ringOffset = RING_C * (1 - usagePct / 100);

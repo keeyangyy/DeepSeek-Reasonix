@@ -1060,8 +1060,7 @@ func normaliseUsage(u *wireUsage) *provider.Usage {
 		total = prompt + completion
 	}
 
-	hit := u.PromptCacheHitTokens
-	miss := u.PromptCacheMissTokens
+	hit, miss := u.PromptCacheHitTokens, u.PromptCacheMissTokens
 	if hit == 0 && u.PromptTokensDetails != nil {
 		hit = u.PromptTokensDetails.CachedTokens
 	}
@@ -1088,6 +1087,7 @@ func normaliseUsage(u *wireUsage) *provider.Usage {
 		TotalTokens:      total,
 		CacheHitTokens:   hit,
 		CacheMissTokens:  miss,
+		CacheReported:    u.PromptTokensDetails != nil || u.PromptCacheHitTokens != 0 || u.PromptCacheMissTokens != 0 || u.CacheReadInputTokens != 0 || u.CacheCreationInputTokens != 0, // absent counters mean unknown, not "all missed"
 		ReasoningTokens:  reasoning,
 	}
 }

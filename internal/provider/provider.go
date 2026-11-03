@@ -687,17 +687,17 @@ const (
 // Estimated marks counts reconstructed locally because the provider's terminalusage record did not arrive;
 // exact provider usage leaves it false.
 type Usage struct {
-	Unknown                bool `json:"unknown,omitempty"` // at least one request had no provider usage
-	PromptTokens           int
-	CompletionTokens       int
-	TotalTokens            int
-	CacheHitTokens         int     // prompt tokens served from cache
-	CacheMissTokens        int     // prompt tokens not cached, including CacheWriteTokens
-	CacheWriteTokens       int     // subset of CacheMissTokens used to create provider cache entries
-	CacheWriteBilledTokens float64 // cache-write charge expressed in ordinary input-token equivalents
-	ReasoningTokens        int     // subset of CompletionTokens spent on chain-of-thought
-	FinishReason           string  // "stop", "tool_calls", "length", "content_filter", "repetition_truncation", …
-	Estimated              bool
+	Unknown                  bool `json:"unknown,omitempty"` // at least one request had no provider usage
+	PromptTokens             int
+	CompletionTokens         int
+	TotalTokens              int
+	CacheHitTokens           int     // prompt tokens served from cache
+	CacheMissTokens          int     // prompt tokens not cached, including CacheWriteTokens
+	CacheWriteTokens         int     // subset of CacheMissTokens used to create provider cache entries
+	CacheWriteBilledTokens   float64 // cache-write charge expressed in ordinary input-token equivalents
+	ReasoningTokens          int     // subset of CompletionTokens spent on chain-of-thought
+	FinishReason             string  // "stop", "tool_calls", "length", "content_filter", "repetition_truncation", …
+	Estimated, CacheReported bool    // CacheReported: provider sent cache counters (unknown when false)
 	// RequestCount is the number of provider requests represented by thisaggregate.
 	// Zero means one request for backward compatibility. Recovery paths that merge multiple attempts set the exact count.
 	RequestCount int

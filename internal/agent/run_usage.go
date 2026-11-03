@@ -170,6 +170,9 @@ func mergeSamplingUsage(acc, attempt *provider.Usage) *provider.Usage {
 	}
 	merged := *acc
 	merged.Unknown = merged.Unknown || attempt.Unknown
+	// One attempt that reported cache counters makes the merged figure usable
+	// for cache-rate displays; attempts that omitted them contribute nothing.
+	merged.CacheReported = acc.CacheReported || attempt.CacheReported
 	// Billable input for Cost: sum hit/miss (prompt when no cache split).
 	ah, am := billableHitMiss(acc)
 	bh, bm := billableHitMiss(attempt)

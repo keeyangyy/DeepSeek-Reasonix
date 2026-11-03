@@ -3637,6 +3637,7 @@ export const zh: Record<DictKey, string> = {
   "context.sourceCost": "费用",
   "context.sourceDetails": "明细",
   "context.cacheNotReported": "未返回",
+  "context.cacheCoverage": "覆盖 {pct}% token",
   "context.sourceExecutor": "主模型",
   "context.sourcePlanner": "规划器",
   "context.sourceSubagent": "子代理",

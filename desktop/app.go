@@ -6361,9 +6361,9 @@ func (a *App) ContextUsageForTab(tabID string) ContextInfo {
 		info.SessionTokens = snap.Usage.TotalTokens
 		info.SessionCost = snap.Usage.SessionCost
 		info.SessionCurrency = snap.Usage.SessionCurrency
-		info.CacheHitTokens = snap.Usage.CacheHitTokens
-		info.CacheMissTokens = snap.Usage.CacheMissTokens
-		info.Estimated = snap.Usage.Estimated
+		info.CacheHitTokens, info.CacheMissTokens = snap.Usage.CacheHitTokens, snap.Usage.CacheMissTokens
+		info.ReportedCacheHitTokens, info.ReportedCacheMissTokens = snap.Usage.ReportedCacheHitTokens, snap.Usage.ReportedCacheMissTokens
+		info.Estimated, info.CacheMarkerSeen = snap.Usage.Estimated, snap.Usage.CacheMarkerSeen
 		info.SessionCostComplete = snap.Usage.SessionCostComplete
 		info.SessionCostQuote = snap.Usage.SessionCostQuote
 		info.Sources = snap.Usage.Sources
