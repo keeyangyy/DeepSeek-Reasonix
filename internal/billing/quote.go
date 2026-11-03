@@ -143,6 +143,9 @@ type UsageTokens struct {
 	CacheWriteTokens       int
 	CacheWriteBilledTokens float64
 	Estimated              bool
+	// CacheReported marks usage whose provider returned cache counters. When
+	// false, the hit/miss pair is a billing fallback, not a measurement.
+	CacheReported bool
 }
 
 // QuoteInput drives a single CostQuote computation.

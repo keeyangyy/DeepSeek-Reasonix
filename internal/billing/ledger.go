@@ -24,7 +24,11 @@ type LedgerEntry struct {
 	TotalTokens      int `json:"totalTokens"`
 	CacheHitTokens   int `json:"cacheHitTokens"`
 	CacheMissTokens  int `json:"cacheMissTokens"`
-	RequestCount     int `json:"requestCount"`
+	// Reported* count only calls whose provider returned cache counters. The
+	// pair above keeps the billing fallback, so hit-rate readers use these.
+	ReportedCacheHitTokens  int `json:"reportedCacheHitTokens,omitempty"`
+	ReportedCacheMissTokens int `json:"reportedCacheMissTokens,omitempty"`
+	RequestCount            int `json:"requestCount"`
 }
 
 // LedgerKey builds the stable aggregation key.
@@ -155,6 +159,10 @@ func (l *Ledger) Add(q CostQuote, tokens UsageTokens, occurred time.Time) {
 		ent.CacheMissTokens += tokens.CacheMissTokens
 	} else {
 		ent.CacheMissTokens += tokens.PromptTokens
+	}
+	if tokens.CacheReported {
+		ent.ReportedCacheHitTokens += tokens.CacheHitTokens
+		ent.ReportedCacheMissTokens += tokens.CacheMissTokens
 	}
 	ent.RequestCount++
 	if occurred.After(ent.OccurredAt) {

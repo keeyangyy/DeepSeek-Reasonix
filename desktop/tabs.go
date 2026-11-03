@@ -279,13 +279,15 @@ type readFileRecord struct {
 }
 
 type sessionUsageStats struct {
-	PromptTokens     int `json:"promptTokens"`
-	CompletionTokens int `json:"completionTokens"`
-	TotalTokens      int `json:"totalTokens"`
-	ReasoningTokens  int `json:"reasoningTokens"`
-	CacheHitTokens   int `json:"cacheHitTokens"`
-	CacheMissTokens  int `json:"cacheMissTokens"`
-	CacheWriteTokens int `json:"cacheWriteTokens,omitempty"`
+	PromptTokens            int `json:"promptTokens"`
+	CompletionTokens        int `json:"completionTokens"`
+	TotalTokens             int `json:"totalTokens"`
+	ReasoningTokens         int `json:"reasoningTokens"`
+	CacheHitTokens          int `json:"cacheHitTokens"`
+	CacheMissTokens         int `json:"cacheMissTokens"`
+	CacheWriteTokens        int `json:"cacheWriteTokens,omitempty"`
+	ReportedCacheHitTokens  int `json:"reportedCacheHitTokens,omitempty"`
+	ReportedCacheMissTokens int `json:"reportedCacheMissTokens,omitempty"`
 	// CacheWriteBilledTokens preserves provider-specific cache-write pricing
 	// across persisted telemetry repricing without changing hit-rate totals.
 	CacheWriteBilledTokens float64 `json:"cacheWriteBilledTokens,omitempty"`
@@ -322,19 +324,21 @@ type sessionUsageStats struct {
 }
 
 type usageSourceStats struct {
-	PromptTokens           int     `json:"promptTokens"`
-	CompletionTokens       int     `json:"completionTokens"`
-	TotalTokens            int     `json:"totalTokens"`
-	ReasoningTokens        int     `json:"reasoningTokens"`
-	CacheHitTokens         int     `json:"cacheHitTokens"`
-	CacheMissTokens        int     `json:"cacheMissTokens"`
-	CacheWriteTokens       int     `json:"cacheWriteTokens,omitempty"`
-	CacheWriteBilledTokens float64 `json:"cacheWriteBilledTokens,omitempty"`
-	Estimated              bool    `json:"estimated,omitempty"`
-	RequestCount           int     `json:"requestCount"`
-	SessionCost            float64 `json:"sessionCost,omitempty"`
-	SessionCurrency        string  `json:"sessionCurrency,omitempty"`
-	SessionCostUsd         float64 `json:"sessionCostUsd,omitempty"`
+	PromptTokens            int     `json:"promptTokens"`
+	CompletionTokens        int     `json:"completionTokens"`
+	TotalTokens             int     `json:"totalTokens"`
+	ReasoningTokens         int     `json:"reasoningTokens"`
+	CacheHitTokens          int     `json:"cacheHitTokens"`
+	CacheMissTokens         int     `json:"cacheMissTokens"`
+	ReportedCacheHitTokens  int     `json:"reportedCacheHitTokens,omitempty"`
+	ReportedCacheMissTokens int     `json:"reportedCacheMissTokens,omitempty"`
+	CacheWriteTokens        int     `json:"cacheWriteTokens,omitempty"`
+	CacheWriteBilledTokens  float64 `json:"cacheWriteBilledTokens,omitempty"`
+	Estimated               bool    `json:"estimated,omitempty"`
+	RequestCount            int     `json:"requestCount"`
+	SessionCost             float64 `json:"sessionCost,omitempty"`
+	SessionCurrency         string  `json:"sessionCurrency,omitempty"`
+	SessionCostUsd          float64 `json:"sessionCostUsd,omitempty"`
 }
 
 type sourceSessionCacheCounters struct {
@@ -1006,6 +1010,7 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 	cacheHitTokens, cacheMissTokens := t.usageTelemetry.cacheTokenDelta(source, u, e.SessionHit, e.SessionMiss)
 	t.usageTelemetry.CacheHitTokens += cacheHitTokens
 	t.usageTelemetry.CacheMissTokens += cacheMissTokens
+	t.usageTelemetry.addReportedCache(u.CacheReported, cacheHitTokens, cacheMissTokens)
 	t.usageTelemetry.CacheWriteTokens += u.CacheWriteTokens
 	t.usageTelemetry.CacheWriteBilledTokens += u.CacheWriteBilledTokens
 	t.usageTelemetry.Estimated = t.usageTelemetry.Estimated || u.Estimated
@@ -1038,6 +1043,7 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 	src.ReasoningTokens += u.ReasoningTokens
 	src.CacheHitTokens += cacheHitTokens
 	src.CacheMissTokens += cacheMissTokens
+	src.addReportedCache(u.CacheReported, cacheHitTokens, cacheMissTokens)
 	src.CacheWriteTokens += u.CacheWriteTokens
 	src.CacheWriteBilledTokens += u.CacheWriteBilledTokens
 	src.Estimated = src.Estimated || u.Estimated
@@ -1059,6 +1065,7 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 			CacheWriteTokens:       u.CacheWriteTokens,
 			CacheWriteBilledTokens: u.CacheWriteBilledTokens,
 			Estimated:              u.Estimated,
+			CacheReported:          u.CacheReported,
 		}
 		t.usageTelemetry.CostLedger.Add(*q, tokens, time.Now().UTC())
 		display := billing.NormalizeCurrency(t.runtimeCostDisplayCurrency)
@@ -7128,24 +7135,28 @@ type ContextPanelInfo struct {
 	// Session-cumulative token counts (from telemetry, atomic snapshot).
 	// Separate from the per-turn fields above so existing consumers (status bar
 	// turn tokens, donut chart) are unaffected.
-	SessionCacheHitTokens   int                         `json:"sessionCacheHitTokens"`
-	SessionCacheMissTokens  int                         `json:"sessionCacheMissTokens"`
-	SessionCompletionTokens int                         `json:"sessionCompletionTokens"`
-	SessionEstimated        bool                        `json:"sessionEstimated,omitempty"`
-	RequestCount            int                         `json:"requestCount"`
-	ElapsedMs               int64                       `json:"elapsedMs"`
-	SessionCost             float64                     `json:"sessionCost"`
-	SessionCurrency         string                      `json:"sessionCurrency,omitempty"`
-	SessionCostUsd          float64                     `json:"sessionCostUsd,omitempty"`
-	SessionCostComplete     bool                        `json:"sessionCostComplete,omitempty"`
-	SessionCostEstimated    bool                        `json:"sessionCostEstimated,omitempty"`
-	SessionBillingMode      string                      `json:"sessionBillingMode,omitempty"`
-	SessionCostQuote        *billing.CostQuote          `json:"sessionCostQuote,omitempty"`
-	Sources                 map[string]usageSourceStats `json:"sources,omitempty"`
-	Mock                    bool                        `json:"mock,omitempty"`
-	ReadFiles               []readFileRecord            `json:"readFiles"`
-	ChangedFiles            []ChangedFileInfo           `json:"changedFiles"`
-	ContextBudget           *ContextBudgetInfo          `json:"contextBudget,omitempty"`
+	SessionCacheHitTokens  int `json:"sessionCacheHitTokens"`
+	SessionCacheMissTokens int `json:"sessionCacheMissTokens"`
+	// Reported pair covers only calls whose provider returned cache counters;
+	// the pair above keeps the billing fallback for zero-hit input.
+	SessionReportedCacheHitTokens  int                         `json:"sessionReportedCacheHitTokens,omitempty"`
+	SessionReportedCacheMissTokens int                         `json:"sessionReportedCacheMissTokens,omitempty"`
+	SessionCompletionTokens        int                         `json:"sessionCompletionTokens"`
+	SessionEstimated               bool                        `json:"sessionEstimated,omitempty"`
+	RequestCount                   int                         `json:"requestCount"`
+	ElapsedMs                      int64                       `json:"elapsedMs"`
+	SessionCost                    float64                     `json:"sessionCost"`
+	SessionCurrency                string                      `json:"sessionCurrency,omitempty"`
+	SessionCostUsd                 float64                     `json:"sessionCostUsd,omitempty"`
+	SessionCostComplete            bool                        `json:"sessionCostComplete,omitempty"`
+	SessionCostEstimated           bool                        `json:"sessionCostEstimated,omitempty"`
+	SessionBillingMode             string                      `json:"sessionBillingMode,omitempty"`
+	SessionCostQuote               *billing.CostQuote          `json:"sessionCostQuote,omitempty"`
+	Sources                        map[string]usageSourceStats `json:"sources,omitempty"`
+	Mock                           bool                        `json:"mock,omitempty"`
+	ReadFiles                      []readFileRecord            `json:"readFiles"`
+	ChangedFiles                   []ChangedFileInfo           `json:"changedFiles"`
+	ContextBudget                  *ContextBudgetInfo          `json:"contextBudget,omitempty"`
 }
 
 type ChangedFileInfo struct {
@@ -7235,6 +7246,8 @@ func (a *App) ContextPanel(tabID string) ContextPanelInfo {
 	info.Sources = usage.Sources
 	info.SessionCacheHitTokens = usage.CacheHitTokens
 	info.SessionCacheMissTokens = usage.CacheMissTokens
+	info.SessionReportedCacheHitTokens = usage.ReportedCacheHitTokens
+	info.SessionReportedCacheMissTokens = usage.ReportedCacheMissTokens
 	info.SessionCompletionTokens = usage.CompletionTokens
 	info.SessionEstimated = usage.Estimated
 	if ctrl != nil {

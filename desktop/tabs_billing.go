@@ -250,3 +250,24 @@ func (t *WorkspaceTab) displayTelemetrySnapshot() tabTelemetrySnapshot {
 	}
 	return snapshot
 }
+
+// addReportedCache accumulates cache counters only for calls whose provider
+// actually reported them. Billing keeps treating unknown calls as fully
+// uncached input; hit-rate displays read this pair instead, so a gateway that
+// omits cache fields cannot drag the rate down to zero.
+func (s *sessionUsageStats) addReportedCache(reported bool, hit, miss int) {
+	if !reported {
+		return
+	}
+	s.ReportedCacheHitTokens += hit
+	s.ReportedCacheMissTokens += miss
+}
+
+// addReportedCache is the per-source equivalent used by the panel's source rows.
+func (s *usageSourceStats) addReportedCache(reported bool, hit, miss int) {
+	if !reported {
+		return
+	}
+	s.ReportedCacheHitTokens += hit
+	s.ReportedCacheMissTokens += miss
+}

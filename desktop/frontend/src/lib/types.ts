@@ -743,9 +743,8 @@ export interface ContextPanelInfo {
   cacheHitTokens: number;
   cacheMissTokens: number;
   estimated?: boolean;
-  sessionCacheHitTokens: number;
-  sessionCacheMissTokens: number;
-  sessionCompletionTokens: number;
+  sessionCacheHitTokens: number; sessionCacheMissTokens: number;
+  sessionReportedCacheHitTokens?: number; sessionReportedCacheMissTokens?: number;
   sessionEstimated?: boolean;
   requestCount?: number;
   elapsedMs?: number;
@@ -771,6 +770,7 @@ export interface UsageSourceStats {
   reasoningTokens: number;
   cacheHitTokens: number;
   cacheMissTokens: number;
+  reportedCacheHitTokens?: number; reportedCacheMissTokens?: number;
   estimated?: boolean;
   requestCount: number;
   sessionCost?: number;

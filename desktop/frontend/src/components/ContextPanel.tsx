@@ -443,12 +443,8 @@ export function ContextPanel({
         ? usage.totalTokens
         : promptTokens + completionTokens;
   const reasoningTokens = turnBreakdown.reasoningTokens;
-  // Session-cumulative cache tokens for the top summary: all-sources telemetry
-  // first (matching the session cost and per-source rows in this panel — the
-  // wire session counters are executor-only), with the live counters bridging
-  // only a fresh session's first turn before the telemetry refresh. Hit and
-  // miss come as a pair from one source so the rate cannot mix scopes.
-  const { hit: sessionCacheHit, miss: sessionCacheMiss } = contextSessionCache(info, context, usage);
+  const { hit: sessionCacheHit, miss: sessionCacheMiss, coverage: sessionCacheCoverage } = contextSessionCache(info, context, usage);
+  const cacheValue = sessionCacheHit + sessionCacheMiss > 0 ? formatCacheHitRate(sessionCacheHit, sessionCacheMiss) + (sessionCacheCoverage < 0.9 ? ` · ${t("context.cacheCoverage", { pct: Math.round(sessionCacheCoverage * 100) })}` : "") : t("context.cacheNotReported");
   const totalTokensMetric = formatMetricTokens(totalTokens, locale);
   const cost = contextCostDisplay({ info, sessionCost, sessionCurrency, usage });
   const sourceUsageRows = contextSourceRows(info, sessionCurrency);
@@ -612,7 +608,11 @@ export function ContextPanel({
             <SectionHeading title={t("context.sessionMetrics")} />
             <div className="context-panel__session-metrics">
               <div className="context-panel__summary-rows">
-                <MiniStat label={t("status.cacheAvgLabel")} value={formatCacheHitRate(sessionCacheHit, sessionCacheMiss)} tone={cacheHitTone(sessionCacheHit, sessionCacheMiss)} />
+                <MiniStat
+                  label={t("status.cacheAvgLabel")}
+                  value={cacheValue}
+                  tone={cacheHitTone(sessionCacheHit, sessionCacheMiss)}
+                />
                 <MiniStat label={t("context.sessionCost")} value={sessionCostLabel} title={sessionRateBandTitle} badge={sessionRateBandBadge} />
                 <MiniStat label={t("context.time")} value={fmtDuration(elapsed, t)} />
                 <MiniStat label={t("context.requests")} value={requestCount > 0 ? String(requestCount) : "-"} />
