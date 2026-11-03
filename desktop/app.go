@@ -5520,9 +5520,7 @@ func (state *historyMessageConvertState) convertHistoryMessage(
 	toolResults map[string]provider.Message,
 ) []HistoryMessage {
 	rows := state.convertHistoryMessageRows(index, m, resolveUserContent, checkpointTurns, replayedTodoArgs, toolResults)
-	for i := range rows {
-		rows[i].ID = m.ID
-	}
+	stampHostMessageID(rows, m.ID)
 	return rows
 }
 
@@ -5639,7 +5637,7 @@ func (state *historyMessageConvertState) convertHistoryMessageRows(
 	if m.Role == provider.RoleUser {
 		key := messageDisplayKey(agent.UserMessageText(m))
 		if turns := state.plannerByUserHash[key]; len(turns) > 0 {
-			out = append(out, cloneHistoryMessages(turns[0].Messages)...)
+			out = append(out, adoptPlannerRows(m.ID, turns[0].Messages)...)
 			state.suppressCanonicalTurn = plannerDisplaySuppressesCanonical(turns[0])
 			state.plannerByUserHash[key] = turns[1:]
 		}
