@@ -210,10 +210,10 @@ func (l *Ledger) Total(display string) CostQuote {
 	}
 	quotes := make([]CostQuote, 0, len(l.Entries))
 	for _, ent := range l.Entries {
-		// A bucket with no token count contributed nothing, yet its quote hides
-		// the whole price. Drop it here so older ledgers recover without a
-		// data migration.
-		if !ent.hasBillableTokens() {
+		// A bucket with no cost fact added nothing yet blanked the session;
+		// skipping it repairs ledgers written before the writers stopped
+		// emitting such quotes.
+		if !ent.hasBillableCost() {
 			continue
 		}
 		quotes = append(quotes, ent.Quote)
@@ -225,12 +225,14 @@ func (l *Ledger) Total(display string) CostQuote {
 	return AggregateQuotes(quotes, display)
 }
 
-// hasBillableTokens reports whether a bucket ever saw a token count. Buckets
-// with only a request count came from calls the provider answered without a
-// usage block: they cost nothing and must not taint the aggregate.
-func (e LedgerEntry) hasBillableTokens() bool {
-	return e.PromptTokens > 0 || e.CompletionTokens > 0 || e.TotalTokens > 0 ||
-		e.CacheHitTokens > 0 || e.CacheMissTokens > 0
+// hasBillableCost reports whether a bucket holds a cost fact worth adding: a
+// complete quote (a zero rate is still complete) or one that computed an
+// amount. Buckets with neither added nothing yet blanked the whole session.
+func (e LedgerEntry) hasBillableCost() bool {
+	if quoteHasCompleteCostFact(e.Quote) {
+		return true
+	}
+	return !e.Quote.Original.IsZero()
 }
 
 // SelectDisplay rebinds Selected on every entry and the total without
@@ -239,14 +241,28 @@ func (l *Ledger) SelectDisplay(display string) CostQuote {
 	return l.Total(display)
 }
 
-// EntriesBySource groups ledger entries by usage source for status panels.
-func (l *Ledger) EntriesBySource() map[string][]LedgerEntry {
-	out := map[string][]LedgerEntry{}
-	if l == nil {
+// TotalsBySource aggregates the ledger per usage source. The panel shows the
+// session total and its per-source breakdown, so both must come from the same
+// place: a separate running sum drifts the moment one update cannot be
+// aggregated, leaving a breakdown that no longer adds up to the total.
+func (l *Ledger) TotalsBySource(display string) map[string]CostQuote {
+	out := map[string]CostQuote{}
+	if l == nil || len(l.Entries) == 0 {
 		return out
 	}
+	grouped := map[string][]CostQuote{}
 	for _, ent := range l.Entries {
-		out[ent.UsageSource] = append(out[ent.UsageSource], ent)
+		if !ent.hasBillableCost() {
+			continue
+		}
+		source := ent.UsageSource
+		if source == "" {
+			source = "executor"
+		}
+		grouped[source] = append(grouped[source], ent.Quote)
+	}
+	for source, quotes := range grouped {
+		out[source] = AggregateQuotes(quotes, display)
 	}
 	return out
 }
