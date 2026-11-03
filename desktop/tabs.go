@@ -1147,31 +1147,6 @@ func (t *WorkspaceTab) telemetrySnapshot() tabTelemetrySnapshot {
 	return tabTelemetrySnapshot{Version: 3, ReadFiles: records, Usage: usage}
 }
 
-// displayTelemetrySnapshot overlays the live wallet hint onto a copy used by
-// UI reads. The persisted snapshot remains the occurrence-time/original view.
-func (t *WorkspaceTab) displayTelemetrySnapshot() tabTelemetrySnapshot {
-	snapshot := t.telemetrySnapshot()
-	t.telemMu.Lock()
-	quote := t.runtimeCostQuote
-	t.telemMu.Unlock()
-	if quote == nil {
-		return snapshot
-	}
-	snapshot.Usage.SessionCostQuote = quote
-	snapshot.Usage.SessionCostComplete = quote.Complete
-	if quote.Selected != nil {
-		snapshot.Usage.SessionCost = quote.Selected.Float64()
-		snapshot.Usage.SessionCurrency = quote.LegacyCurrencyCode()
-		snapshot.Usage.SessionCostUsd = snapshot.Usage.SessionCost
-	} else {
-		snapshot.Usage.SessionCostComplete = false
-		snapshot.Usage.SessionCost = 0
-		snapshot.Usage.SessionCurrency = ""
-		snapshot.Usage.SessionCostUsd = 0
-	}
-	return snapshot
-}
-
 func (t *WorkspaceTab) resetTelemetry(sessionPath string) {
 	t.telemMu.Lock()
 	t.readTelemetry = nil
@@ -1209,9 +1184,9 @@ func (t *WorkspaceTab) syncTelemetryToSession(sessionPath string) {
 		t.readTelemetry = snapshot.ReadFiles
 		t.usageTelemetry = snapshot.Usage
 		t.runtimeCostDisplayCurrency = ""
-		t.runtimeCostQuote = nil
 		t.runtimeCostGeneration++
 		t.telemetrySessionKey = key
+		t.refreshRestoredCostQuoteLocked()
 	}
 	t.telemMu.Unlock()
 }

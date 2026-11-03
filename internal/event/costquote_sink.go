@@ -147,9 +147,20 @@ func EnsureCostQuote(e Event, ctx *QuoteContext) *billing.CostQuote {
 		known.Unknown = false
 		e.Usage = &known
 		q := EnsureCostQuote(e, ctx)
+		if q == nil {
+			// Unknown with no token counts and no rate: keep the quote so the
+			// session still records that a call happened with unmeasured spend.
+			q = &billing.CostQuote{ModelRef: e.ModelRef, UsageSource: e.UsageSource}
+		}
 		q.CostComplete, q.DisplayComplete, q.Complete = false, false, false
 		q.Estimated, q.DisplayStatus, q.IncompleteReason = true, billing.DisplayStatusUnavailable, "usage_unknown"
 		return q
+	}
+	// A call that reported no token counts contributes nothing to the session
+	// cost, but a quote built from it would mark the whole session's cost as
+	// incomplete and hide the price everywhere. Skip it instead.
+	if !usageHasBillableFacts(e.Usage) {
+		return nil
 	}
 	if e.Pricing == nil {
 		q := billing.CostQuote{
@@ -204,6 +215,17 @@ func rateCardFromPricing(p *provider.Pricing) billing.RateCard {
 		Output:   p.Output,
 		Currency: billing.NormalizeCurrency(p.Currency),
 	}
+}
+
+// usageHasBillableFacts reports whether a usage record carries any token count
+// at all. A provider that answers without a usage block leaves every field
+// zero: that call was never billed, so it must not enter the cost ledger.
+func usageHasBillableFacts(u *provider.Usage) bool {
+	if u == nil {
+		return false
+	}
+	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.CacheHitTokens > 0 ||
+		u.CacheMissTokens > 0 || u.CacheWriteTokens > 0 || u.CacheWriteBilledTokens > 0
 }
 
 func usageTokens(u *provider.Usage) billing.UsageTokens {

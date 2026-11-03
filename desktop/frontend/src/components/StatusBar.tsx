@@ -261,7 +261,7 @@ export function StatusBar({
     ? t("context.sessionCostBucketed")
     : statusUnavailable
       ? "-"
-      : Number.isFinite(statusSelectedAmount) && statusSelectedAmount > 0
+      : Number.isFinite(statusSelectedAmount) && statusSelectedAmount >= 0
         ? markEstimated(formatMoneyLocalized(statusSelectedAmount, statusQuote?.selected?.currency || context.sessionCurrency || currency, { locale }), statusQuote?.estimated !== false)
         : costLabel;
   const statusCostLabel = appendRateBand(rawStatusCostLabel, statusQuote?.rateBand, t);

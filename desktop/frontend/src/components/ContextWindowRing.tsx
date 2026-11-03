@@ -124,7 +124,7 @@ export function ContextWindowRing({ enabled = true, context, tabId, turnCost, tu
     : info?.sessionCost;
   const sessionCostCurrency = info?.sessionCostQuote?.selected?.currency || info?.sessionCurrency;
   const sessionCost =
-    !sessionCostBucketed && sessionCostComplete && typeof sessionCostRaw === "number" && sessionCostRaw > 0
+    !sessionCostBucketed && sessionCostComplete && typeof sessionCostRaw === "number" && sessionCostRaw >= 0
       ? `≈${formatMoneyLocalized(sessionCostRaw, sessionCostCurrency, { locale, empty: "dash" }).replace(/^≈/, "")}`
       : undefined;
   const sessionCostHint =

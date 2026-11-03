@@ -161,3 +161,72 @@ func TestLedgerMixedOriginalBucketsContinueAccumulating(t *testing.T) {
 		t.Fatalf("ledger buckets = %+v", q)
 	}
 }
+
+// A bucket can have tokens and still carry no cost fact: the title generator
+// used to report usage without pricing. It contributed nothing to the total,
+// yet its quote marked the aggregate incomplete and hid the price of every
+// other turn. Total() must drop such buckets at read time so existing sessions
+// recover without a migration.
+func TestLedgerTotalIgnoresBucketsWithoutCost(t *testing.T) {
+	l := NewLedger()
+	// Tokens but no amount — the real keeyanglib case (247 tokens, no_price).
+	unpriced := CostQuote{
+		Original:     Money{},
+		Valuations:   map[string]Valuation{},
+		CostComplete: false, DisplayComplete: false, Complete: false,
+		DisplayStatus: DisplayStatusUnavailable, IncompleteReason: "no_price",
+		ModelRef: "axon/deepseek-flash", UsageSource: "title", PricingFingerprint: "fp-title",
+	}
+	// No tokens at all — a call the provider answered without a usage block.
+	tokenless := CostQuote{
+		Original:     Money{Amount: "0", Currency: "CNY"},
+		Valuations:   map[string]Valuation{"CNY": {Money: Money{Amount: "0", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete: false, DisplayComplete: false, Complete: false,
+		DisplayStatus: DisplayStatusUnavailable, IncompleteReason: "missing_price_or_usage",
+		ModelRef: "axon/deepseek-flash", UsageSource: "executor", PricingFingerprint: "fp-empty",
+	}
+	priced := CostQuote{
+		Original:     Money{Amount: "1.5", Currency: "CNY"},
+		Valuations:   map[string]Valuation{"CNY": {Money: Money{Amount: "1.5", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete: true, DisplayComplete: true, Complete: true,
+		DisplayStatus: DisplayStatusMatched, ModelRef: "axon/deepseek-flash-st", PricingFingerprint: "fp-priced",
+	}
+	l.Add(unpriced, UsageTokens{PromptTokens: 200, CompletionTokens: 47}, time.Time{})
+	l.Add(tokenless, UsageTokens{}, time.Time{})
+	l.Add(priced, UsageTokens{PromptTokens: 100}, time.Time{})
+	got := l.Total("CNY")
+	if !got.Complete || !got.CostComplete || got.Selected == nil || got.Selected.Amount != "1.5" {
+		t.Fatalf("total = %+v, want only the priced bucket", got)
+	}
+}
+
+// A zero-priced model has a rate card (the rate is 0), so it is complete and
+// must stay counted — unlike a bucket that never produced an amount.
+func TestLedgerTotalKeepsZeroPricedBuckets(t *testing.T) {
+	l := NewLedger()
+	zeroPriced := CostQuote{
+		Original:     Money{Amount: "0", Currency: "CNY"},
+		Valuations:   map[string]Valuation{"CNY": {Money: Money{Amount: "0", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete: true, DisplayComplete: true, Complete: true,
+		DisplayStatus: DisplayStatusMatched, ModelRef: "axon/deepseek-flash-ms", PricingFingerprint: "fp-zero",
+	}
+	l.Add(zeroPriced, UsageTokens{PromptTokens: 1000}, time.Time{})
+	got := l.Total("CNY")
+	if !got.Complete || got.Selected == nil || got.Selected.Amount != "0" {
+		t.Fatalf("total = %+v, want a complete zero price", got)
+	}
+}
+
+// All buckets empty: nothing was ever billed, so the total stays unavailable
+// rather than reporting a confident zero.
+func TestLedgerTotalWithoutAnyTokenStaysUnavailable(t *testing.T) {
+	l := NewLedger()
+	l.Add(CostQuote{
+		Original: Money{Amount: "0", Currency: "CNY"}, Valuations: map[string]Valuation{},
+		IncompleteReason: "missing_price_or_usage", ModelRef: "m", PricingFingerprint: "fp",
+	}, UsageTokens{}, time.Time{})
+	got := l.Total("CNY")
+	if got.Complete || got.Selected != nil || got.DisplayStatus != DisplayStatusUnavailable {
+		t.Fatalf("total = %+v, want unavailable", got)
+	}
+}

@@ -55,3 +55,36 @@ func TestCostQuoteSinkRatesOnceAndPreservesExistingQuote(t *testing.T) {
 		t.Fatalf("existing quote was recomputed: got=%p want=%p nowCalls=%d", first, prebuilt, nowCalls)
 	}
 }
+
+// A provider that answers without a usage block reports zero tokens. That call
+// was never billed, so it must not produce a quote: a quote carrying
+// "missing_price_or_usage" would mark the whole session's cost incomplete and
+// hide the price everywhere.
+func TestEnsureCostQuoteSkipsCallsWithoutTokenFacts(t *testing.T) {
+	e := Event{Kind: Usage, ModelRef: "axon/deepseek-flash", UsageSource: UsageSourceExecutor,
+		Pricing: &provider.Pricing{Input: 1, Output: 4, Currency: "CNY"},
+		Usage:   &provider.Usage{}}
+	if q := EnsureCostQuote(e, &QuoteContext{}); q != nil {
+		t.Fatalf("quote for an empty usage = %+v, want nil", q)
+	}
+}
+
+func TestEnsureCostQuoteKeepsPricedCallWithTokens(t *testing.T) {
+	e := Event{Kind: Usage, ModelRef: "axon/deepseek-flash", UsageSource: UsageSourceExecutor,
+		Pricing: &provider.Pricing{Input: 1, Output: 4, Currency: "CNY"},
+		Usage:   &provider.Usage{PromptTokens: 100, CompletionTokens: 20}}
+	q := EnsureCostQuote(e, &QuoteContext{})
+	if q == nil || q.Selected == nil {
+		t.Fatalf("quote = %+v, want a priced quote", q)
+	}
+}
+
+func TestEnsureCostQuoteKeepsUnknownUsage(t *testing.T) {
+	e := Event{Kind: Usage, ModelRef: "axon/deepseek-flash", UsageSource: UsageSourceExecutor,
+		Pricing: &provider.Pricing{Input: 1, Output: 4, Currency: "CNY"},
+		Usage:   &provider.Usage{Unknown: true}}
+	q := EnsureCostQuote(e, &QuoteContext{})
+	if q == nil || q.IncompleteReason != "usage_unknown" {
+		t.Fatalf("quote = %+v, want usage_unknown", q)
+	}
+}

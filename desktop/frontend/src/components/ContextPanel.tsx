@@ -151,7 +151,7 @@ export function contextCostDisplay({
   const selected = quote?.selected;
   if (selected?.amount) {
     const n = Number(selected.amount);
-    if (Number.isFinite(n) && n > 0) {
+    if (Number.isFinite(n) && n >= 0) { // zero is a real price, not a missing one
       const mode = quote?.billingMode || info?.sessionBillingMode;
       return {
         amount: n,
@@ -313,7 +313,7 @@ function sourceLabel(source: string, t: Translator): string {
 }
 
 function sourceCost(stats: UsageSourceStats): number {
-  return stats.sessionCost && stats.sessionCost > 0 ? stats.sessionCost : stats.sessionCostUsd ?? 0;
+  return typeof stats.sessionCost === "number" ? stats.sessionCost : stats.sessionCostUsd ?? 0; // 0 is a real price
 }
 
 function sourceTokenTotal(row: Pick<ContextSourceRow, "promptTokens" | "completionTokens" | "totalTokens">): number {

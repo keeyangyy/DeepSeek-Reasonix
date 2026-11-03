@@ -170,3 +170,83 @@ func (t *WorkspaceTab) repriceUsage(pricingBySource map[string]*provider.Pricing
 	}
 	return t.selectDisplayCurrency(display)
 }
+
+// refreshRestoredCostQuoteLocked re-aggregates the restored ledger instead of
+// trusting the persisted completeness flag, which was written by whichever
+// version ran then. Read-side fixes (skipping buckets that never recorded a
+// token count) only reach old sessions through this recompute: the panel shows
+// the runtime quote when present and falls back to the snapshot otherwise.
+// Caller holds telemMu.
+func (t *WorkspaceTab) refreshRestoredCostQuoteLocked() {
+	// Clear first: a session without a ledger must not inherit the previous
+	// session's runtime quote.
+	t.runtimeCostQuote = nil
+	ledger := t.usageTelemetry.CostLedger
+	if ledger == nil || len(ledger.Entries) == 0 {
+		return
+	}
+	display := billing.NormalizeCurrency(t.usageTelemetry.SessionCurrency)
+	total := ledger.Total(display)
+	t.runtimeCostQuote = &total
+	t.usageTelemetry.SessionCostQuote = &total
+	t.usageTelemetry.SessionCostComplete = total.Complete
+	if total.Selected != nil {
+		t.usageTelemetry.SessionCost = total.Selected.Float64()
+		t.usageTelemetry.SessionCurrency = total.LegacyCurrencyCode()
+		t.usageTelemetry.SessionCostUsd = t.usageTelemetry.SessionCost
+	}
+}
+
+// displayTelemetrySnapshot overlays the live wallet hint onto a copy used by
+// UI reads. The persisted snapshot remains the occurrence-time/original view.
+func (t *WorkspaceTab) displayTelemetrySnapshot() tabTelemetrySnapshot {
+	snapshot := t.telemetrySnapshot()
+	t.telemMu.Lock()
+	quote := t.runtimeCostQuote
+	ledger := t.usageTelemetry.CostLedger
+	display := billing.NormalizeCurrency(t.runtimeCostDisplayCurrency)
+	if display == "" {
+		display = billing.NormalizeCurrency(t.usageTelemetry.SessionCurrency)
+	}
+	t.telemMu.Unlock()
+	// A restored session may have no runtime quote yet (syncTelemetryToSession
+	// returns early on a matching key), and the persisted quote can still say
+	// "unavailable". Aggregate here so opening shows the price immediately.
+	if quote == nil && ledger != nil && len(ledger.Entries) > 0 {
+		fresh := ledger.Total(display)
+		quote = &fresh
+	}
+	// Derive per-source amounts from the ledger — the same source the session
+	// total comes from. A separately accumulated sum drifts once one update
+	// cannot be aggregated, leaving a breakdown that no longer adds up.
+	if ledger != nil && len(ledger.Entries) > 0 {
+		bySource := ledger.TotalsBySource(display)
+		for source, stats := range snapshot.Usage.Sources {
+			if agg, ok := bySource[source]; ok && agg.Selected != nil {
+				stats.SessionCost = agg.Selected.Float64()
+				stats.SessionCostUsd = stats.SessionCost
+				stats.SessionCurrency = agg.LegacyCurrencySymbol()
+			} else {
+				stats.SessionCost = 0
+				stats.SessionCostUsd = 0
+			}
+			snapshot.Usage.Sources[source] = stats
+		}
+	}
+	if quote == nil {
+		return snapshot
+	}
+	snapshot.Usage.SessionCostQuote = quote
+	snapshot.Usage.SessionCostComplete = quote.Complete
+	if quote.Selected != nil {
+		snapshot.Usage.SessionCost = quote.Selected.Float64()
+		snapshot.Usage.SessionCurrency = quote.LegacyCurrencyCode()
+		snapshot.Usage.SessionCostUsd = snapshot.Usage.SessionCost
+	} else {
+		snapshot.Usage.SessionCostComplete = false
+		snapshot.Usage.SessionCost = 0
+		snapshot.Usage.SessionCurrency = ""
+		snapshot.Usage.SessionCostUsd = 0
+	}
+	return snapshot
+}

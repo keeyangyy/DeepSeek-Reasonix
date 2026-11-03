@@ -169,3 +169,33 @@ func TestCleanSessionTitle(t *testing.T) {
 		}
 	}
 }
+
+// The title call bills like any other, so it must carry the catalog rate. A
+// nil result means the catalog has no price for that model, and the usage event
+// simply carries no cost.
+func TestSessionTitlePricingReadsCatalogRate(t *testing.T) {
+	catalog := []provider.Descriptor{{
+		Ref: "test/title-model", PricingCurrency: "CNY",
+		CacheHitPerMillion: 0.02, InputPerMillion: 1, OutputPerMillion: 4,
+	}}
+	got := sessionTitlePricing(catalog, "test/title-model")
+	if got == nil || got.CacheHit != 0.02 || got.Input != 1 || got.Output != 4 || got.Currency != "CNY" {
+		t.Fatalf("pricing = %+v", got)
+	}
+}
+
+func TestSessionTitlePricingIsNilWithoutRates(t *testing.T) {
+	catalog := []provider.Descriptor{{Ref: "test/title-model"}}
+	if got := sessionTitlePricing(catalog, "test/title-model"); got != nil {
+		t.Fatalf("pricing = %+v, want nil", got)
+	}
+}
+
+func TestSessionTitlePricingIgnoresOtherModels(t *testing.T) {
+	catalog := []provider.Descriptor{{
+		Ref: "other/model", InputPerMillion: 9, OutputPerMillion: 9, PricingCurrency: "USD",
+	}}
+	if got := sessionTitlePricing(catalog, "test/title-model"); got != nil {
+		t.Fatalf("pricing = %+v, want nil for an unlisted model", got)
+	}
+}
