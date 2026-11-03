@@ -336,6 +336,7 @@ type usageSourceStats struct {
 	CacheMissTokens         int     `json:"cacheMissTokens"`
 	ReportedCacheHitTokens  int     `json:"reportedCacheHitTokens,omitempty"`
 	ReportedCacheMissTokens int     `json:"reportedCacheMissTokens,omitempty"`
+	CacheMarkerSeen         bool    `json:"cacheMarkerSeen,omitempty"`
 	CacheWriteTokens        int     `json:"cacheWriteTokens,omitempty"`
 	CacheWriteBilledTokens  float64 `json:"cacheWriteBilledTokens,omitempty"`
 	Estimated               bool    `json:"estimated,omitempty"`

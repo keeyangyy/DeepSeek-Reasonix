@@ -48,11 +48,23 @@ export interface ContextSourceRow {
   cacheMissTokens: number;
   reportedCacheHitTokens?: number;
   reportedCacheMissTokens?: number;
+  cacheMarkerSeen?: boolean;
   totalTokens: number;
   cost: number;
   currency?: string;
   requests: number;
   estimated: boolean;
+}
+
+// SourceRow cache pair for the hit-rate display. Mirrors contextSessionCache:
+// reported calls win; a bucket that never saw a new-format call keeps the
+// billing pair it already carried, so an upgrade does not blank out history.
+export function sourceCacheFigures(row: ContextSourceRow): { hit: number; miss: number } {
+  const reportedHit = row.reportedCacheHitTokens ?? 0;
+  const reportedMiss = row.reportedCacheMissTokens ?? 0;
+  if (reportedHit + reportedMiss > 0) return { hit: reportedHit, miss: reportedMiss };
+  if (row.cacheMarkerSeen) return { hit: 0, miss: 0 };
+  return { hit: row.cacheHitTokens, miss: row.cacheMissTokens };
 }
 
 export function contextSourceRows(info: ContextPanelInfo | null, sessionCurrency?: string): ContextSourceRow[] {
@@ -82,6 +94,7 @@ export function contextSourceRows(info: ContextPanelInfo | null, sessionCurrency
       cacheMissTokens: stats.cacheMissTokens ?? 0,
       reportedCacheHitTokens: stats.reportedCacheHitTokens ?? 0,
       reportedCacheMissTokens: stats.reportedCacheMissTokens ?? 0,
+      cacheMarkerSeen: stats.cacheMarkerSeen === true,
       totalTokens: stats.totalTokens ?? 0,
       cost: sourceCost(stats),
       currency: stats.sessionCurrency || sessionCurrency || info?.sessionCurrency,

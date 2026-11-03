@@ -770,7 +770,7 @@ export interface UsageSourceStats {
   reasoningTokens: number;
   cacheHitTokens: number;
   cacheMissTokens: number;
-  reportedCacheHitTokens?: number; reportedCacheMissTokens?: number;
+  reportedCacheHitTokens?: number; reportedCacheMissTokens?: number; cacheMarkerSeen?: boolean;
   estimated?: boolean;
   requestCount: number;
   sessionCost?: number;

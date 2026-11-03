@@ -10,7 +10,7 @@ import { formatTokens, formatOptionalTokens } from "../lib/format";
 import { appendRateBand, normalizeRateBand, rateBandLabel, type DisplayRateBand } from "../lib/costRateBand";
 import type { BalanceInfo, ContextInfo, ContextPanelInfo, WireUsage } from "../lib/types";
 import { contextSessionCache } from "../lib/contextSessionCache";
-import { contextSourceRows, sourceLabel, sourceTokenTotal, sourceTone, type ContextSourceRow } from "../lib/contextSourceRows";
+import { contextSourceRows, sourceCacheFigures, sourceLabel, sourceTokenTotal, sourceTone, type ContextSourceRow } from "../lib/contextSourceRows";
 import { ContextBudgetCard, resolveContextBudget } from "./ContextBudgetCard";
 import type { Item } from "../lib/useController";
 import { contextWindowStatus, formatCacheHitRate } from "../lib/contextPanelUtils";
@@ -442,8 +442,8 @@ export function ContextPanel({
     const hitMetric = formatMetricTokens(row.cacheHitTokens, locale);
     const missMetric = formatMetricTokens(row.cacheMissTokens, locale);
     const totalMetric = formatMetricTokens(sourceTokenTotal(row), locale);
-    const reportedHit = row.reportedCacheHitTokens ?? 0, reportedMiss = row.reportedCacheMissTokens ?? 0;
-    const cacheRate = reportedHit + reportedMiss > 0 ? formatCacheHitRate(reportedHit, reportedMiss) : t("context.cacheNotReported");
+    const cacheFigures = sourceCacheFigures(row);
+    const cacheRate = cacheFigures.hit + cacheFigures.miss > 0 ? formatCacheHitRate(cacheFigures.hit, cacheFigures.miss) : t("context.cacheNotReported");
     const costLabel = markEstimated(formatMoneyLocalized(row.cost, row.currency, { locale, empty: "dash" }), row.estimated);
     return (
       <div className="context-panel__source-row" key={row.source}>
@@ -469,7 +469,7 @@ export function ContextPanel({
                 { label: t("context.sourceOutput"), value: row.completionTokens, tone: "output" },
               ]}
             />
-            {reportedHit + reportedMiss > 0 ? (
+            {cacheFigures.hit + cacheFigures.miss > 0 ? (
               <SourceSplitBar
                 label={`${t("context.sourceCacheHit")}/${t("context.sourceCacheMiss")}`}
                 segments={[

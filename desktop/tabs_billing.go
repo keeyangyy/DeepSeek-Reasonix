@@ -268,6 +268,9 @@ func (s *sessionUsageStats) addReportedCache(reported bool, hit, miss int) {
 
 // addReportedCache is the per-source equivalent used by the panel's source rows.
 func (s *usageSourceStats) addReportedCache(reported bool, hit, miss int) {
+	// Mark the bucket on any new-format call so a zero reported pair can mean
+	// "unknown" instead of "this source predates the marker".
+	s.CacheMarkerSeen = true
 	if !reported {
 		return
 	}
