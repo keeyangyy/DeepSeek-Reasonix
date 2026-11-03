@@ -7136,6 +7136,7 @@ type ContextPanelInfo struct {
 	ReasoningTokens  int  `json:"reasoningTokens"`
 	CacheHitTokens   int  `json:"cacheHitTokens"`
 	CacheMissTokens  int  `json:"cacheMissTokens"`
+	CacheReported    bool `json:"cacheReported,omitempty"` // false: provider sent no counters (unknown)
 	Estimated        bool `json:"estimated,omitempty"`
 	// Session-cumulative token counts (from telemetry, atomic snapshot).
 	// Separate from the per-turn fields above so existing consumers (status bar
@@ -7144,9 +7145,9 @@ type ContextPanelInfo struct {
 	SessionCacheMissTokens int `json:"sessionCacheMissTokens"`
 	// Reported pair covers only calls whose provider returned cache counters;
 	// the pair above keeps the billing fallback for zero-hit input.
-	SessionReportedCacheHitTokens  int  `json:"sessionReportedCacheHitTokens,omitempty"`
-	SessionReportedCacheMissTokens int  `json:"sessionReportedCacheMissTokens,omitempty"`
-	SessionCacheMarkerSeen         bool `json:"sessionCacheMarkerSeen,omitempty"`
+	SessionReportedCacheHitTokens  int                         `json:"sessionReportedCacheHitTokens,omitempty"`
+	SessionReportedCacheMissTokens int                         `json:"sessionReportedCacheMissTokens,omitempty"`
+	SessionCacheMarkerSeen         bool                        `json:"sessionCacheMarkerSeen,omitempty"`
 	SessionCompletionTokens        int                         `json:"sessionCompletionTokens"`
 	SessionEstimated               bool                        `json:"sessionEstimated,omitempty"`
 	RequestCount                   int                         `json:"requestCount"`
@@ -7211,9 +7212,8 @@ func (a *App) ContextPanel(tabID string) ContextPanelInfo {
 			info.PromptTokens = u.PromptTokens
 			info.CompletionTokens = u.CompletionTokens
 			info.ReasoningTokens = u.ReasoningTokens
-			info.CacheHitTokens = u.CacheHitTokens
-			info.CacheMissTokens = u.CacheMissTokens
-			info.Estimated = u.Estimated
+			info.CacheHitTokens, info.CacheMissTokens = u.CacheHitTokens, u.CacheMissTokens
+			info.Estimated, info.CacheReported = u.Estimated, u.CacheReported
 		} else {
 			// Executor rebuilt (session rebind): fall back to the telemetry-
 			// persisted per-turn breakdown so the donut chart and type

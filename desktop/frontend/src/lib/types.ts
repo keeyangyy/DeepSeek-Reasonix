@@ -740,7 +740,7 @@ export interface ContextPanelInfo {
   totalTokens: number;
   reasoningTokens: number;
   cacheHitTokens: number;
-  cacheMissTokens: number;
+  cacheMissTokens: number; cacheReported?: boolean; // false = provider sent no counters
   estimated?: boolean;
   sessionCacheHitTokens: number; sessionCacheMissTokens: number;
   sessionReportedCacheHitTokens?: number; sessionReportedCacheMissTokens?: number;

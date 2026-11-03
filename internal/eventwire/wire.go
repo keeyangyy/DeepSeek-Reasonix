@@ -273,7 +273,7 @@ func toWireUsage(e event.Event) *Usage {
 	wire := &Usage{
 		PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens,
 		TotalTokens: u.TotalTokens, CacheHitTokens: u.CacheHitTokens,
-		CacheMissTokens: u.CacheMissTokens, ReasoningTokens: u.ReasoningTokens,
+		CacheMissTokens: u.CacheMissTokens, CacheReported: u.CacheReported, ReasoningTokens: u.ReasoningTokens,
 		Estimated:               u.Estimated,
 		Source:                  e.UsageSource,
 		ContextPromptTokens:     u.ContextPromptTokens,
@@ -501,13 +501,13 @@ type Usage struct {
 	CacheMissTokens  int               `json:"cacheMissTokens"`
 	ReasoningTokens  int               `json:"reasoningTokens,omitempty"`
 	Estimated        bool              `json:"estimated,omitempty"`
+	CacheReported    bool              `json:"cacheReported,omitempty"` // false: provider sent no counters (unknown)
 	Source           string            `json:"source,omitempty"`
 	CacheDiagnostics *CacheDiagnostics `json:"cacheDiagnostics,omitempty"`
 	// Session-cumulative cache tokens keep status displays steadier than one-turn values.
 	SessionCacheHitTokens  int `json:"sessionCacheHitTokens"`
 	SessionCacheMissTokens int `json:"sessionCacheMissTokens"`
-	// Context* fields are the latest single-request shape for gauges/rebind.
-	// When omitted, clients fall back to the billable prompt/completion totals.
+	// Context* fields are the latest single-request shape for gauges/rebind; when omitted, clients fall back to billable totals.
 	ContextPromptTokens     int     `json:"contextPromptTokens,omitempty"`
 	ContextCompletionTokens int     `json:"contextCompletionTokens,omitempty"`
 	ContextReasoningTokens  int     `json:"contextReasoningTokens,omitempty"`
