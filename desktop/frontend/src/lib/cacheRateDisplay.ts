@@ -26,18 +26,42 @@ export function avgRate(u?: WireUsage): string | null {
   return formatRate(u.sessionCacheHitTokens, u.sessionCacheHitTokens + u.sessionCacheMissTokens);
 }
 
+// Reported pair wins; a bucket that saw new-format calls but none reported is
+// unknown; one that never saw the marker keeps its legacy pair, so an upgrade
+// does not blank out a number the user already had.
+function resolveCachePair(
+  reportedHit: number,
+  reportedMiss: number,
+  markerSeen: boolean,
+  legacyHit: number,
+  legacyMiss: number,
+): [number, number] {
+  if (reportedHit + reportedMiss > 0) return [reportedHit, reportedMiss];
+  if (markerSeen) return [0, 0];
+  return [legacyHit, legacyMiss];
+}
+
 // All-sources session aggregate from tab telemetry — matches the 会话费用
-// tooltip scope (main model + subagents + auxiliary calls). Uses the reported
-// pair so unmarked calls are unknown rather than misses.
+// tooltip scope (main model + subagents + auxiliary calls).
 export function contextAvgRate(ctx: ContextInfo): string | null {
-  const hit = ctx.reportedCacheHitTokens ?? 0;
-  const miss = ctx.reportedCacheMissTokens ?? 0;
+  const [hit, miss] = resolveCachePair(
+    ctx.reportedCacheHitTokens ?? 0,
+    ctx.reportedCacheMissTokens ?? 0,
+    ctx.cacheMarkerSeen === true,
+    ctx.cacheHitTokens ?? 0,
+    ctx.cacheMissTokens ?? 0,
+  );
   return formatRate(hit, hit + miss);
 }
 
 // Per-source row rate for the cache tooltip.
 export function sourceCacheRate(stats: UsageSourceStats, notReported: string): string {
-  const hit = stats.reportedCacheHitTokens ?? 0;
-  const miss = stats.reportedCacheMissTokens ?? 0;
+  const [hit, miss] = resolveCachePair(
+    stats.reportedCacheHitTokens ?? 0,
+    stats.reportedCacheMissTokens ?? 0,
+    stats.cacheMarkerSeen === true,
+    stats.cacheHitTokens,
+    stats.cacheMissTokens,
+  );
   return hit + miss > 0 ? `${formatRate(hit, hit + miss)}%` : notReported;
 }
