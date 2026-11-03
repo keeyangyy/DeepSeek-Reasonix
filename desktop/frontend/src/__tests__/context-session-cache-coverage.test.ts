@@ -27,6 +27,7 @@ console.log("\nSession cache coverage");
       sessionCacheMissTokens: 16_049_924,
       sessionReportedCacheHitTokens: 0,
       sessionReportedCacheMissTokens: 0,
+      sessionCacheMarkerSeen: true,
     },
     undefined,
     undefined,
@@ -94,10 +95,11 @@ console.log("\nSession cache coverage");
   ok(r.coverage === 1, "回退路径不做覆盖率折扣");
 }
 
-// Legacy telemetry: panel has figures but no reported pair at all.
+// Legacy telemetry (no marker at all): keep the figure the user already saw
+// rather than blanking it out after an upgrade.
 {
-  const r = contextSessionCache({ sessionCacheHitTokens: 0, sessionCacheMissTokens: 5000 }, undefined, undefined);
-  ok(r.hit === 0 && r.miss === 0, "旧数据无上报标记时视为未上报");
+  const r = contextSessionCache({ sessionCacheHitTokens: 4000, sessionCacheMissTokens: 1000 }, undefined, undefined);
+  ok(r.hit === 4000 && r.miss === 1000, "旧数据无标记时保留原有命中/未命中");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -8,8 +8,9 @@ import { useI18n, type Locale, type Translator } from "../lib/i18n";
 import { formatMoneyLocalized } from "../lib/money";
 import { formatTokens, formatOptionalTokens } from "../lib/format";
 import { appendRateBand, normalizeRateBand, rateBandLabel, type DisplayRateBand } from "../lib/costRateBand";
-import type { BalanceInfo, ContextInfo, ContextPanelInfo, UsageSourceStats, WireUsage } from "../lib/types";
+import type { BalanceInfo, ContextInfo, ContextPanelInfo, WireUsage } from "../lib/types";
 import { contextSessionCache } from "../lib/contextSessionCache";
+import { contextSourceRows, sourceLabel, sourceTokenTotal, sourceTone, type ContextSourceRow } from "../lib/contextSourceRows";
 import { ContextBudgetCard, resolveContextBudget } from "./ContextBudgetCard";
 import type { Item } from "../lib/useController";
 import { contextWindowStatus, formatCacheHitRate } from "../lib/contextPanelUtils";
@@ -286,86 +287,7 @@ export function contextBreakdown(
 
 export { contextWindowStatus } from "../lib/contextPanelUtils";
 
-const SOURCE_ORDER = ["executor", "planner", "subagent", "compaction", "classifier", "title"];
-
-function sourceTone(source: string): string {
-  switch (source) {
-    case "executor": return "teal";
-    case "planner": return "blue";
-    case "subagent": return "amber";
-    case "compaction": return "slate";
-    case "classifier": return "violet";
-    case "title": return "rose";
-    default: return "default";
-  }
-}
-
-function sourceLabel(source: string, t: Translator): string {
-  switch (source) {
-    case "executor": return t("context.sourceExecutor");
-    case "planner": return t("context.sourcePlanner");
-    case "subagent": return t("context.sourceSubagent");
-    case "compaction": return t("context.sourceCompaction");
-    case "classifier": return t("context.sourceClassifier");
-    case "title": return t("context.sourceTitle");
-    default: return source;
-  }
-}
-
-function sourceCost(stats: UsageSourceStats): number {
-  return typeof stats.sessionCost === "number" ? stats.sessionCost : stats.sessionCostUsd ?? 0; // 0 is a real price
-}
-
-function sourceTokenTotal(row: Pick<ContextSourceRow, "promptTokens" | "completionTokens" | "totalTokens">): number {
-  return row.totalTokens > 0 ? row.totalTokens : row.promptTokens + row.completionTokens;
-}
-
-export interface ContextSourceRow {
-  source: string;
-  label: string;
-  promptTokens: number;
-  completionTokens: number;
-  cacheHitTokens: number;
-  cacheMissTokens: number;
-  totalTokens: number;
-  cost: number;
-  currency?: string;
-  requests: number;
-  estimated: boolean;
-}
-
-export function contextSourceRows(info: ContextPanelInfo | null, sessionCurrency?: string): ContextSourceRow[] {
-  const entries = Object.entries(info?.sources ?? {});
-  if (entries.length === 0) return [];
-  return entries
-    .filter(([, stats]) =>
-      (stats.requestCount ?? 0) > 0 ||
-      (stats.promptTokens ?? 0) > 0 ||
-      (stats.completionTokens ?? 0) > 0 ||
-      (stats.cacheHitTokens ?? 0) > 0 ||
-      (stats.cacheMissTokens ?? 0) > 0 ||
-      sourceCost(stats) > 0
-    )
-    .sort(([a], [b]) => {
-      const ia = SOURCE_ORDER.indexOf(a);
-      const ib = SOURCE_ORDER.indexOf(b);
-      if (ia >= 0 || ib >= 0) return (ia >= 0 ? ia : SOURCE_ORDER.length) - (ib >= 0 ? ib : SOURCE_ORDER.length);
-      return a.localeCompare(b);
-    })
-    .map(([source, stats]) => ({
-      source,
-      label: source,
-      promptTokens: stats.promptTokens ?? 0,
-      completionTokens: stats.completionTokens ?? 0,
-      cacheHitTokens: stats.cacheHitTokens ?? 0,
-      cacheMissTokens: stats.cacheMissTokens ?? 0,
-      totalTokens: stats.totalTokens ?? 0,
-      cost: sourceCost(stats),
-      currency: stats.sessionCurrency || sessionCurrency || info?.sessionCurrency,
-      requests: stats.requestCount ?? 0,
-      estimated: stats.estimated === true,
-    }));
-}
+export { contextSourceRows, type ContextSourceRow } from "../lib/contextSourceRows";
 
 export function ContextPanel({
   tabId,
@@ -520,8 +442,8 @@ export function ContextPanel({
     const hitMetric = formatMetricTokens(row.cacheHitTokens, locale);
     const missMetric = formatMetricTokens(row.cacheMissTokens, locale);
     const totalMetric = formatMetricTokens(sourceTokenTotal(row), locale);
-    const cacheReported = row.cacheHitTokens + row.cacheMissTokens > 0;
-    const cacheRate = cacheReported ? formatCacheHitRate(row.cacheHitTokens, row.cacheMissTokens) : t("context.cacheNotReported");
+    const reportedHit = row.reportedCacheHitTokens ?? 0, reportedMiss = row.reportedCacheMissTokens ?? 0;
+    const cacheRate = reportedHit + reportedMiss > 0 ? formatCacheHitRate(reportedHit, reportedMiss) : t("context.cacheNotReported");
     const costLabel = markEstimated(formatMoneyLocalized(row.cost, row.currency, { locale, empty: "dash" }), row.estimated);
     return (
       <div className="context-panel__source-row" key={row.source}>
@@ -547,7 +469,7 @@ export function ContextPanel({
                 { label: t("context.sourceOutput"), value: row.completionTokens, tone: "output" },
               ]}
             />
-            {cacheReported ? (
+            {reportedHit + reportedMiss > 0 ? (
               <SourceSplitBar
                 label={`${t("context.sourceCacheHit")}/${t("context.sourceCacheMiss")}`}
                 segments={[

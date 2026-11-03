@@ -288,6 +288,10 @@ type sessionUsageStats struct {
 	CacheWriteTokens        int `json:"cacheWriteTokens,omitempty"`
 	ReportedCacheHitTokens  int `json:"reportedCacheHitTokens,omitempty"`
 	ReportedCacheMissTokens int `json:"reportedCacheMissTokens,omitempty"`
+	// CacheMarkerSeen separates "this session predates the marker" from "every
+	// call here omitted cache counters": both have a zero reported pair, but
+	// only the latter may render as "not reported".
+	CacheMarkerSeen bool `json:"cacheMarkerSeen,omitempty"`
 	// CacheWriteBilledTokens preserves provider-specific cache-write pricing
 	// across persisted telemetry repricing without changing hit-rate totals.
 	CacheWriteBilledTokens float64 `json:"cacheWriteBilledTokens,omitempty"`
@@ -7139,8 +7143,9 @@ type ContextPanelInfo struct {
 	SessionCacheMissTokens int `json:"sessionCacheMissTokens"`
 	// Reported pair covers only calls whose provider returned cache counters;
 	// the pair above keeps the billing fallback for zero-hit input.
-	SessionReportedCacheHitTokens  int                         `json:"sessionReportedCacheHitTokens,omitempty"`
-	SessionReportedCacheMissTokens int                         `json:"sessionReportedCacheMissTokens,omitempty"`
+	SessionReportedCacheHitTokens  int  `json:"sessionReportedCacheHitTokens,omitempty"`
+	SessionReportedCacheMissTokens int  `json:"sessionReportedCacheMissTokens,omitempty"`
+	SessionCacheMarkerSeen         bool `json:"sessionCacheMarkerSeen,omitempty"`
 	SessionCompletionTokens        int                         `json:"sessionCompletionTokens"`
 	SessionEstimated               bool                        `json:"sessionEstimated,omitempty"`
 	RequestCount                   int                         `json:"requestCount"`
@@ -7248,6 +7253,7 @@ func (a *App) ContextPanel(tabID string) ContextPanelInfo {
 	info.SessionCacheMissTokens = usage.CacheMissTokens
 	info.SessionReportedCacheHitTokens = usage.ReportedCacheHitTokens
 	info.SessionReportedCacheMissTokens = usage.ReportedCacheMissTokens
+	info.SessionCacheMarkerSeen = usage.CacheMarkerSeen
 	info.SessionCompletionTokens = usage.CompletionTokens
 	info.SessionEstimated = usage.Estimated
 	if ctrl != nil {

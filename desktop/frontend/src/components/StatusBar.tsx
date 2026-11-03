@@ -15,40 +15,7 @@ import { useRemoteStore } from "../store/remote";
 
 type StatusBarLabelStyle = "icon" | "text";
 
-function formatRate(hit: number, denom: number): string | null {
-  return denom > 0 ? ((hit / denom) * 100).toFixed(2) : null;
-}
-
-// nowRate is the SINGLE-TURN prompt cache-hit % (latest turn) — the higher,
-// steeper number on a non-compacting DeepSeek session. null when nothing yet.
-function nowRate(u?: WireUsage): string | null {
-  if (!u) return null;
-  const denom = u.cacheHitTokens + u.cacheMissTokens;
-  return formatRate(u.cacheHitTokens, denom);
-}
-
-// avgRate is the SESSION-AGGREGATE cache-hit % — Σhit/Σ(hit+miss) across every
-// turn — but scoped to the EXECUTOR agent only: the wire session counters come
-// from the main agent and exclude subagent/planner/auxiliary requests. It is
-// only the pre-first-refresh fallback; the authoritative all-sources number is
-// contextAvgRate below, so the "session average" label reports one scope.
-function avgRate(u?: WireUsage): string | null {
-  if (!u) return null;
-  const denom = u.sessionCacheHitTokens + u.sessionCacheMissTokens;
-  return formatRate(u.sessionCacheHitTokens, denom);
-}
-
-// contextAvgRate computes the session-aggregate cache-hit % from ContextInfo
-// cache tokens — the tab telemetry that accumulates ALL request sources
-// (executor, subagents, planner, auxiliary calls), refreshed at turn
-// boundaries. Preferred over avgRate: it matches the 会话费用 tooltip's
-// "includes main model, subagents and auxiliary calls" scope.
-function contextAvgRate(ctx: ContextInfo): string | null {
-  const hit = ctx.cacheHitTokens ?? 0;
-  const miss = ctx.cacheMissTokens ?? 0;
-  return formatRate(hit, hit + miss);
-}
-
+import { avgRate, contextAvgRate, nowRate, sourceCacheRate } from "../lib/cacheRateDisplay";
 function rateValueClass(rate: string | null): string {
   if (rate === null) return "stat__value--empty";
   const pct = Number.parseFloat(rate);
@@ -113,8 +80,7 @@ function sourceCacheTooltip(t: Translator, title: string, context: ContextInfo):
     <span className="statusbar__tooltip-stack">
       <span>{title}</span>
       {rows.map(({ source, stats }) => {
-        const denom = stats.cacheHitTokens + stats.cacheMissTokens;
-        const rate = denom > 0 ? `${formatRate(stats.cacheHitTokens, denom)}%` : t("context.cacheNotReported");
+        const rate = sourceCacheRate(stats, t("context.cacheNotReported"));
         return (
           <span key={source}>
             {sourceLabel(source, t)}: {rate} · {t("context.sourceInput")} {formatTokenCount(stats.promptTokens)}

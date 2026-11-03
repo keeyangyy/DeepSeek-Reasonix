@@ -143,8 +143,7 @@ export interface WireUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-  cacheHitTokens: number;
-  cacheMissTokens: number;
+  cacheHitTokens: number; cacheMissTokens: number; cacheReported?: boolean; // false = unknown, not all missed
   reasoningTokens?: number;
   estimated?: boolean;
   source?: string;
@@ -745,6 +744,7 @@ export interface ContextPanelInfo {
   estimated?: boolean;
   sessionCacheHitTokens: number; sessionCacheMissTokens: number;
   sessionReportedCacheHitTokens?: number; sessionReportedCacheMissTokens?: number;
+  sessionCacheMarkerSeen?: boolean;
   sessionEstimated?: boolean;
   requestCount?: number;
   elapsedMs?: number;
@@ -1025,8 +1025,8 @@ export interface ContextInfo {
   compactRatio?: number;
   sessionCost?: number;
   sessionCurrency?: string;
-  cacheHitTokens?: number;
-  cacheMissTokens?: number;
+  cacheHitTokens?: number; reportedCacheHitTokens?: number; reportedCacheMissTokens?: number;
+  cacheMissTokens?: number; cacheMarkerSeen?: boolean;
   estimated?: boolean;
   sessionCostComplete?: boolean;
   sessionCostQuote?: CostQuote;

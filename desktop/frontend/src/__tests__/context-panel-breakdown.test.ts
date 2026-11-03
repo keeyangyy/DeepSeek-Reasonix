@@ -250,7 +250,7 @@ eq(
     { cacheHitTokens: 800, cacheMissTokens: 200 },
     { sessionCacheHitTokens: 700, sessionCacheMissTokens: 300 },
   ),
-  { hit: 800, miss: 200 },
+  { hit: 800, miss: 200, coverage: 1 },
   "live shared ContextInfo beats a stale all-sources panel snapshot",
 );
 eq(
@@ -259,7 +259,7 @@ eq(
     { cacheHitTokens: 0, cacheMissTokens: 0 },
     { sessionCacheHitTokens: 700, sessionCacheMissTokens: 300 },
   ),
-  { hit: 900, miss: 100 },
+  { hit: 900, miss: 100, coverage: 1 },
   "panel telemetry remains the all-sources fallback without live ContextInfo",
 );
 eq(
@@ -268,12 +268,12 @@ eq(
     { cacheHitTokens: 0, cacheMissTokens: 0 },
     { sessionCacheHitTokens: 700, sessionCacheMissTokens: 300 },
   ),
-  { hit: 700, miss: 300 },
+  { hit: 700, miss: 300, coverage: 1 },
   "executor-only wire counters only bridge the pre-refresh gap",
 );
 eq(
   contextSessionCache(null, undefined, undefined),
-  { hit: 0, miss: 0 },
+  { hit: 0, miss: 0, coverage: 0 },
   "no data renders as empty, not NaN",
 );
 eq(formatMoney(infoCost.amount, infoCost.currency, "dash"), "$0.1759", "USD panel cost renders with dollar sign");

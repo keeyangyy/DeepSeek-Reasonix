@@ -16,6 +16,8 @@ export interface SessionCacheFigures {
   coverage: number;
 }
 
+const UNKNOWN: SessionCacheFigures = { hit: 0, miss: 0, coverage: 0 };
+
 export function contextSessionCache(
   info?: Pick<
     ContextPanelInfo,
@@ -23,8 +25,9 @@ export function contextSessionCache(
     | "sessionCacheMissTokens"
     | "sessionReportedCacheHitTokens"
     | "sessionReportedCacheMissTokens"
+    | "sessionCacheMarkerSeen"
   > | null,
-  context?: Pick<ContextInfo, "cacheHitTokens" | "cacheMissTokens">,
+  context?: Pick<ContextInfo, "cacheHitTokens" | "cacheMissTokens" | "cacheMarkerSeen">,
   usage?: Pick<WireUsage, "sessionCacheHitTokens" | "sessionCacheMissTokens">,
 ): SessionCacheFigures {
   const reportedHit = info?.sessionReportedCacheHitTokens ?? 0;
@@ -34,20 +37,19 @@ export function contextSessionCache(
     const known = reportedHit + reportedMiss;
     return { hit: reportedHit, miss: reportedMiss, coverage: all > 0 ? known / all : 1 };
   }
-  // Panel telemetry exists but carries no reported pair: either the session
-  // predates the marker or every call omitted cache counters. Report "unknown"
-  // instead of surfacing the billing fallback as a real 0% hit rate.
-  if (info && (info.sessionCacheHitTokens ?? 0) + (info.sessionCacheMissTokens ?? 0) > 0) {
-    return { hit: 0, miss: 0, coverage: 0 };
-  }
-  // Panel has not refreshed yet: bridge with live counters, which predate the
-  // marker and so cannot distinguish reported from unreported calls.
+  // The marker separates two cases that both show a zero reported pair:
+  //   - seen:     every call omitted counters, so the rate is genuinely unknown
+  //   - not seen: the session predates the marker; keep the legacy figure so an
+  //               upgrade does not blank out a number the user had before
+  if (info?.sessionCacheMarkerSeen || context?.cacheMarkerSeen) return UNKNOWN;
   const ctxHit = context?.cacheHitTokens ?? 0;
   const ctxMiss = context?.cacheMissTokens ?? 0;
   if (ctxHit + ctxMiss > 0) return { hit: ctxHit, miss: ctxMiss, coverage: 1 };
-  return {
-    hit: usage?.sessionCacheHitTokens ?? 0,
-    miss: usage?.sessionCacheMissTokens ?? 0,
-    coverage: 1,
-  };
+  const infoHit = info?.sessionCacheHitTokens ?? 0;
+  const infoMiss = info?.sessionCacheMissTokens ?? 0;
+  if (infoHit + infoMiss > 0) return { hit: infoHit, miss: infoMiss, coverage: 1 };
+  const usageHit = usage?.sessionCacheHitTokens ?? 0;
+  const usageMiss = usage?.sessionCacheMissTokens ?? 0;
+  if (usageHit + usageMiss > 0) return { hit: usageHit, miss: usageMiss, coverage: 1 };
+  return UNKNOWN;
 }

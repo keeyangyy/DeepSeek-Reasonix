@@ -256,6 +256,9 @@ func (t *WorkspaceTab) displayTelemetrySnapshot() tabTelemetrySnapshot {
 // uncached input; hit-rate displays read this pair instead, so a gateway that
 // omits cache fields cannot drag the rate down to zero.
 func (s *sessionUsageStats) addReportedCache(reported bool, hit, miss int) {
+	// Any new-format call marks the session, even one that omitted counters:
+	// that is what lets a zero reported pair mean "unknown" instead of "legacy".
+	s.CacheMarkerSeen = true
 	if !reported {
 		return
 	}
