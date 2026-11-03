@@ -15,26 +15,15 @@
   &nbsp;·&nbsp;
   <a href="./docs/SPEC.zh-CN.md">规格</a>
   &nbsp;·&nbsp;
-  <a href="https://esengine.github.io/DeepSeek-Reasonix/">官方网站</a>
+  <a href="https://esengine.github.io/DeepSeek-Reasonix/">上游官网</a>
   &nbsp;·&nbsp;
-  <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
+  <a href="https://discord.gg/XF78rEME2D">上游社区</a>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/v/reasonix.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white" alt="npm version"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/esengine/DeepSeek-Reasonix/ci.yml?style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/reasonix.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
-  <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/dm/reasonix.svg?style=flat-square&color=3fb950&labelColor=161b22&label=downloads" alt="downloads"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/stargazers"><img src="https://img.shields.io/github/stars/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=dbab09&labelColor=161b22&logo=github&logoColor=white" alt="GitHub stars"/></a>
-  <a href="https://atomgit.com/esengine/DeepSeek-Reasonix"><img src="https://atomgit.com/esengine/DeepSeek-Reasonix/star/badge.svg" alt="AtomGit stars"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors"><img src="https://img.shields.io/github/contributors/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=bc8cff&labelColor=161b22&logo=github&logoColor=white" alt="contributors"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/discussions"><img src="https://img.shields.io/github/discussions/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=58a6ff&labelColor=161b22&logo=github&logoColor=white" alt="Discussions"/></a>
-  <a href="https://discord.gg/XF78rEME2D"><img src="https://img.shields.io/badge/discord-join-5865F2.svg?style=flat-square&labelColor=161b22&logo=discord&logoColor=white" alt="Discord"/></a>
-</p>
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/27020?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-27020" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/27020/monthly?language=Go" alt="esengine/DeepSeek-Reasonix | Trendshift" width="250" height="55"/></a>
-  <a href="https://trendshift.io/repositories/27020?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-27020" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/27020" alt="esengine/DeepSeek-Reasonix | Trendshift" width="250" height="55"/></a>
+  <a href="https://github.com/keeyangyy/DeepSeek-Reasonix/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/keeyangyy/DeepSeek-Reasonix/ci.yml?branch=wails-mine&style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/keeyangyy/DeepSeek-Reasonix.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
+  <a href="https://github.com/keeyangyy/DeepSeek-Reasonix/stargazers"><img src="https://img.shields.io/github/stars/keeyangyy/DeepSeek-Reasonix.svg?style=flat-square&color=dbab09&labelColor=161b22&logo=github&logoColor=white" alt="GitHub stars"/></a>
 </p>
 
 <br/>
@@ -49,8 +38,19 @@
 
 <br/>
 
-> [!IMPORTANT]
-> **加入社区 · Community** — 双语 Discord，提供安装答疑（`#help` / `#求助`）、工作流展示与功能想法。→ **<https://discord.gg/XF78rEME2D>**
+> **独立维护的定制版本**
+>
+> 本版本从上游 DeepSeek-Reasonix v1.38.2 分出，保留 Wails 桌面端，未引入 Electron。
+> 当前主要维护 Wails 桌面端（`desktop/`）及其共享 Go 核心，版本号继续沿用 1.38.x 序列，
+> 并选择性吸收上游 1.38 线的修复；不承诺跟随上游后续版本，也不保证与官方版互相兼容。
+>
+> 本仓库不是 Reasonix 官方发行版本，发布渠道、功能取舍和问题处理均可能与上游不同。
+> 桌面端仅发布 Windows amd64；更新从本仓库的 `wails-latest` 通道获取，不会自动更新为上游版本。
+>
+> 原项目及贡献者的版权声明予以保留，代码遵循 MIT 许可证。上游项目：
+> <https://github.com/esengine/DeepSeek-Reasonix>
+
+<br/>
 
 ## 特性
 
@@ -67,55 +67,32 @@
 
 ## 安装
 
-选择适合你的使用路径。CLI/TUI、桌面端和 VS Code 扩展都使用同一套本地
-Reasonix 引擎。
+本定制版提供两条安装路径：直接下载本仓库发布的 Windows 桌面安装包，或从源码构建。
+上游的 npm、Homebrew 和官网下载渠道不适用于本版本。
 
-### 路径 A：CLI / TUI
+### 路径 A：Windows 桌面端
 
-任意支持的平台都可以通过 npm 安装原生二进制；macOS 也可以使用 Homebrew：
-
-```sh
-npm i -g reasonix                  # 任意系统;自动拉取对应平台的原生二进制
-brew install esengine/reasonix/reasonix   # macOS
-```
-
-预编译归档(`darwin|linux|windows × amd64|arm64`)和 `SHA256SUMS` 见每个
-[GitHub release](https://github.com/esengine/DeepSeek-Reasonix/releases)。
-
-### 路径 B：桌面端
-
-前往[官方下载页](https://reasonix.io/?download=desktop#start)获取最新桌面版本。
+前往[本仓库 Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases)下载最新安装包：
 
 | 平台 | 安装包 | 架构 |
 | --- | --- | --- |
-| macOS | 通用 `.dmg` 或 `.zip` | Apple Silicon / Intel |
-| Windows | 安装器 `.exe` 或便携 `.zip` | x64 / ARM64 |
-| Linux | `.deb` 或 `.tar.gz` | x64 |
+| Windows | 安装器 `Reasonix-windows-amd64-installer.exe` 或便携包 `Reasonix-windows-amd64-portable.zip` | x64 |
 
-Windows 安装器通过 [SignPath.io](https://signpath.io/) 完成代码签名，证书由
-[SignPath 基金会](https://signpath.org/) 免费提供。
+安装包未做 Authenticode 签名，首次运行可能触发 Windows SmartScreen 提示；
+应用内更新包使用本仓库的 minisign 公钥校验。
 
-### 路径 C：VS Code 扩展
+### 路径 B：从源码构建
 
-请先完成路径 A。扩展不内置 CLI，而是启动本机的 `reasonix acp` 后端，
-并提供原生聊天、编辑器上下文、工具调用审批、模型选择和工作区会话。
-
-- **VS Code：** [从 Visual Studio Marketplace 安装](https://marketplace.visualstudio.com/items?itemName=SivanLiu.reasonix-agent)
-- **VSCodium / Eclipse Theia：** [从 Open VSX Registry 安装](https://open-vsx.org/extension/SivanLiu/reasonix-agent)
-- **扩展 ID：** `SivanLiu.reasonix-agent` · [源码与使用说明](https://github.com/SivanCola/reasonix-vscode)
-
-### 路径 D：从源码构建
-
-先克隆仓库：
+先克隆本仓库：
 
 ```sh
-git clone https://github.com/esengine/DeepSeek-Reasonix.git
+git clone https://github.com/keeyangyy/DeepSeek-Reasonix.git
 cd DeepSeek-Reasonix
 ```
 
 #### CLI
 
-CLI 构建需要 **Go 1.25+**。模块固定了 `toolchain` 指令；
+CLI 构建需要 **Go 1.26+**。模块固定了 `toolchain` 指令；
 保持 `GOTOOLCHAIN=auto` 让 Go 自动下载固定的工具链，或自行安装。
 
 ```sh
@@ -125,7 +102,7 @@ make cross      # -> dist/（darwin|linux|windows × amd64|arm64）
 
 #### 桌面端
 
-桌面端构建额外需要：
+桌面端基于 **Wails v2**（WebView2），不使用 Electron。构建额外需要：
 
 - **Node 24+ 和 pnpm 10**（`npm install -g pnpm@10`）用于前端
 - **Wails CLI**，与共享的 `.wails-version` 固定版本一致
@@ -139,11 +116,11 @@ wails build
 平台相关的 WebView 依赖和 Linux 构建标签见
 [桌面端构建指南](desktop/README.md#prerequisites)。
 
+> VS Code 扩展属于上游生态，依赖上游 CLI；本版本不提供该扩展的配套发布。
+
 ## 快速开始
 
 ### CLI / TUI
-
-以下命令仅适用于通过路径 A 安装的 CLI/TUI：
 
 ```sh
 reasonix setup                      # 配置 provider 和模型
@@ -155,9 +132,14 @@ reasonix run "把 main.go 里的 TODO 实现掉"
 
 ### 桌面端
 
-从[官方下载页](https://reasonix.io/?download=desktop#start)下载对应系统的安装包，
-安装并启动 Reasonix，然后在应用内配置 provider 和模型即可使用。桌面端无需执行
-上面的 CLI 命令。
+从[本仓库 Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases)下载对应安装包，
+安装并启动 Reasonix，然后在应用内配置 provider 和模型即可使用。
+
+> 本版本与官方版默认共用 `%APPDATA%\reasonix` 数据目录和单实例锁。如需两者共存，
+> 请为其中一个设置独立的 `REASONIX_HOME`，避免配置、会话和单实例互相干扰。
+
+> 桌面端匿名启动统计与崩溃报告目前仍发送到上游 `crash.reasonix.io`，可在设置中关闭。
+> CLI 的 `reasonix upgrade` 目前仍指向上游 release 源，不建议在本版本中使用。
 
 CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**、
 **[指南](./docs/GUIDE.zh-CN.md)** 和
@@ -183,23 +165,11 @@ CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**�
   [Extension Protocol](./docs/EXTENSION_PROTOCOL.zh-CN.md) ·
   [Go SDK 与 starter](./sdk/go/README.md)
 
-## Star 趋势
-
-<a href="https://www.star-history.com/?repos=esengine%2FDeepSeek-Reasonix&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/star-history/assets/star-history/star-history-dark.svg" />
-   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/star-history/assets/star-history/star-history-light.svg" />
-   <img alt="Star History Chart" src="https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/star-history/assets/star-history/star-history-light.svg" />
- </picture>
-</a>
-
-<br/>
-
 ## 致谢
 
-下面这些朋友的工作塑造了 Reasonix 今天的样子 —— 当前按 commit 数统计的前 20 名贡献者。
-完整贡献者列表在
-[GitHub](https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors?all=1)。
+下面这些朋友的工作塑造了 Reasonix 今天的样子 —— 以下按 commit 数统计的是上游项目的前 20 名贡献者。
+完整贡献者列表见
+[上游 GitHub](https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors?all=1)。
 
 <!-- reasonix-top-contributors:start -->
 | Contributor | Contributor | Contributor | Contributor |
@@ -211,7 +181,7 @@ CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**�
 | [**CnsMaple**](https://github.com/CnsMaple) | [**cyq1017**](https://github.com/cyq1017) | [**JesonChou**](https://github.com/JesonChou) | [**XTLine**](https://github.com/XTLine) |
 <!-- reasonix-top-contributors:end -->
 
-特别感谢 [**Bernardxu123**](https://github.com/Bernardxu123) 设计的项目 logo和开场视频。
+特别感谢 [**Bernardxu123**](https://github.com/Bernardxu123) 设计的项目 logo 和开场视频。
 
 <p align="center">
   <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">
@@ -226,19 +196,5 @@ CLI 进阶用法和详细配置见 **[CLI 命令参考](./docs/CLI.zh-CN.md)**�
 <p align="center">
   <sub>MIT —— 见 <a href="./LICENSE">LICENSE</a></sub>
   <br/>
-  <sub>由 <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">esengine/DeepSeek-Reasonix</a> 社区共建</sub>
-</p>
-
----
-
-<p align="center"><sub><strong>支持本项目</strong></sub></p>
-
-如果 Reasonix 帮你省了时间或 token，欢迎请杯咖啡。捐助不会换来 feature
-优先级，也不会影响 issue 的处理顺序——就是「谢谢」。
-
-- **国内** — 微信支付（扫下方二维码）
-- **海外** — PayPal: [paypal.me/yuhuahui](https://paypal.me/yuhuahui)
-
-<p align="center">
-  <img src=".github/sponsor/wechat-pay.jpg" alt="微信支付收款码" width="180"/>
+  <sub>基于 <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">esengine/DeepSeek-Reasonix</a> 的成果，由本仓库独立维护</sub>
 </p>

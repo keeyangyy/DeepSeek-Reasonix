@@ -15,26 +15,15 @@
   &nbsp;·&nbsp;
   <a href="./docs/SPEC.md">Spec</a>
   &nbsp;·&nbsp;
-  <a href="https://esengine.github.io/DeepSeek-Reasonix/">Website</a>
+  <a href="https://esengine.github.io/DeepSeek-Reasonix/">Upstream website</a>
   &nbsp;·&nbsp;
-  <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
+  <a href="https://discord.gg/XF78rEME2D">Upstream community</a>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/v/reasonix.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white" alt="npm version"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/esengine/DeepSeek-Reasonix/ci.yml?style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/reasonix.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
-  <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/dm/reasonix.svg?style=flat-square&color=3fb950&labelColor=161b22&label=downloads" alt="downloads"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/stargazers"><img src="https://img.shields.io/github/stars/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=dbab09&labelColor=161b22&logo=github&logoColor=white" alt="GitHub stars"/></a>
-  <a href="https://atomgit.com/esengine/DeepSeek-Reasonix"><img src="https://atomgit.com/esengine/DeepSeek-Reasonix/star/badge.svg" alt="AtomGit stars"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors"><img src="https://img.shields.io/github/contributors/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=bc8cff&labelColor=161b22&logo=github&logoColor=white" alt="contributors"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/discussions"><img src="https://img.shields.io/github/discussions/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=58a6ff&labelColor=161b22&logo=github&logoColor=white" alt="Discussions"/></a>
-  <a href="https://discord.gg/XF78rEME2D"><img src="https://img.shields.io/badge/discord-join-5865F2.svg?style=flat-square&labelColor=161b22&logo=discord&logoColor=white" alt="Discord"/></a>
-</p>
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/27020?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-27020" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/27020/monthly?language=Go" alt="esengine/DeepSeek-Reasonix | Trendshift" width="250" height="55"/></a>
-  <a href="https://trendshift.io/repositories/27020?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-27020" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/27020" alt="esengine/DeepSeek-Reasonix | Trendshift" width="250" height="55"/></a>
+  <a href="https://github.com/keeyangyy/DeepSeek-Reasonix/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/keeyangyy/DeepSeek-Reasonix/ci.yml?branch=wails-mine&style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/keeyangyy/DeepSeek-Reasonix.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
+  <a href="https://github.com/keeyangyy/DeepSeek-Reasonix/stargazers"><img src="https://img.shields.io/github/stars/keeyangyy/DeepSeek-Reasonix.svg?style=flat-square&color=dbab09&labelColor=161b22&logo=github&logoColor=white" alt="GitHub stars"/></a>
 </p>
 
 <br/>
@@ -49,8 +38,21 @@
 
 <br/>
 
-> [!IMPORTANT]
-> **Community · 加入社区** — bilingual Discord for setup help (`#help` / `#求助`), workflow showcases, and feature ideas. → **<https://discord.gg/XF78rEME2D>**
+> **Independently maintained custom build**
+>
+> This fork branches from upstream DeepSeek-Reasonix v1.38.2 and keeps the Wails
+> desktop app; it does not adopt Electron. Maintenance focuses on the Wails
+> desktop layer (`desktop/`) and the shared Go core. The version line stays on
+> 1.38.x and selectively picks up upstream 1.38 fixes; compatibility with later
+> upstream releases is not guaranteed.
+>
+> This repository is not an official Reasonix release. Release channels, feature
+> choices and issue handling may differ from upstream. Desktop builds cover
+> Windows amd64 only and update from this repository's `wails-latest` channel,
+> never from upstream.
+>
+> Upstream copyright notices are retained; the code remains under the MIT
+> License. Upstream: <https://github.com/esengine/DeepSeek-Reasonix>
 
 <br/>
 
@@ -73,52 +75,28 @@
 
 ## Install
 
-Choose the path that matches how you want to use Reasonix. The CLI/TUI,
-desktop app, and VS Code extension all use the same local Reasonix engine.
+This custom build offers two paths: download the Windows desktop installer from
+this repository's Releases, or build from source. Upstream's npm, Homebrew and
+website download channels do not apply to this build.
 
-### Path A: CLI / TUI
+### Path A: Windows desktop
 
-Install the native binary through npm on any supported platform, or use
-Homebrew on macOS:
-
-```sh
-npm i -g reasonix                  # any OS; pulls the prebuilt native binary
-brew install esengine/reasonix/reasonix   # macOS
-```
-
-Prebuilt archives (`darwin|linux|windows × amd64|arm64`) and `SHA256SUMS` are on
-every [GitHub release](https://github.com/esengine/DeepSeek-Reasonix/releases).
-
-### Path B: Desktop app
-
-Use the [official download page](https://reasonix.io/?download=desktop#start)
-for the latest desktop build.
+Download the latest installer from
+[this repository's Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases):
 
 | Platform | Package | Architecture |
 | --- | --- | --- |
-| macOS | Universal `.dmg` or `.zip` | Apple Silicon / Intel |
-| Windows | Installer `.exe` or portable `.zip` | x64 / ARM64 |
-| Linux | `.deb` or `.tar.gz` | x64 |
+| Windows | Installer `Reasonix-windows-amd64-installer.exe` or portable `Reasonix-windows-amd64-portable.zip` | x64 |
 
-Windows installers are code-signed through [SignPath.io](https://signpath.io/)
-with a free certificate provided by the [SignPath Foundation](https://signpath.org/).
+The installer is not Authenticode-signed, so Windows SmartScreen may warn on
+first launch. In-app updates are verified with this repository's minisign key.
 
-### Path C: VS Code extension
+### Path B: Build from source
 
-Complete Path A first. The extension does not bundle the CLI; it starts your
-local `reasonix acp` backend and adds native chat, editor context, tool-call
-approvals, model selection, and workspace sessions.
-
-- **VS Code:** [install from Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=SivanLiu.reasonix-agent)
-- **VSCodium / Eclipse Theia:** [install from Open VSX Registry](https://open-vsx.org/extension/SivanLiu/reasonix-agent)
-- **Extension ID:** `SivanLiu.reasonix-agent` · [source and usage guide](https://github.com/SivanCola/reasonix-vscode)
-
-### Path D: Build from source
-
-Clone the repository first:
+Clone this repository first:
 
 ```sh
-git clone https://github.com/esengine/DeepSeek-Reasonix.git
+git clone https://github.com/keeyangyy/DeepSeek-Reasonix.git
 cd DeepSeek-Reasonix
 ```
 
@@ -134,7 +112,8 @@ make cross      # -> dist/ (darwin|linux|windows × amd64|arm64)
 
 #### Desktop
 
-The desktop build additionally requires:
+The desktop app uses **Wails v2** (WebView2), not Electron. The build
+additionally requires:
 
 - **Node 24+ and pnpm 10** (`npm install -g pnpm@10`) for the frontend
 - **Wails CLI** matching the shared `.wails-version` pin
@@ -148,11 +127,12 @@ wails build
 See the [desktop build guide](desktop/README.md#prerequisites) for platform
 webview dependencies and Linux build tags.
 
+> The VS Code extension belongs to the upstream ecosystem and depends on the
+> upstream CLI; this build does not ship a matching extension release.
+
 ## Quick start
 
 ### CLI / TUI
-
-These commands are for the CLI/TUI installed through Path A:
 
 ```sh
 reasonix setup                      # configure a provider and model
@@ -165,10 +145,17 @@ instructions.
 
 ### Desktop app
 
-Download the installer for your platform from the
-[official download page](https://reasonix.io/?download=desktop#start), install
-and launch Reasonix, then configure a provider and model in the app. The CLI
-commands above are not required for the desktop app.
+Download the installer from
+[this repository's Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases),
+install and launch Reasonix, then configure a provider and model in the app.
+
+> This build and the official release share `%APPDATA%\reasonix` and the same
+> single-instance lock by default. To run both side by side, set a separate
+> `REASONIX_HOME` for one of them.
+
+> Anonymous launch telemetry and crash reports still go to upstream
+> `crash.reasonix.io` and can be disabled in settings. `reasonix upgrade` still
+> points at the upstream release source and should not be used with this build.
 
 For advanced CLI usage and configuration, see the **[CLI reference](./docs/CLI.md)**,
 **[Guide](./docs/GUIDE.md)**, and
@@ -191,23 +178,12 @@ For advanced CLI usage and configuration, see the **[CLI reference](./docs/CLI.m
   [Extension Protocol](./docs/EXTENSION_PROTOCOL.md) ·
   [Go SDK and starter](./sdk/go/README.md)
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=esengine%2FDeepSeek-Reasonix&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/star-history/assets/star-history/star-history-dark.svg" />
-   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/star-history/assets/star-history/star-history-light.svg" />
-   <img alt="Star History Chart" src="https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/star-history/assets/star-history/star-history-light.svg" />
- </picture>
-</a>
-
-<br/>
-
 ## Acknowledgments
 
 A small list of folks whose work has shaped Reasonix the most — the current top
-20 contributors by commit count. The full contributor graph is on
-[GitHub](https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors?all=1).
+20 contributors of the upstream project, by commit count. The full contributor
+graph is on
+[upstream GitHub](https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors?all=1).
 
 <!-- reasonix-top-contributors:start -->
 | Contributor | Contributor | Contributor | Contributor |
@@ -234,20 +210,5 @@ Special thanks to [**Bernardxu123**](https://github.com/Bernardxu123) for design
 <p align="center">
   <sub>MIT — see <a href="./LICENSE">LICENSE</a></sub>
   <br/>
-  <sub>Built by the community at <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">esengine/DeepSeek-Reasonix</a></sub>
-</p>
-
----
-
-<p align="center"><sub><strong>Support this project</strong></sub></p>
-
-If Reasonix has been useful and you'd like to say thanks, you can. It stays a
-coffee, not a contract — donations don't buy feature priority or change how
-issues get triaged.
-
-- **International** — PayPal: [paypal.me/yuhuahui](https://paypal.me/yuhuahui)
-- **国内** — 微信支付（扫码）
-
-<p align="center">
-  <img src=".github/sponsor/wechat-pay.jpg" alt="WeChat Pay QR code" width="180"/>
+  <sub>Built on the work of <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">esengine/DeepSeek-Reasonix</a>, independently maintained in this repository</sub>
 </p>

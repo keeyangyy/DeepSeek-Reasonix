@@ -1,11 +1,17 @@
-# Contributing to Reasonix
+# Contributing to this build
 
-Thank you for your interest in contributing to Reasonix! This guide covers
-everything you need to get started.
+Thank you for your interest in this independently maintained build of
+DeepSeek-Reasonix. This fork branches from upstream v1.38.2 and keeps the Wails
+desktop app; it does not adopt Electron.
+
+This guide covers the local development workflow for this repository. Upstream
+project-wide contributions should go to
+[esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix);
+changes specific to the Wails desktop line belong here.
 
 ## Prerequisites
 
-- **Go 1.25+** — the project targets the latest stable Go release
+- **Go 1.26+** — the project targets the latest stable Go release
 - **Git** — for version control
 - **Node.js** (optional) — only if you work on the desktop app (`desktop/`)
 - **Wails CLI** (desktop only) — run `make wails-install` so the CLI matches
@@ -14,7 +20,7 @@ everything you need to get started.
 ## Getting started
 
 ```bash
-git clone https://github.com/esengine/DeepSeek-Reasonix.git
+git clone https://github.com/keeyangyy/DeepSeek-Reasonix.git
 cd DeepSeek-Reasonix
 go build ./cmd/reasonix    # builds the CLI binary
 go test ./...              # runs the full test suite
@@ -96,6 +102,9 @@ logs — stays under `REASONIX_HOME`. Legacy migration, OS-home convention
 directory scanning, and all other fallback paths are skipped so no production
 data leaks in or out.
 
+> This build and the official release use `%APPDATA%\reasonix` and the same
+> single-instance lock by default. Use `REASONIX_HOME` when you need both.
+
 ### Cache-first review gate
 
 Reasonix treats high prompt-cache hit rate as product behavior. Changes that
@@ -175,16 +184,18 @@ ci: add golangci-lint and govulncheck
 
 ## Submitting changes
 
-1. Fork the repository
-2. Create a feature branch from `main-v2`
-3. Make your changes with tests
-4. Ensure `go test ./...` passes
-5. Ensure `gofmt -l .` shows no changes
-6. Submit a pull request to `main-v2`
+1. Create a feature branch from `wails-mine`
+2. Make your changes with tests
+3. Ensure `go test ./...` passes
+4. Ensure `gofmt -l .` shows no changes
+5. Submit a pull request to `wails-mine`
+
+Changes that also apply upstream are welcome there as a separate PR; keep this
+repository's diff focused on the Wails desktop line.
 
 ## Reporting issues
 
-Open an issue on GitHub with:
+Open an issue on this repository with:
 - Steps to reproduce
 - Expected vs actual behavior
 - Go version and OS
@@ -193,4 +204,4 @@ Open an issue on GitHub with:
 ## License
 
 By contributing, you agree that your contributions will be licensed under the
-same license as the project.
+same license as the project. Upstream copyright notices are retained.
