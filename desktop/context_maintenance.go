@@ -10,25 +10,25 @@ import (
 // ContextInfo is the prompt-vs-window gauge payload plus session totals. Used
 // and Window both zero means no context-window data yet.
 type ContextInfo struct {
-	Used                int                         `json:"used"`
-	Window              int                         `json:"window"`
-	SessionTokens       int                         `json:"sessionTokens"`
-	CompactRatio        float64                     `json:"compactRatio,omitempty"`
-	SessionCost         float64                     `json:"sessionCost,omitempty"`
-	SessionCurrency     string                      `json:"sessionCurrency,omitempty"`
-	CacheHitTokens      int                         `json:"cacheHitTokens,omitempty"`
-	CacheMissTokens     int                         `json:"cacheMissTokens,omitempty"`
+	Used            int     `json:"used"`
+	Window          int     `json:"window"`
+	SessionTokens   int     `json:"sessionTokens"`
+	CompactRatio    float64 `json:"compactRatio,omitempty"`
+	SessionCost     float64 `json:"sessionCost,omitempty"`
+	SessionCurrency string  `json:"sessionCurrency,omitempty"`
+	CacheHitTokens  int     `json:"cacheHitTokens,omitempty"`
+	CacheMissTokens int     `json:"cacheMissTokens,omitempty"`
 	// Reported* cover only calls whose provider returned cache counters; the
 	// pair above keeps the billing fallback for zero-hit input.
-	ReportedCacheHitTokens  int  `json:"reportedCacheHitTokens,omitempty"`
-	ReportedCacheMissTokens int  `json:"reportedCacheMissTokens,omitempty"`
-	CacheMarkerSeen         bool `json:"cacheMarkerSeen,omitempty"`
-	Estimated           bool                        `json:"estimated,omitempty"`
-	SessionCostComplete bool                        `json:"sessionCostComplete,omitempty"`
-	SessionCostQuote    *billing.CostQuote          `json:"sessionCostQuote,omitempty"`
-	Sources             map[string]usageSourceStats `json:"sources,omitempty"`
-	Maintenance         *ContextMaintenanceInfo     `json:"maintenance,omitempty"`
-	ContextBudget       *ContextBudgetInfo          `json:"contextBudget,omitempty"`
+	ReportedCacheHitTokens  int                         `json:"reportedCacheHitTokens,omitempty"`
+	ReportedCacheMissTokens int                         `json:"reportedCacheMissTokens,omitempty"`
+	CacheMarkerSeen         bool                        `json:"cacheMarkerSeen,omitempty"`
+	Estimated               bool                        `json:"estimated,omitempty"`
+	SessionCostComplete     bool                        `json:"sessionCostComplete,omitempty"`
+	SessionCostQuote        *billing.CostQuote          `json:"sessionCostQuote,omitempty"`
+	Sources                 map[string]usageSourceStats `json:"sources,omitempty"`
+	Maintenance             *ContextMaintenanceInfo     `json:"maintenance,omitempty"`
+	ContextBudget           *ContextBudgetInfo          `json:"contextBudget,omitempty"`
 }
 
 // ContextMaintenanceInfo is the Wails-safe current-view snapshot. Optional
