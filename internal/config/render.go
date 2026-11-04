@@ -716,6 +716,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		b.WriteString("\n")
 	}
 
+	renderServeConfig(&b, c, scope)
 	renderRemoteConfig(&b, c, scope)
 
 	b.WriteString("# External MCP servers. type: \"stdio\" (default, a subprocess) | \"http\" | \"sse\".\n")

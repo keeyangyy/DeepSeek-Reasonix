@@ -14,6 +14,10 @@ import (
 type configPatch struct {
 	doc, rendered *tomlDoc
 	broken, lossy bool
+	// keepMissingTables keeps a table that a project delta stops naming: the
+	// text may hold entries the render never writes, and those are not the
+	// save's to drop. Only the keys the delta named are removed.
+	keepMissingTables bool
 }
 
 // configSide is one side of a save at one path: its value as rendered, and as
@@ -34,6 +38,12 @@ func (p *configPatch) table(path tomlPath, before, after configSide) {
 		now, inAfter := shownA[key]
 		switch {
 		case !inAfter:
+			if p.keepMissingTables {
+				// The project delta only names non-default values: a key it
+				// does not name is either already at its default or owned by
+				// another line, and either way not this save's to drop.
+				continue
+			}
 			if inBefore {
 				p.remove(path, key)
 			}
@@ -107,7 +117,7 @@ func (p *configPatch) array(path tomlPath, before, after configSide) {
 		p.doc.removeTables(func(b tomlPath) bool { return len(b) >= len(path) && gone[b[:len(path)].String()] })
 	}
 	for i, next := range shownA {
-		id := elementIdentity(next["name"], 0)
+		id := elementIdentity(next["name"], next["id"], 0)
 		if _, existed := was[id]; existed && !changed(id) {
 			continue
 		}
@@ -123,7 +133,7 @@ func (p *configPatch) array(path tomlPath, before, after configSide) {
 // nextBlockIn is the header block of the first of rest the text holds, or -1.
 func (p *configPatch) nextBlockIn(path tomlPath, rest []map[string]any) int {
 	for _, el := range rest {
-		if bi := p.doc.block(path.element(elementIdentity(el["name"], 0))); bi >= 0 {
+		if bi := p.doc.block(path.element(elementIdentity(el["name"], el["id"], 0))); bi >= 0 {
 			return bi
 		}
 	}
@@ -172,7 +182,7 @@ func keepsOrder(ids []string, was map[string]map[string]any, next []map[string]a
 	}
 	last := -1
 	for _, el := range next {
-		id := elementIdentity(el["name"], 0)
+		id := elementIdentity(el["name"], el["id"], 0)
 		i, inDoc := at[id]
 		if _, kept := was[id]; !kept || !inDoc {
 			continue
@@ -191,10 +201,11 @@ func elementsByIdentity(list []map[string]any) (map[string]map[string]any, bool)
 	out := make(map[string]map[string]any, len(list))
 	for _, el := range list {
 		name, _ := el["name"].(string)
-		if name == "" {
+		elemID, _ := el["id"].(string)
+		if name == "" && elemID == "" {
 			return nil, false
 		}
-		id := elementIdentity(name, 0)
+		id := elementIdentity(name, elemID, 0)
 		if _, dup := out[id]; dup {
 			return nil, false
 		}

@@ -71,9 +71,16 @@ func tomlKeySegment(key string) string {
 	return strconv.Quote(key)
 }
 
-func elementIdentity(name any, ordinal int) string {
+// elementIdentity names an array element by the first identity its table
+// declares: name, then id (the bot-connection shape), then its ordinal. The
+// identity is what lets a save rewrite one element and carry the entries this
+// build does not decode through it.
+func elementIdentity(name, id any, ordinal int) string {
 	if s, ok := name.(string); ok && s != "" {
 		return "name=" + s
+	}
+	if s, ok := id.(string); ok && s != "" {
+		return "id=" + s
 	}
 	return "#" + strconv.Itoa(ordinal)
 }
@@ -167,7 +174,7 @@ func parseTOMLDoc(text string) (*tomlDoc, bool) {
 		}
 		if h.array {
 			key := path.String()
-			path = path.element(elementIdentity(d.keyValue(bi, "name"), ordinals[key]))
+			path = path.element(elementIdentity(d.keyValue(bi, "name"), d.keyValue(bi, "id"), ordinals[key]))
 			ordinals[key]++
 			current[key] = path
 		}

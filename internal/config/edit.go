@@ -1632,9 +1632,22 @@ func (c *Config) saveProjectIncrementalResolved(logicalPath, resolvedPath string
 		return nil // no changes to write
 	}
 
-	// Parse delta into section blocks and merge each into body
-	if strings.TrimSpace(delta) != "" {
-		body = mergeTOMLDelta(body, delta)
+	// Patch the doc key by key first: a section replace would drop entries
+	// this build does not decode inside the same table. When the patch cannot
+	// express the save, fall back to merging whole sections as before. The
+	// explicit cleanups below edit whole sections, so they keep the old path.
+	if strings.TrimSpace(delta) != "" && !removePlugins && !removeSandboxBash && !removeSkills && !removeRetiredAutoGuard {
+		patched := false
+		if base, err := loadUserConfigFromText(logicalPath, body); err == nil {
+			if candidate, ok := patchProjectConfigText(body, base, c, delta); ok && looksLikeProjectIntended(logicalPath, candidate, c) {
+				body = candidate
+				patched = true
+			}
+		}
+		if !patched {
+			body = mergeTOMLDelta(body, delta)
+		}
+		body = stripRetiredConfigLines(body, c)
 	}
 	if removePlugins {
 		body = removeTOMLSection(body, "plugins")

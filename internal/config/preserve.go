@@ -180,6 +180,78 @@ func patchUserConfigText(text string, base, next *Config, nextRender string) (st
 	return doc.String(), true
 }
 
+// patchProjectConfigText rewrites in text only the entries a project save
+// changed, leaving entries this build does not decode inside the same table
+// alone. Project saves render a delta (only values that differ from the
+// built-in defaults), so both sides are compared through that delta.
+func patchProjectConfigText(text string, base, next *Config, nextRender string) (string, bool) {
+	doc, parsed := parseTOMLDoc(text)
+	if !parsed {
+		return "", false
+	}
+	rendered, parsed := parseTOMLDoc(nextRender)
+	if !parsed {
+		return "", false
+	}
+	// Compare against what the file actually holds, and against the value the
+	// load produced: a key the project delta never writes is not this save's
+	// to drop unless the edit changed it.
+	before, okB := decodeRenderTree(text)
+	after, okA := decodeRenderTree(nextRender)
+	if !okB || !okA {
+		return "", false
+	}
+	was, _ := encodeConfigTree(base)
+	now, _ := encodeConfigTree(next)
+	p := &configPatch{doc: doc, rendered: rendered, keepMissingTables: true}
+	p.table(nil, configSide{before, was}, configSide{after, now})
+	if doc.broken || p.broken {
+		return "", false
+	}
+	return doc.String(), true
+}
+
+// sameProjectRender compares two configs by the delta a project save writes.
+func sameProjectRender(a, b *Config) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	ma, okA := decodeRenderTree(RenderTOMLProjectDelta(a))
+	mb, okB := decodeRenderTree(RenderTOMLProjectDelta(b))
+	return okA && okB && sameValue(ma, mb)
+}
+
+// looksLikeProjectIntended reports whether body loads and writes back the same
+// project delta the save intended.
+func looksLikeProjectIntended(path, body string, want *Config) bool {
+	cfg, err := loadUserConfigFromText(path, body)
+	if err != nil {
+		return false
+	}
+	return sameProjectRender(cfg, want)
+}
+
+// stripRetiredConfigLines drops the keys this build declares retired. A patch
+// keeps the entries of a table it does not model, so a key the load normalized
+// away would otherwise stay on disk claiming a setting nothing honours.
+func stripRetiredConfigLines(body string, c *Config) string {
+	return stripRetiredAutoPlanLines(body, c)
+}
+
+// stripRetiredAutoPlanLines drops the retired auto-plan keys. They are only
+// removed once the config holds their retired values: a file that still carries
+// another value belongs to a build that honours it, or to the user.
+func stripRetiredAutoPlanLines(body string, c *Config) string {
+	if c == nil || strings.TrimSpace(c.Agent.AutoPlan) != "off" || strings.TrimSpace(c.Agent.AutoPlanClassifier) != "" {
+		return body
+	}
+	stripped, changed := stripTOMLKeyLines(body, "agent", "auto_plan", "auto_plan_classifier")
+	if !changed {
+		return body
+	}
+	return stripped
+}
+
 // keepPriorUserConfig preserves the bytes a rewrite replaces, so a setting that
 // could not be carried over remains recoverable by hand.
 func keepPriorUserConfig(logicalPath, resolvedPath string, raw []byte, msg string) {
