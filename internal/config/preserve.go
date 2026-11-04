@@ -252,6 +252,21 @@ func stripRetiredAutoPlanLines(body string, c *Config) string {
 	return stripped
 }
 
+// mergeProjectConfigDelta folds a project save into body. It patches key by key
+// when the section cleanups do not claim the file, so entries this build does
+// not decode inside a touched table survive; otherwise whole sections merge as
+// before. Retired keys are stripped either way.
+func mergeProjectConfigDelta(logicalPath, body, delta string, next *Config, patchable bool) string {
+	if patchable {
+		if base, err := loadUserConfigFromText(logicalPath, body); err == nil {
+			if candidate, ok := patchProjectConfigText(body, base, next, delta); ok && looksLikeProjectIntended(logicalPath, candidate, next) {
+				return stripRetiredConfigLines(candidate, next)
+			}
+		}
+	}
+	return stripRetiredConfigLines(mergeTOMLDelta(body, delta), next)
+}
+
 // keepPriorUserConfig preserves the bytes a rewrite replaces, so a setting that
 // could not be carried over remains recoverable by hand.
 func keepPriorUserConfig(logicalPath, resolvedPath string, raw []byte, msg string) {
