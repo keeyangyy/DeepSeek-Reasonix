@@ -15,7 +15,7 @@
 5. **接口优先、registry 驱动。** `Provider` 与 `Tool` 都是接口。
 6. **持续演进，不过度设计。**
 
-所有代码、注释、面向用户的字符串、工具描述、system prompt 和英文规范以英语为主；README 同时维护英文版 `README.md` 与中文版 `README.zh-CN.md`。
+所有代码、注释、面向用户的字符串、工具描述、system prompt 和英文规范以英语为主；README 默认中文 `README.md`，英文版为 `README.en.md`。
 
 ## 2. 目录与依赖方向
 
@@ -23,7 +23,7 @@
 reasonix/
 ├── go.mod / go.sum
 ├── Makefile
-├── README.md / README.zh-CN.md
+├── README.md / README.en.md
 ├── reasonix.example.toml
 ├── docs/SPEC.md / docs/SPEC.zh-CN.md
 ├── cmd/reasonix/main.go

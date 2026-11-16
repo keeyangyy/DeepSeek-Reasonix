@@ -1,6 +1,6 @@
 # Reasonix CLI Reference
 
-<a href="../README.md">README</a>
+<a href="../README.en.md">README</a>
 &nbsp;·&nbsp;
 <a href="./CLI.zh-CN.md">简体中文</a>
 &nbsp;·&nbsp;
