@@ -30,7 +30,7 @@
 > This is a personal fork line: it branched from upstream DeepSeek-Reasonix v1.38.2, maintained both a Wails (1.x) and a Studio (2.x) line in parallel, and later focused on Wails. Both lines have moved out:
 >
 > - **[reasonix-wails](https://github.com/keeyangyy/reasonix-wails)**: continues the Wails line — a lightweight Windows single-exe desktop app.
-> - **reasonix-studio**: continues the 2.x line — the full-featured Electron desktop app (repository in preparation).
+> - **[reasonix-studio](https://github.com/keeyangyy/reasonix-studio)**: continues the 2.x line — the full-featured Electron desktop app.
 >
 > Upstream [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix) was archived on 2026-11-12; its final release is v2.61.0.
 
@@ -56,7 +56,7 @@ Upstream copyright notices, the MIT license and contributor credits are retained
 
 ## Download and build
 
-The [Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases) page keeps historical builds and is **no longer updated**. The final Wails release is `v1.38.55`; new users should use [reasonix-wails](https://github.com/keeyangyy/reasonix-wails).
+The [Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases) page keeps historical builds and is **no longer updated**. The final Wails release is `v1.38.55`; new users should use [reasonix-wails](https://github.com/keeyangyy/reasonix-wails); the Studio line is [reasonix-studio](https://github.com/keeyangyy/reasonix-studio).
 
 ### Historical installers
 
