@@ -30,7 +30,7 @@
 > 本仓库是一条个人分支线：从上游 DeepSeek-Reasonix v1.38.2 分出，曾并行维护 Wails（1.x）与 Studio（2.x）两条线，后期以 Wails 线为主。两条线已分别迁出，后续维护见：
 >
 > - **[reasonix-wails](https://github.com/keeyangyy/reasonix-wails)**：接续 Wails 线，Windows 单 exe、轻量、易用。
-> - **reasonix-studio**：接续 2.x 线，Electron 桌面、功能全面（仓库筹备中）。
+> - **[reasonix-studio](https://github.com/keeyangyy/reasonix-studio)**：接续 2.x 线，Electron 桌面、功能全面。
 >
 > 上游 [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix) 已于 2026-11-12 归档，最终版本 v2.61.0。
 
@@ -56,7 +56,7 @@
 
 ## 下载与构建
 
-本仓库的 [Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases) 保留历史版本，**不再更新**。Wails 线最终版为 `v1.38.55`；新用户请使用 [reasonix-wails](https://github.com/keeyangyy/reasonix-wails)。
+本仓库的 [Releases](https://github.com/keeyangyy/DeepSeek-Reasonix/releases) 保留历史版本，**不再更新**。Wails 线最终版为 `v1.38.55`，新用户请使用 [reasonix-wails](https://github.com/keeyangyy/reasonix-wails)；Studio 线见 [reasonix-studio](https://github.com/keeyangyy/reasonix-studio)。
 
 ### 历史安装包
 
